@@ -1,0 +1,2175 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>Vitalbor — Produção</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+// ============================================================
+// ADAPTADOR SUPABASE — substitui o backend Google Apps Script
+// mantendo a mesma interface google.script.run(...).funcao()
+// usada em todo o restante deste arquivo. Não precisa mexer em
+// mais nada abaixo deste bloco.
+// ============================================================
+
+// PREENCHA AQUI com os dados do seu projeto Supabase:
+var SUPABASE_URL = 'https://SEU-PROJETO.supabase.co';
+var SUPABASE_ANON_KEY = 'SUA-ANON-KEY-AQUI';
+
+// Senha de admin — decisão sua: fica em texto puro aqui, visível
+// pra qualquer um que abrir "Ver código-fonte" da página. Se
+// mudar de ideia sobre isso depois, é aqui que entra autenticação
+// de verdade (Supabase Auth / Edge Function).
+var ADMIN_PASSWORD = 'vitalbor2025';
+
+function sbHeaders(extra) {
+  var h = { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY, 'Content-Type': 'application/json' };
+  if (extra) for (var k in extra) h[k] = extra[k];
+  return h;
+}
+async function sbGet(path) {
+  var r = await fetch(SUPABASE_URL + '/rest/v1/' + path, { headers: sbHeaders() });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function sbPost(table, body, prefer) {
+  var r = await fetch(SUPABASE_URL + '/rest/v1/' + table, {
+    method: 'POST',
+    headers: sbHeaders({ Prefer: prefer || 'return=representation' }),
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error(await r.text());
+  if ((prefer || '').indexOf('return=minimal') >= 0) return null;
+  return r.json();
+}
+async function sbPatch(table, filtro, body) {
+  var r = await fetch(SUPABASE_URL + '/rest/v1/' + table + '?' + filtro, {
+    method: 'PATCH',
+    headers: sbHeaders({ Prefer: 'return=minimal' }),
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error(await r.text());
+}
+
+function gerarID() { return crypto.randomUUID().replace(/-/g, '').substring(0, 12).toUpperCase(); }
+
+function fmtDataHoraBR(iso) {
+  if (!iso) return '';
+  var d = new Date(iso);
+  var p = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).formatToParts(d);
+  function g(t) { return p.find(function (x) { return x.type === t; }).value; }
+  return g('day') + '/' + g('month') + '/' + g('year') + ' ' + g('hour') + ':' + g('minute') + ':' + g('second');
+}
+function fmtDataBR(iso) {
+  if (!iso) return '';
+  return new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(iso));
+}
+
+async function inserirLog(tipo, usuario, descricao, detalhes) {
+  try { await sbPost('logs', { tipo: String(tipo), usuario: String(usuario), descricao: String(descricao), detalhes: String(detalhes || '') }, 'return=minimal'); } catch (e) {}
+}
+
+// ── TEMPLATES PADRÃO DE ETIQUETA (idênticos ao Code.gs original) ──
+var TEMPLATE_PADRAO_PECA =
+'<div style="display:flex;flex-direction:column;width:100%;height:100%;font-family:\'Arial Black\',\'Arial\',sans-serif;color:#000;background:#fff;box-sizing:border-box">' +
+  '<div style="padding:.6mm 3mm;display:flex;justify-content:space-between;align-items:center;border-bottom:.6mm solid #000">' +
+    '<div style="font-size:2.6mm;font-weight:900;letter-spacing:.6mm">{{EMPRESA}}</div>' +
+    '<div style="font-size:2.3mm;font-weight:700">{{TRIMESTRE}}</div>' +
+  '</div>' +
+  '<div style="padding:.3mm 3mm .6mm;border-bottom:1mm solid #000;text-align:center">' +
+    '<div style="font-size:8mm;font-weight:900;letter-spacing:-.2mm;line-height:1">{{CODIGO}}</div>' +
+    '<div style="font-size:3.1mm;font-weight:700;letter-spacing:.1mm;text-transform:uppercase;margin-top:.5mm">{{DESCRICAO}}</div>' +
+  '</div>' +
+  '<div style="padding:.6mm 3mm;border-bottom:1mm solid #000;position:relative;text-align:center;box-sizing:border-box">' +
+    '<div style="font-size:2mm;font-weight:900;letter-spacing:.4mm;text-transform:uppercase;opacity:.6">MATERIAL</div>' +
+    '<div style="font-size:5mm;font-weight:900;letter-spacing:.4mm;line-height:1">{{MATERIAL}}</div>' +
+    '<div style="position:absolute;bottom:1mm;right:3mm;max-width:42mm;font-size:2.1mm;font-weight:700;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{NORMA}}</div>' +
+  '</div>' +
+  '<div style="display:flex;flex-direction:row;flex:1;min-height:0">' +
+    '<div style="flex:1;min-width:0;border-right:1mm solid #000;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:1mm 3mm;box-sizing:border-box">' +
+      '<div style="font-size:2.1mm;font-weight:900;letter-spacing:.4mm;text-transform:uppercase;opacity:.6">QUANTIDADE</div>' +
+      '<div style="font-size:10mm;font-weight:900;line-height:1;letter-spacing:-.4mm">{{QUANTIDADE}}</div>' +
+    '</div>' +
+    '<div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:center;padding:1mm;box-sizing:border-box">' +
+      '{{QR_CODE}}' +
+    '</div>' +
+  '</div>' +
+  '<div style="border-top:1mm solid #000;display:flex;flex-direction:column">' +
+    '<div style="display:flex;flex-direction:row;border-bottom:1mm solid #000">' +
+      '<div style="flex:1;min-width:0;padding:.6mm 3mm;border-right:1mm solid #000;box-sizing:border-box">' +
+        '<div style="font-size:1.9mm;font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6">DATA</div>' +
+        '<div style="font-size:2.8mm;font-weight:900">{{DATA}}</div>' +
+      '</div>' +
+      '<div style="flex:1;min-width:0;padding:.6mm 3mm;box-sizing:border-box">' +
+        '<div style="font-size:1.9mm;font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6">LOTE</div>' +
+        '<div style="font-size:2.8mm;font-weight:900">{{LOTE}}</div>' +
+      '</div>' +
+    '</div>' +
+    '<div style="display:flex;flex-direction:row">' +
+      '<div style="flex:1;min-width:0;padding:.6mm 3mm;border-right:1mm solid #000;box-sizing:border-box">' +
+        '<div style="font-size:1.9mm;font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6">OP</div>' +
+        '<div style="font-size:2.8mm;font-weight:900">{{OP}}</div>' +
+      '</div>' +
+      '<div style="flex:1;min-width:0;padding:.6mm 3mm;box-sizing:border-box">' +
+        '<div style="font-size:1.9mm;font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6">REFERÊNCIA</div>' +
+        '<div style="font-size:2.6mm;font-weight:900;font-family:\'Courier New\',monospace">{{REFERENCIA}}</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>' +
+'</div>';
+
+var TEMPLATE_PADRAO_CONFERENCIA =
+'<div style="display:flex;flex-direction:column;justify-content:center;gap:1mm;width:100%;height:100%;font-family:Arial,sans-serif;color:#000;padding:2mm 3mm;box-sizing:border-box">' +
+  '<div style="font-size:3.6mm;font-weight:900;text-align:center;letter-spacing:.6mm">{{EMPRESA}}</div>' +
+  '<div style="font-size:2.4mm;font-weight:800;text-align:center;line-height:1.2">CERTIFICADO DE QUALIDADE CONFERIDO</div>' +
+  '<div style="display:flex;gap:1.5mm;font-size:2.6mm;font-weight:700;margin-top:1mm">' +
+    '<span>CONFERENTE Nº1:</span><span style="flex:1;border-bottom:.4mm solid #000;font-weight:900">{{CONFERENTE_1}}</span>' +
+  '</div>' +
+  '<div style="display:flex;gap:1.5mm;font-size:2.6mm;font-weight:700">' +
+    '<span>CONFERENTE Nº2:</span><span style="flex:1;border-bottom:.4mm solid #000;min-height:3.5mm"></span>' +
+  '</div>' +
+  '<div style="display:flex;gap:1.5mm;font-size:2.6mm;font-weight:700">' +
+    '<span>DATA:</span><span style="border-bottom:.4mm solid #000;font-weight:900;min-width:20mm">{{DATA_CONF}}</span>' +
+  '</div>' +
+  '<div style="display:flex;gap:3mm;font-size:2.1mm;font-weight:800;align-items:center;flex-wrap:wrap;margin-top:.5mm">' +
+    '<span><span style="width:2.6mm;height:2.6mm;border:.4mm solid #000;display:inline-block;margin-right:1mm"></span>B.P ESTOQUE</span>' +
+    '<span><span style="width:2.6mm;height:2.6mm;border:.4mm solid #000;display:inline-block;margin-right:1mm"></span>B.P SAÍDA</span>' +
+  '</div>' +
+'</div>';
+
+async function getModeloEtiquetaInterno(tipo) {
+  try {
+    var rows = await sbGet('modelos_etiqueta?tipo=eq.' + tipo + '&select=html');
+    if (rows.length && rows[0].html) return rows[0].html;
+  } catch (e) {}
+  return tipo === 'PECA' ? TEMPLATE_PADRAO_PECA : TEMPLATE_PADRAO_CONFERENCIA;
+}
+
+// ── BACKEND: mesma assinatura de função do Code.gs original ──
+var backend = {
+
+  async getOperadores() {
+    var rows = await sbGet('operadores?ativo=eq.true&order=nome.asc');
+    return rows.map(function (o) { return { ID: o.id, Matricula: o.matricula || '', Nome: o.nome, Ativo: true, DataCadastro: fmtDataBR(o.data_cadastro) }; });
+  },
+  async getOperadoresTodos() {
+    var rows = await sbGet('operadores?order=nome.asc');
+    return rows.map(function (o) { return { ID: o.id, Matricula: o.matricula || '', Nome: o.nome, Ativo: o.ativo, DataCadastro: fmtDataBR(o.data_cadastro) }; });
+  },
+  async salvarOperador(dados) {
+    try {
+      if (dados.ID) { await sbPatch('operadores', 'id=eq.' + dados.ID, { matricula: dados.Matricula || '', nome: dados.Nome, ativo: true }); return { ok: true }; }
+      var rows = await sbPost('operadores', { matricula: dados.Matricula || '', nome: dados.Nome, ativo: true });
+      await inserirLog('CADASTRO', 'Admin', 'Operador cadastrado: ' + dados.Matricula + ' - ' + dados.Nome, '');
+      return { ok: true, id: rows[0].id };
+    } catch (e) { return { ok: false, erro: e.message }; }
+  },
+  async excluirOperador(id) {
+    try { await sbPatch('operadores', 'id=eq.' + id, { ativo: false }); return { ok: true }; }
+    catch (e) { return { ok: false, erro: e.message }; }
+  },
+
+  async getPecas() {
+    var rows = await sbGet('pecas?ativo=eq.true&order=codigo.asc');
+    return rows.map(function (p) { return { ID: p.id, Codigo: p.codigo, Nome: p.nome, QtdPadrao: p.qtd_padrao, Ativo: true, DataCadastro: fmtDataBR(p.data_cadastro) }; });
+  },
+  async getPecasTodas() {
+    var rows = await sbGet('pecas?order=codigo.asc');
+    return rows.map(function (p) { return { ID: p.id, Codigo: p.codigo, Nome: p.nome, QtdPadrao: p.qtd_padrao, Ativo: p.ativo, DataCadastro: fmtDataBR(p.data_cadastro) }; });
+  },
+  async salvarPeca(dados) {
+    try {
+      if (dados.ID) { await sbPatch('pecas', 'id=eq.' + dados.ID, { codigo: dados.Codigo, nome: dados.Nome, qtd_padrao: Number(dados.QtdPadrao), ativo: true }); return { ok: true }; }
+      var rows = await sbPost('pecas', { codigo: dados.Codigo, nome: dados.Nome, qtd_padrao: Number(dados.QtdPadrao), ativo: true });
+      await inserirLog('CADASTRO', 'Admin', 'Peça cadastrada: ' + dados.Nome, '');
+      return { ok: true, id: rows[0].id };
+    } catch (e) { return { ok: false, erro: e.message }; }
+  },
+  async excluirPeca(id) {
+    try { await sbPatch('pecas', 'id=eq.' + id, { ativo: false }); return { ok: true }; }
+    catch (e) { return { ok: false, erro: e.message }; }
+  },
+
+  async getMateriais() {
+    var rows = await sbGet('materiais?ativo=eq.true&order=nome.asc');
+    return rows.map(function (m) { return { ID: m.id, Nome: m.nome, Descricao: m.descricao || '', Cor: m.cor || '', Ativo: true, DataCadastro: fmtDataBR(m.data_cadastro) }; });
+  },
+  async getMateriaisTodos() {
+    var rows = await sbGet('materiais?order=nome.asc');
+    return rows.map(function (m) { return { ID: m.id, Nome: m.nome, Descricao: m.descricao || '', Cor: m.cor || '', Ativo: m.ativo, DataCadastro: fmtDataBR(m.data_cadastro) }; });
+  },
+  async salvarMaterial(dados) {
+    try {
+      if (dados.ID) { await sbPatch('materiais', 'id=eq.' + dados.ID, { nome: dados.Nome, descricao: dados.Descricao || '', cor: dados.Cor || '', ativo: true }); return { ok: true }; }
+      var rows = await sbPost('materiais', { nome: dados.Nome, descricao: dados.Descricao || '', cor: dados.Cor || '', ativo: true });
+      await inserirLog('CADASTRO', 'Admin', 'Material cadastrado: ' + dados.Nome, '');
+      return { ok: true, id: rows[0].id };
+    } catch (e) { return { ok: false, erro: e.message }; }
+  },
+  async excluirMaterial(id) {
+    try { await sbPatch('materiais', 'id=eq.' + id, { ativo: false }); return { ok: true }; }
+    catch (e) { return { ok: false, erro: e.message }; }
+  },
+
+  async getMaquinas() {
+    var rows = await sbGet('maquinas?ativo=eq.true&order=nome.asc');
+    return rows.map(function (m) { return { ID: m.id, Nome: m.nome, Descricao: m.descricao || '', Ativo: true, DataCadastro: fmtDataBR(m.data_cadastro) }; });
+  },
+  async getMaquinasTodas() {
+    var rows = await sbGet('maquinas?order=nome.asc');
+    return rows.map(function (m) { return { ID: m.id, Nome: m.nome, Descricao: m.descricao || '', Ativo: m.ativo, DataCadastro: fmtDataBR(m.data_cadastro) }; });
+  },
+  async salvarMaquina(dados) {
+    try {
+      if (dados.ID) { await sbPatch('maquinas', 'id=eq.' + dados.ID, { nome: dados.Nome, descricao: dados.Descricao || '', ativo: true }); return { ok: true }; }
+      var rows = await sbPost('maquinas', { nome: dados.Nome, descricao: dados.Descricao || '', ativo: true });
+      return { ok: true, id: rows[0].id };
+    } catch (e) { return { ok: false, erro: e.message }; }
+  },
+  async excluirMaquina(id) {
+    try { await sbPatch('maquinas', 'id=eq.' + id, { ativo: false }); return { ok: true }; }
+    catch (e) { return { ok: false, erro: e.message }; }
+  },
+
+  async registrarProducao(dados, senhaAdmin) {
+    try {
+      var qtdPecas = Number(dados.QtdPecas), qtdPadrao = Number(dados.QtdPadrao);
+      var temAjuste = qtdPecas !== qtdPadrao;
+      if (temAjuste && String(senhaAdmin) !== ADMIN_PASSWORD) return { ok: false, erro: 'Senha de administrador incorreta para ajuste de quantidade.' };
+      var caixas = Number(dados.NumeroDeCaixas) || 1;
+      var existentes = await sbGet('producao?codigo_peca=eq.' + encodeURIComponent(dados.CodigoPeca) + '&select=numero_caixa&order=numero_caixa.desc&limit=1');
+      var baseNum = existentes.length ? Number(existentes[0].numero_caixa) + 1 : 1;
+      var ids = [];
+      for (var i = 0; i < caixas; i++) {
+        var id = gerarID(); var numCx = baseNum + i;
+        await sbPost('producao', {
+          id: id, matricula: dados.Matricula || '', operador: dados.Operador, peca: dados.Peca, codigo_peca: dados.CodigoPeca,
+          material: dados.Material, maquina: dados.Maquina || '', lote: dados.Lote, trimestre: dados.Trimestre, ano: dados.Ano,
+          numero_caixa: numCx, qtd_pecas: qtdPecas, qtd_padrao: qtdPadrao,
+          ajuste_manual: temAjuste ? 'SIM' : 'NAO', ajustado_por: temAjuste ? (dados.Matricula || dados.Operador) : ''
+        }, 'return=minimal');
+        ids.push({ id: id, numCaixa: numCx });
+      }
+      if (temAjuste) await inserirLog('AJUSTE', dados.Matricula || dados.Operador, 'Ajuste: ' + dados.Peca, 'Padrão:' + qtdPadrao + '→' + qtdPecas);
+      await inserirLog('PRODUCAO', dados.Matricula || dados.Operador, caixas + 'x ' + dados.Peca, 'Lote:' + dados.Lote);
+      return { ok: true, caixas: ids };
+    } catch (e) { return { ok: false, erro: e.message }; }
+  },
+
+  async getProducao(filtros) {
+    try {
+      var rows = await sbGet('producao?order=data_hora.desc&limit=5000');
+      var result = rows.map(function (r) {
+        return {
+          ID: r.id, DataHora: fmtDataHoraBR(r.data_hora), Matricula: r.matricula || '', Operador: r.operador,
+          Peca: r.peca, CodigoPeca: r.codigo_peca, Material: r.material, Maquina: r.maquina || '', Lote: r.lote,
+          Trimestre: r.trimestre, Ano: r.ano, NumeroCaixa: r.numero_caixa, QtdPecas: r.qtd_pecas, QtdPadrao: r.qtd_padrao,
+          AjusteManual: r.ajuste_manual, AjustadoPor: r.ajustado_por || ''
+        };
+      });
+      if (!filtros) return result;
+      if (filtros.operador) result = result.filter(function (r) { return r.Operador === filtros.operador || r.Matricula === filtros.operador; });
+      if (filtros.peca) result = result.filter(function (r) { return r.Peca === filtros.peca; });
+      return result;
+    } catch (e) { return []; }
+  },
+
+  async getLogs() {
+    try {
+      var rows = await sbGet('logs?select=data_hora,tipo,usuario,descricao,detalhes&order=data_hora.desc&limit=100');
+      return rows.map(function (r) { return { DataHora: fmtDataHoraBR(r.data_hora), Tipo: r.tipo, Usuario: r.usuario, Descricao: r.descricao, Detalhes: r.detalhes || '' }; });
+    } catch (e) { return []; }
+  },
+
+  async registrarMovimentacao(dados, senhaAdmin) {
+    try {
+      var origem = String(dados.Origem || '').toUpperCase() === 'MANUAL' ? 'MANUAL' : 'BIPADO';
+      var tipo = String(dados.Tipo || '').toUpperCase();
+      if (tipo !== 'ENTRADA' && tipo !== 'SAIDA') return { ok: false, erro: 'Tipo de movimentação inválido.' };
+      if (origem === 'MANUAL' && (!senhaAdmin || String(senhaAdmin) !== ADMIN_PASSWORD)) return { ok: false, erro: 'Movimentação manual (sem leitura de etiqueta) exige senha de administrador.' };
+
+      var caixaId = String(dados.CaixaID || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+      var peca = String(dados.Peca || ''), codPeca = String(dados.CodigoPeca || ''), material = String(dados.Material || ''), lote = String(dados.Lote || '');
+      var qtd = Number(dados.QtdCaixas) || 1;
+      var autorizadoPor = '';
+
+      if (origem === 'BIPADO') {
+        if (!caixaId) return { ok: false, erro: 'Código da caixa não informado.' };
+        var encontrados = await sbGet('producao?id=eq.' + caixaId + '&select=peca,codigo_peca,material,lote');
+        if (!encontrados.length) return { ok: false, erro: 'Caixa não encontrada na produção. Confira o código lido.' };
+        peca = encontrados[0].peca; codPeca = encontrados[0].codigo_peca; material = encontrados[0].material; lote = encontrados[0].lote; qtd = 1;
+
+        var historico = await sbGet('movimentacoes?caixa_id=eq.' + caixaId + '&select=tipo&order=data_hora.asc');
+        var ultimoTipo = historico.length ? historico[historico.length - 1].tipo : null;
+        var status = ultimoTipo === 'ENTRADA' ? 'EM_ESTOQUE' : (ultimoTipo === 'SAIDA' ? 'FORA_ESTOQUE' : 'NUNCA_MOVIMENTADA');
+
+        if (tipo === 'ENTRADA' && status === 'EM_ESTOQUE' && !dados.Forcar) return { ok: false, erro: 'Esta caixa já está em estoque (entrada duplicada).', precisaForcar: true };
+        if (tipo === 'SAIDA' && status !== 'EM_ESTOQUE' && !dados.Forcar) return { ok: false, erro: 'Esta caixa não consta como em estoque no momento.', precisaForcar: true };
+        if (dados.Forcar) {
+          if (!senhaAdmin || String(senhaAdmin) !== ADMIN_PASSWORD) return { ok: false, erro: 'Forçar movimentação exige senha de administrador.' };
+          autorizadoPor = 'Admin';
+        }
+      } else {
+        if (!peca || !material) return { ok: false, erro: 'Selecione a peça e o material.' };
+        autorizadoPor = 'Admin';
+      }
+
+      var id = gerarID();
+      await sbPost('movimentacoes', {
+        id: id, tipo: tipo, caixa_id: caixaId, peca: peca, codigo_peca: codPeca, material: material, lote: lote, qtd_caixas: qtd,
+        origem: origem, usuario: String(dados.Usuario || ''), motivo: String(dados.Motivo || ''), autorizado_por: autorizadoPor
+      }, 'return=minimal');
+
+      await inserirLog(tipo === 'ENTRADA' ? 'ESTOQUE_ENTRADA' : 'ESTOQUE_SAIDA', String(dados.Usuario || ''),
+        (tipo === 'ENTRADA' ? 'Entrada' : 'Saída') + ' de estoque: ' + peca + ' (' + material + ')',
+        'Lote:' + lote + ' Qtd:' + qtd + ' Origem:' + origem + (caixaId ? ' CaixaID:' + caixaId : ''));
+
+      return { ok: true, id: id, tipo: tipo, peca: peca, material: material, qtd: qtd };
+    } catch (e) { return { ok: false, erro: e.message }; }
+  },
+
+  async getEstoqueAtual() {
+    try {
+      var rows = await sbGet('movimentacoes?select=peca,codigo_peca,material,tipo,qtd_caixas&order=data_hora.asc&limit=100000');
+      var mapa = {};
+      rows.forEach(function (r) {
+        var peca = r.peca, mat = r.material;
+        if (!peca || !mat) return;
+        var chave = peca + '||' + mat;
+        if (!mapa[chave]) mapa[chave] = { Peca: peca, CodigoPeca: r.codigo_peca, Material: mat, Saldo: 0 };
+        var qtd = Number(r.qtd_caixas) || 1;
+        if (r.tipo === 'ENTRADA') mapa[chave].Saldo += qtd; else if (r.tipo === 'SAIDA') mapa[chave].Saldo -= qtd;
+      });
+      return Object.keys(mapa).map(function (k) { return mapa[k]; });
+    } catch (e) { return []; }
+  },
+
+  async getMovimentacoes(filtros) {
+    try {
+      var q = 'movimentacoes?order=data_hora.desc&limit=300';
+      if (filtros && filtros.peca) q += '&peca=eq.' + encodeURIComponent(filtros.peca);
+      if (filtros && filtros.material) q += '&material=eq.' + encodeURIComponent(filtros.material);
+      var rows = await sbGet(q);
+      return rows.map(function (r) {
+        return { ID: r.id, DataHora: fmtDataHoraBR(r.data_hora), Tipo: r.tipo, CaixaID: r.caixa_id, Peca: r.peca, CodigoPeca: r.codigo_peca,
+          Material: r.material, Lote: r.lote, QtdCaixas: r.qtd_caixas, Origem: r.origem, Usuario: r.usuario, Motivo: r.motivo, AutorizadoPor: r.autorizado_por };
+      });
+    } catch (e) { return []; }
+  },
+
+  async getModelosPadrao() { return { PECA: TEMPLATE_PADRAO_PECA, CONFERENCIA: TEMPLATE_PADRAO_CONFERENCIA }; },
+  async getModelosEtiqueta() { return { PECA: await getModeloEtiquetaInterno('PECA'), CONFERENCIA: await getModeloEtiquetaInterno('CONFERENCIA') }; },
+  async salvarModeloEtiqueta(tipo, html) {
+    try {
+      var r = await fetch(SUPABASE_URL + '/rest/v1/modelos_etiqueta', {
+        method: 'POST',
+        headers: sbHeaders({ Prefer: 'resolution=merge-duplicates,return=minimal' }),
+        body: JSON.stringify({ tipo: String(tipo), html: String(html), data_atualizacao: new Date().toISOString() })
+      });
+      if (!r.ok) throw new Error(await r.text());
+      await inserirLog('MODELO_ETIQUETA', 'Admin', 'Modelo de etiqueta atualizado: ' + tipo, '');
+      return { ok: true };
+    } catch (e) { return { ok: false, erro: e.message }; }
+  },
+
+  async verificarSenhaAdmin(senha) { return String(senha) === ADMIN_PASSWORD; }
+};
+
+// ── Polyfill: reproduz a interface google.script.run(...).withSuccessHandler(cb).funcao(args) ──
+(function () {
+  var successCb = null, failureCb = null;
+  var proxy = new Proxy({}, {
+    get: function (_, prop) {
+      if (prop === 'withSuccessHandler') return function (cb) { successCb = cb; return proxy; };
+      if (prop === 'withFailureHandler') return function (cb) { failureCb = cb; return proxy; };
+      return function () {
+        var args = Array.prototype.slice.call(arguments);
+        var fn = backend[prop];
+        var sc = successCb, fc = failureCb;
+        successCb = null; failureCb = null;
+        if (!fn) { if (fc) fc({ message: 'Função não implementada no adaptador Supabase: ' + prop }); return proxy; }
+        Promise.resolve().then(function () { return fn.apply(backend, args); })
+          .then(function (r) { if (sc) sc(r); })
+          .catch(function (e) { if (fc) fc(e); else console.error(e); });
+        return proxy;
+      };
+    }
+  });
+  window.google = { script: { run: proxy } };
+})();
+</script>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --azul:#1a1a2e;--azul2:#16213e;--azul3:#0f3460;
+  --laranja:#e94560;--laranja2:#c73652;
+  --verde:#1d7a4e;--verde2:#166040;
+  --amarelo:#f6c90e;
+  --cinza:#f0f2f5;--cinza2:#e4e6ea;--cinza3:#c8cdd5;
+  --texto:#1a1a2e;--texto2:#5a6175;
+  --radius:12px;--radius-sm:8px;
+}
+html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-family:'Segoe UI',system-ui,sans-serif;color:var(--texto);display:flex;flex-direction:column;user-select:none}
+
+/* ── LOADER ── */
+#loader{position:fixed;inset:0;background:var(--azul);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:16px}
+.logo-load{color:#fff;font-size:36px;font-weight:900;letter-spacing:6px}
+.logo-sub{color:rgba(255,255,255,.4);font-size:12px;letter-spacing:3px;text-transform:uppercase}
+.spinner{width:40px;height:40px;border:4px solid rgba(255,255,255,.12);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── MODAL INICIAL — OPERADOR OU ADMIN ── */
+#modal-inicio{position:fixed;inset:0;background:var(--azul);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:500;gap:0}
+.mi-logo{color:#fff;font-size:42px;font-weight:900;letter-spacing:6px;margin-bottom:6px}
+.mi-sub{color:rgba(255,255,255,.35);font-size:13px;letter-spacing:3px;text-transform:uppercase;margin-bottom:44px}
+.mi-titulo{color:rgba(255,255,255,.7);font-size:16px;font-weight:700;margin-bottom:20px;text-align:center;letter-spacing:.5px}
+.mi-botoes{display:flex;gap:16px;width:100%;max-width:640px;padding:0 20px;flex-wrap:wrap;justify-content:center}
+.mi-btn{
+  flex:1;min-width:150px;border:none;border-radius:var(--radius);
+  padding:24px 16px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  transition:all .15s;
+}
+.mi-btn:active{transform:scale(.96)}
+.mi-btn-op{background:var(--laranja);color:#fff}
+.mi-btn-op:hover{background:var(--laranja2)}
+.mi-btn-mov{background:var(--verde);color:#fff}
+.mi-btn-mov:hover{background:var(--verde2)}
+.mi-btn-adm{background:rgba(255,255,255,.1);color:#fff;border:2px solid rgba(255,255,255,.15)}
+.mi-btn-adm:hover{background:rgba(255,255,255,.18)}
+.mi-btn .ico{font-size:36px}
+.mi-btn .txt{font-size:17px;font-weight:900;letter-spacing:.5px}
+.mi-btn .desc{font-size:11px;opacity:.7;font-weight:500;text-align:center;line-height:1.4}
+
+/* ── TOPBAR ── */
+#topbar{height:52px;background:var(--azul);display:flex;align-items:center;justify-content:space-between;padding:0 12px;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,.5);z-index:50}
+.tb-brand{color:#fff;font-size:18px;font-weight:900;letter-spacing:3px;display:flex;align-items:center;gap:8px}
+.tb-tag{background:var(--laranja);font-size:8px;padding:3px 6px;border-radius:4px;letter-spacing:1px;font-weight:800}
+.tb-right{display:flex;align-items:center;gap:8px}
+.tb-usuario{color:rgba(255,255,255,.6);font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px}
+.tb-usuario .u-badge{background:rgba(255,255,255,.1);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800}
+.tb-usuario .u-badge.adm{background:var(--verde)}
+.btn-sair{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.6);padding:7px 11px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;transition:all .15s}
+.btn-sair:hover{background:rgba(255,255,255,.15);color:#fff}
+
+/* ── PÁGINAS ── */
+.pag{display:none;flex:1;overflow:hidden;flex-direction:column;min-height:0}
+.pag.ativa{display:flex}
+
+/* ── TOASTS ── */
+#tc{position:fixed;bottom:12px;right:12px;z-index:9999;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.toast{padding:11px 16px;border-radius:8px;color:#fff;font-size:13px;font-weight:700;animation:tIn .2s ease;display:flex;align-items:center;gap:8px;box-shadow:0 4px 16px rgba(0,0,0,.2)}
+.toast.sucesso{background:var(--verde)}.toast.erro{background:#c0392b}.toast.aviso{background:#d68910}
+@keyframes tIn{from{transform:translateX(110%);opacity:0}to{transform:none;opacity:1}}
+
+/* ══════════════════════════════
+   POS — PRODUÇÃO
+══════════════════════════════ */
+#pag-producao{flex-direction:row!important;background:#1e2030}
+
+.pos-sidebar{width:220px;flex-shrink:0;background:var(--azul);display:flex;flex-direction:column;border-right:2px solid rgba(255,255,255,.06)}
+.pos-logo{padding:14px 12px 10px;border-bottom:1px solid rgba(255,255,255,.06)}
+.pos-logo-txt{color:#fff;font-size:14px;font-weight:900;letter-spacing:2px}
+.pos-logo-sub{color:rgba(255,255,255,.3);font-size:10px;margin-top:2px}
+.pos-sels{flex:1;overflow:hidden;padding:10px 0}
+.pos-sel-item{padding:8px 12px;display:flex;flex-direction:column;gap:1px;border-bottom:1px solid rgba(255,255,255,.04)}
+.ps-label{font-size:9px;color:rgba(255,255,255,.3);font-weight:700;text-transform:uppercase;letter-spacing:.8px}
+.ps-val{font-size:13px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ps-val.vazio{color:rgba(255,255,255,.2);font-weight:400;font-style:italic}
+
+.pos-registrar{margin:10px 10px 0;background:var(--verde);color:#fff;border:none;border-radius:var(--radius);padding:14px;font-size:15px;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .15s;opacity:.4;pointer-events:none}
+.pos-registrar.pronto{opacity:1;pointer-events:auto}
+.pos-registrar.pronto:active{background:var(--verde2);transform:scale(.97)}
+.pos-imprimir{margin:8px 10px;background:var(--laranja);color:#fff;border:none;border-radius:var(--radius);padding:14px;font-size:15px;font-weight:900;cursor:pointer;display:none;align-items:center;justify-content:center;gap:8px}
+.pos-imprimir:active{background:var(--laranja2)}
+.pos-imprimir.vis{display:flex}
+.pos-nova{margin:6px 10px 10px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.12);border-radius:var(--radius);padding:10px;font-size:13px;font-weight:700;cursor:pointer;display:none;align-items:center;justify-content:center}
+.pos-nova.vis{display:flex}
+.pos-nova:active{background:rgba(255,255,255,.15)}
+
+.pos-main{flex:1;display:flex;flex-direction:column;min-width:0}
+.pos-steps{height:44px;background:rgba(0,0,0,.3);display:flex;align-items:center;padding:0 10px;gap:0;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,.06)}
+.pstep{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;font-size:11px;font-weight:700;color:rgba(255,255,255,.3);cursor:pointer;padding:6px 4px;border-radius:6px;transition:all .15s}
+.pstep .sn{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.08);color:rgba(255,255,255,.3);font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.pstep.ativo{color:#fff;background:rgba(255,255,255,.06)}
+.pstep.ativo .sn{background:var(--laranja);color:#fff}
+.pstep.done{color:rgba(255,255,255,.6)}
+.pstep.done .sn{background:var(--verde);color:#fff}
+.pstep-sep{width:16px;flex-shrink:0;height:1px;background:rgba(255,255,255,.1)}
+
+.pos-panel-head{padding:10px 14px 8px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.06)}
+.pph-titulo{font-size:16px;font-weight:900;color:#fff}
+.pph-sub{font-size:11px;color:rgba(255,255,255,.35);margin-top:1px}
+.pos-back-btn{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:none;color:rgba(255,255,255,.6);font-size:12px;font-weight:700;padding:8px 12px;border-radius:var(--radius-sm);cursor:pointer;transition:all .15s}
+.pos-back-btn:active{background:rgba(255,255,255,.18);color:#fff}
+
+.pos-grid-wrap{flex:1;overflow:hidden;padding:10px;display:flex;flex-direction:column;gap:8px}
+.pos-grid{flex:1;display:grid;gap:8px}
+
+.pbtn{background:rgba(255,255,255,.07);border:2px solid rgba(255,255,255,.1);border-radius:var(--radius);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;text-align:center;padding:10px 6px;transition:all .12s;position:relative;overflow:hidden}
+.pbtn:active{transform:scale(.94);background:rgba(255,255,255,.18)}
+.pbtn.sel{background:var(--laranja);border-color:var(--laranja);box-shadow:0 0 0 2px rgba(233,69,96,.3),0 4px 12px rgba(233,69,96,.3)}
+.pbtn .pi{font-size:22px;line-height:1}
+.pbtn .pc{font-size:14px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:#fff;margin-bottom:2px}
+.pbtn .pn{font-size:11px;font-weight:600;color:rgba(255,255,255,.6);line-height:1.2}
+.pbtn .pd{font-size:10px;color:rgba(255,255,255,.4);margin-top:1px}
+.pbtn.sel .pc{color:#fff}
+.pbtn.sel .pn{color:rgba(255,255,255,.85)}
+.pbtn.sel .pd{color:rgba(255,255,255,.7)}
+.pbtn .pmat{font-size:9px;font-weight:800;color:rgba(255,255,255,.5);letter-spacing:.8px;text-transform:uppercase;background:rgba(255,255,255,.08);padding:1px 6px;border-radius:4px}
+.pbtn.sel .pmat{color:rgba(255,255,255,.85);background:rgba(255,255,255,.2)}
+.pbtn-chk{position:absolute;top:5px;right:5px;width:18px;height:18px;background:#fff;border-radius:50%;display:none;align-items:center;justify-content:center;color:var(--laranja);font-size:10px;font-weight:900}
+.pbtn.sel .pbtn-chk{display:flex}
+
+.grid-trim{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.tbtn{background:rgba(255,255,255,.07);border:2px solid rgba(255,255,255,.1);border-radius:var(--radius);cursor:pointer;font-size:28px;font-weight:900;color:#fff;height:72px;display:flex;align-items:center;justify-content:center;transition:all .12s}
+.tbtn:active{transform:scale(.93)}
+.tbtn.sel{background:var(--laranja);border-color:var(--laranja);box-shadow:0 0 0 2px rgba(233,69,96,.3)}
+
+.inp-pos{width:100%;background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.12);border-radius:var(--radius-sm);padding:12px 14px;font-size:17px;font-weight:700;color:#fff;outline:none;-webkit-appearance:none;transition:border .2s}
+.inp-pos::placeholder{color:rgba(255,255,255,.2);font-weight:400}
+.inp-pos:focus{border-color:var(--laranja)}
+select.inp-pos option{color:#000;background:#fff}
+.lbl-pos{display:block;font-size:9px;font-weight:800;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px}
+
+.qtd-big{font-size:64px;font-weight:900;text-align:center;color:#fff;background:rgba(255,255,255,.07);border:2px solid rgba(255,255,255,.12);border-radius:var(--radius);padding:12px;width:100%;outline:none;-webkit-appearance:none;transition:border .2s}
+.qtd-big:focus{border-color:var(--laranja)}
+.qtd-btns{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:7px;margin-top:8px}
+.qbtn{background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.1);border-radius:var(--radius-sm);padding:12px 4px;font-size:18px;font-weight:900;color:#fff;cursor:pointer;text-align:center;transition:all .1s}
+.qbtn:active{transform:scale(.91);background:rgba(255,255,255,.2)}
+.info-pill{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:8px 12px;font-size:11px;color:rgba(255,255,255,.35);display:flex;justify-content:space-between;align-items:center;margin-top:7px}
+.info-pill strong{color:#fff;font-size:14px}
+.aviso-adj{background:rgba(246,201,14,.1);border:1px solid rgba(246,201,14,.3);border-radius:6px;padding:7px 12px;font-size:11px;color:var(--amarelo);margin-top:6px;display:none;font-weight:700}
+.cx-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+
+.pos-paginacao{display:flex;align-items:center;justify-content:center;gap:8px;flex-shrink:0;padding:6px 0 2px}
+.ppag-btn{background:rgba(255,255,255,.08);border:none;color:rgba(255,255,255,.6);font-size:13px;font-weight:800;padding:7px 14px;border-radius:6px;cursor:pointer;transition:all .12s}
+.ppag-btn:active{background:rgba(255,255,255,.2)}
+.ppag-btn:disabled{opacity:.2;cursor:default}
+.ppag-info{color:rgba(255,255,255,.4);font-size:12px;font-weight:700;min-width:60px;text-align:center}
+
+/* Etiqueta */
+/* Etiqueta principal — 100mm (largura, travada pelo cabeçote do L42 Pro)
+   x 150mm (altura, sentido do avanço do papel). RETRATO — confirmado
+   por medição física da bobina. Código no topo, material no meio,
+   quantidade + QR numa linha, data/lote/op/referência embaixo. */
+.etiq-fisica{width:100mm;height:150mm;margin:0 auto;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.3);border:3px solid #000;background:#fff;color:#000;font-family:'Arial Black','Arial',sans-serif;display:flex;flex-direction:column}
+.ef-top{padding:.6mm 3mm;display:flex;justify-content:space-between;align-items:center;border-bottom:.6mm solid #000;flex-shrink:0}
+.ef-empresa{font-size:2.6mm;font-weight:900;letter-spacing:.6mm}
+.ef-trim{font-size:2.3mm;font-weight:700}
+.ef-cod-row{padding:.3mm 3mm .6mm;border-bottom:1mm solid #000;flex-shrink:0;text-align:center}
+.ef-cod{font-size:8mm;font-weight:900;letter-spacing:-.2mm;line-height:1}
+.ef-desc{font-size:3.1mm;font-weight:700;letter-spacing:.1mm;text-transform:uppercase;text-align:center;margin-top:.5mm}
+.ef-mat-wrap{padding:.6mm 3mm;border-bottom:1mm solid #000;flex-shrink:0;position:relative;text-align:center}
+.ef-mat-label{font-size:2mm;font-weight:900;letter-spacing:.4mm;text-transform:uppercase;opacity:.6}
+.ef-mat-nome{font-size:5mm;font-weight:900;letter-spacing:.4mm;line-height:1}
+.ef-mat-norma{position:absolute;bottom:1mm;right:3mm;max-width:42mm;font-size:2.1mm;font-weight:700;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ef-mat-cor{font-size:2.1mm;font-weight:800}
+.ef-bottom-grid{display:flex;flex-direction:row;flex:1;min-height:0}
+.ef-qtd-blk{flex:1;border-right:1mm solid #000;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:1mm 3mm;box-sizing:border-box}
+.ef-qtd-label{font-size:2.1mm;font-weight:900;letter-spacing:.4mm;text-transform:uppercase;opacity:.6}
+.ef-qtd-num{font-size:10mm;font-weight:900;line-height:1;letter-spacing:-.4mm}
+.ef-qr-blk{flex:1;display:flex;align-items:center;justify-content:center;padding:1mm;box-sizing:border-box}
+.ef-qr-frame{border:.7mm solid #000;padding:1.2mm;display:flex;align-items:center;justify-content:center;background:#fff;box-sizing:border-box}
+.ef-qr-blk img,.ef-qr-blk canvas{width:22mm!important;height:22mm!important}
+.ef-footer{border-top:1mm solid #000;display:flex;flex-direction:column;flex-shrink:0}
+.ef-foot-row{display:flex;flex-direction:row;border-bottom:1mm solid #000}
+.ef-foot-row:last-child{border-bottom:none}
+.ef-foot-item{flex:1;padding:.6mm 3mm;display:flex;flex-direction:column;justify-content:center}
+.ef-foot-item:first-child{border-right:1mm solid #000}
+.ef-foot-label{font-size:1.9mm;font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6}
+.ef-foot-val{font-size:2.8mm;font-weight:900;letter-spacing:.1mm}
+.ef-foot-val.ef-ref{font-size:2.6mm;font-family:'Courier New',monospace;letter-spacing:0}
+
+/* Etiqueta de conferência — 100mm x 150mm retrato, 2 canhotos
+   empilhados verticalmente (75mm de altura cada), separados por
+   linha tracejada horizontal. */
+.etiq-conf{width:100mm;height:150mm;margin:0 auto;box-shadow:0 4px 20px rgba(0,0,0,.3);border:3px solid #000;display:flex;flex-direction:column;font-family:'Arial',sans-serif;color:#000;background:#fff}
+.conf-canhoto{flex:1;padding:2mm 3mm;display:flex;flex-direction:column;justify-content:center;gap:1mm;min-width:0;min-height:0}
+.conf-canhoto:first-child{border-bottom:1mm dashed #000}
+.conf-marca{font-size:3.6mm;font-weight:900;text-align:center;letter-spacing:.6mm}
+.conf-titulo{font-size:2.4mm;font-weight:800;text-align:center;line-height:1.2}
+.conf-linha{display:flex;align-items:baseline;gap:1.5mm;font-size:2.6mm;font-weight:700;margin-top:1mm}
+.conf-linha .conf-valor{flex:1;border-bottom:.4mm solid #000;min-height:3.5mm;font-weight:900}
+.conf-linha.conf-vazia .conf-valor{min-height:3.5mm}
+.conf-bp-row{display:flex;gap:3mm;margin-top:.5mm;font-size:2.1mm;font-weight:800;align-items:center;flex-wrap:wrap}
+.conf-chk{width:2.6mm;height:2.6mm;border:.4mm solid #000;display:inline-block;margin-right:1mm;flex-shrink:0}
+
+/* ══════════════════════════════
+   ADMIN — sidebar esquerda
+══════════════════════════════ */
+#pag-admin{flex-direction:row!important;background:var(--cinza)}
+
+.adm-nav{
+  width:180px;flex-shrink:0;background:var(--azul);
+  display:flex;flex-direction:column;
+  padding:16px 12px;gap:8px;
+  border-right:2px solid rgba(255,255,255,.06)
+}
+.adm-nav-titulo{color:rgba(255,255,255,.3);font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;padding-left:4px}
+.adm-nav-btn{
+  display:flex;align-items:center;gap:9px;
+  padding:12px 14px;border-radius:var(--radius-sm);
+  cursor:pointer;font-size:13px;font-weight:700;
+  color:rgba(255,255,255,.55);border:none;background:transparent;
+  transition:all .15s;text-align:left;width:100%;
+}
+.adm-nav-btn:hover{background:rgba(255,255,255,.08);color:#fff}
+.adm-nav-btn.ativo{background:var(--laranja);color:#fff}
+.adm-nav-btn:active{opacity:.8}
+.adm-nav-sep{height:1px;background:rgba(255,255,255,.08);margin:4px 0}
+
+.adm-content{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+
+/* Painel Dashboard dentro do Admin */
+.adm-dash{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px}
+.dash-filtro{background:#fff;border-radius:var(--radius);padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+.df-titulo{font-size:13px;font-weight:800;color:var(--azul);margin-bottom:10px}
+.df-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.df-campo label{display:block;font-size:9px;font-weight:800;color:var(--texto2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.df-campo input,.df-campo select{width:100%;padding:10px 11px;border:2px solid var(--cinza3);border-radius:var(--radius-sm);font-size:13px;font-weight:600;color:var(--texto);outline:none;background:#fff;-webkit-appearance:none}
+.df-campo input:focus,.df-campo select:focus{border-color:var(--azul3)}
+.btn-filtrar{background:var(--azul3);color:#fff;border:none;border-radius:var(--radius-sm);padding:11px;font-size:13px;font-weight:800;cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:6px}
+.btn-filtrar:active{background:var(--azul)}
+
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.kpi{background:#fff;border-radius:var(--radius);padding:14px;border-left:4px solid var(--azul3);box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.kpi.v{border-left-color:var(--verde)}.kpi.o{border-left-color:#e67e22}.kpi.r{border-left-color:var(--laranja)}
+.kl{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--texto2);font-weight:700;margin-bottom:5px}
+.kv{font-size:28px;font-weight:900;color:var(--azul);line-height:1}
+.ks{font-size:10px;color:var(--texto2);margin-top:2px}
+
+.hist-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.hist-titulo{font-size:13px;font-weight:900;color:var(--azul)}
+.hist-periodo{font-size:10px;color:var(--texto2);font-weight:600;margin-left:auto}
+.op-card{background:#fff;border-radius:var(--radius);overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.06);margin-bottom:8px}
+.op-hd{background:var(--azul);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer}
+.op-hd:active{background:var(--azul2)}
+.op-nome{font-size:14px;font-weight:900;color:#fff;display:flex;align-items:center;gap:7px}
+.op-mat-badge{background:rgba(255,255,255,.15);color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:5px;letter-spacing:.5px}
+.op-tot{background:var(--laranja);color:#fff;font-size:12px;font-weight:900;padding:3px 10px;border-radius:7px;white-space:nowrap}
+.op-chev{color:rgba(255,255,255,.4);font-size:11px;transition:transform .2s;margin-left:6px}
+.op-chev.open{transform:rotate(180deg)}
+.op-body{display:none;padding:8px 14px}
+.op-body.open{display:block}
+.peca-row{padding:6px 0;border-bottom:1px solid var(--cinza2)}
+.peca-row:last-child{border-bottom:none}
+.peca-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:3px}
+.peca-cod{font-size:10px;font-weight:800;color:var(--texto2);font-family:monospace;background:var(--cinza2);padding:1px 6px;border-radius:4px}
+.peca-nm{font-size:12px;font-weight:800;color:var(--azul)}
+.peca-cx{font-size:12px;font-weight:900;color:var(--verde)}
+.lotes-wrap{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
+.lote-chip{background:var(--cinza2);color:var(--texto2);font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;display:flex;align-items:center;gap:2px}
+.lote-chip .lcn{color:var(--texto);font-weight:800}
+.dash-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;color:var(--texto2);text-align:center;gap:8px;background:#fff;border-radius:var(--radius)}
+.dash-empty .dei{font-size:36px;opacity:.3}
+
+/* Painel Cadastros dentro do Admin */
+.adm-cadastros{flex:1;overflow:hidden;display:flex;flex-direction:column}
+.adm-subtabs{display:flex;gap:5px;padding:10px 12px 0;flex-shrink:0;background:var(--cinza);overflow-x:auto;border-bottom:2px solid var(--cinza2)}
+.astab{padding:8px 12px;border-radius:7px 7px 0 0;cursor:pointer;font-size:11px;font-weight:800;color:var(--texto2);background:#fff;border:2px solid var(--cinza3);border-bottom:none;white-space:nowrap;transition:all .15s}
+.astab.ativo{background:var(--azul);color:#fff;border-color:var(--azul)}
+.adm-sec{flex:1;overflow-y:auto;padding:10px 12px}
+.adm-sec-hd{display:flex;justify-content:space-between;align-items:center;padding-bottom:8px;position:sticky;top:0;background:var(--cinza);z-index:5}
+.adm-sec-t{font-size:14px;font-weight:900;color:var(--azul)}
+.btn-novo{background:var(--verde);color:#fff;border:none;border-radius:7px;padding:9px 14px;font-size:12px;font-weight:800;cursor:pointer}
+
+.ic{background:#fff;border-radius:var(--radius-sm);padding:11px;margin-bottom:7px;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ic-info{flex:1;min-width:0}
+.ic-nome{font-size:13px;font-weight:800;color:var(--azul);margin-bottom:2px;display:flex;align-items:center;gap:7px}
+.ic-mat{font-size:10px;font-weight:800;background:var(--azul3);color:#fff;padding:1px 7px;border-radius:5px}
+.ic-det{font-size:10px;color:var(--texto2);display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.ic-acts{display:flex;gap:5px;flex-shrink:0}
+.bic{width:34px;height:34px;border-radius:7px;border:none;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center}
+.bic-e{background:var(--cinza2)}.bic-d{background:#fde8e8}
+.badge{padding:2px 7px;border-radius:9px;font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.5px}
+.ba{background:#d4edda;color:#155724}.bi2{background:#f8d7da;color:#721c24}
+
+/* MODAIS */
+.mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:500;align-items:flex-end;justify-content:center}
+.mo.aberto{display:flex}
+.mb{background:#fff;border-radius:16px 16px 0 0;padding:20px 16px 28px;width:100%;max-height:90vh;overflow-y:auto}
+.mb-t{font-size:17px;font-weight:900;color:var(--azul);margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid var(--cinza2)}
+.mb-acts{display:flex;gap:8px;margin-top:16px}
+.mb-acts button{flex:1;padding:13px;border-radius:var(--radius-sm);border:none;font-size:14px;font-weight:800;cursor:pointer}
+.mb-cancel{background:var(--cinza2);color:var(--texto2)}
+.mb-save{background:var(--verde);color:#fff}
+.mb-auth{background:#e67e22;color:#fff}
+.fg{margin-bottom:11px}
+.fg label{display:block;font-size:10px;font-weight:800;color:var(--texto2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}
+.fg input,.fg select{width:100%;padding:12px;border:2px solid var(--cinza3);border-radius:var(--radius-sm);font-size:15px;color:var(--texto);outline:none;background:#fff;-webkit-appearance:none}
+.fg input:focus,.fg select:focus{border-color:var(--azul3)}
+.fg-row{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+
+/* LOGIN senha admin */
+.lo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9000;align-items:flex-end;justify-content:center}
+.lo.aberto{display:flex}
+.lb{background:#fff;border-radius:16px 16px 0 0;padding:24px 16px 30px;width:100%;text-align:center}
+.lb-ico{width:52px;height:52px;background:var(--azul);border-radius:50%;margin:0 auto 10px;display:flex;align-items:center;justify-content:center}
+.lb-t{font-size:18px;font-weight:900;color:var(--azul);margin-bottom:3px}
+.lb-s{font-size:12px;color:var(--texto2);margin-bottom:16px}
+.lb-err{color:#c0392b;font-size:12px;margin-bottom:8px;display:none;font-weight:700}
+
+/* ══════════════════════════════
+   MODELOS DE ETIQUETA (admin)
+══════════════════════════════ */
+.mdl-tabs{display:flex;gap:6px;margin-bottom:10px}
+.mdl-tab{padding:9px 16px;border-radius:7px;border:2px solid var(--cinza3);background:#fff;color:var(--texto2);font-size:12px;font-weight:800;cursor:pointer}
+.mdl-tab.ativo{background:var(--azul);color:#fff;border-color:var(--azul)}
+.mdl-cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+.mdl-editor textarea{width:100%;height:340px;font-family:'Courier New',monospace;font-size:12px;padding:10px;border:2px solid var(--cinza3);border-radius:var(--radius-sm);resize:vertical;color:var(--texto)}
+.mdl-acts{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.mdl-acts button{padding:9px 14px;border-radius:7px;border:none;font-size:12px;font-weight:800;cursor:pointer}
+.mdl-btn-prev{background:var(--azul3);color:#fff}
+.mdl-btn-save{background:var(--verde);color:#fff}
+.mdl-btn-reset{background:var(--cinza2);color:var(--texto2)}
+.mdl-btn-dl{background:rgba(0,0,0,.06);color:var(--texto)}
+.mdl-preview-wrap{background:#e4e6ea;border-radius:var(--radius);padding:16px;display:flex;align-items:center;justify-content:center;min-height:200px}
+.mdl-preview-box{width:100mm;height:150mm;background:#fff;border:3px solid #000;box-shadow:0 4px 16px rgba(0,0,0,.15);overflow:hidden;transform:scale(.9)}
+.mdl-legenda{background:#fff;border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;font-size:11px;color:var(--texto2);max-height:110px;overflow-y:auto}
+.mdl-legenda b{color:var(--azul3);font-family:monospace}
+
+/* ══════════════════════════════
+   MOVIMENTAÇÃO DE ESTOQUE
+══════════════════════════════ */
+#pag-movimentacao{background:var(--cinza)}
+.mov-top{background:var(--azul);padding:12px 16px;flex-shrink:0;display:flex;flex-direction:column;gap:8px}
+.mov-tabs{display:flex;gap:8px}
+.mov-tab{flex:1;padding:12px;border-radius:var(--radius-sm);border:2px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:rgba(255,255,255,.6);font-size:13px;font-weight:800;cursor:pointer;text-align:center;transition:all .15s}
+.mov-tab.ativo{background:var(--verde);border-color:var(--verde);color:#fff}
+.mov-tab.saida.ativo{background:var(--laranja);border-color:var(--laranja)}
+.mov-body{flex:1;overflow-y:auto;padding:14px}
+.mov-scan-box{background:#fff;border-radius:var(--radius);padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:14px}
+.mov-scan-lbl{font-size:11px;font-weight:800;color:var(--texto2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.mov-scan-inp{width:100%;padding:16px;border:3px solid var(--azul3);border-radius:var(--radius-sm);font-size:18px;font-weight:800;text-align:center;letter-spacing:1px;outline:none;background:#f8f9fb}
+.mov-scan-inp:focus{border-color:var(--verde)}
+.mov-scan-hint{font-size:11px;color:var(--texto2);margin-top:8px;text-align:center}
+.mov-fallback{text-align:center;margin-top:10px}
+.mov-fallback button{background:none;border:none;color:var(--azul3);font-size:12px;font-weight:800;text-decoration:underline;cursor:pointer;padding:6px}
+.mov-manual-box{background:#fff;border-radius:var(--radius);padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:14px;display:none}
+.mov-manual-box.vis{display:block}
+.mov-manual-aviso{background:rgba(246,201,14,.15);border:1px solid rgba(246,201,14,.4);border-radius:8px;padding:10px 12px;font-size:11px;color:#8a6d00;font-weight:700;margin-bottom:12px;display:flex;gap:8px;align-items:flex-start}
+.mov-ultima{background:#fff;border-radius:var(--radius);padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:14px;display:none}
+.mov-ultima.vis{display:block}
+.mov-ultima-hd{font-size:11px;font-weight:800;color:var(--texto2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.mov-ultima-corpo{display:flex;align-items:center;gap:10px}
+.mov-ultima-ico{font-size:28px}
+.mov-ultima-txt{flex:1}
+.mov-ultima-peca{font-size:15px;font-weight:900;color:var(--azul)}
+.mov-ultima-det{font-size:11px;color:var(--texto2)}
+
+.mov-estoque-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.mov-estoque-titulo{font-size:14px;font-weight:900;color:var(--azul)}
+.mov-refresh{background:var(--cinza2);border:none;border-radius:7px;padding:8px 12px;font-size:11px;font-weight:800;color:var(--texto2);cursor:pointer}
+.mov-tabela-wrap{background:#fff;border-radius:var(--radius);overflow-x:auto;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+table.mov-tabela{border-collapse:collapse;width:100%;font-size:12px}
+table.mov-tabela th{background:var(--azul);color:#fff;padding:9px 10px;text-align:center;font-weight:800;white-space:nowrap;position:sticky;top:0}
+table.mov-tabela th:first-child{text-align:left;position:sticky;left:0;z-index:2}
+table.mov-tabela td{padding:8px 10px;text-align:center;border-bottom:1px solid var(--cinza2);font-weight:700;color:var(--texto)}
+table.mov-tabela td:first-child{text-align:left;font-weight:800;color:var(--azul);background:#fafbfc;position:sticky;left:0}
+table.mov-tabela tr:nth-child(even) td{background:#f7f8fa}
+table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
+.mov-cel-zero{color:var(--cinza3)!important}
+.mov-cel-neg{color:#c0392b!important}
+
+@page{ size:100mm 150mm; margin:0; }
+@media print{
+  html,body{height:auto!important;overflow:visible!important}
+  body>*:not(#print-area){display:none!important}
+  #print-area{display:block!important;position:static!important;overflow:visible!important}
+  .etiq-fisica,.etiq-conf{page-break-after:always;box-shadow:none!important;border:3px solid #000!important;margin:0!important}
+}
+</style>
+</head>
+<body>
+
+<!-- LOADER -->
+<div id="loader">
+  <div class="logo-load">VITALBOR</div>
+  <div class="spinner"></div>
+  <div class="logo-sub">Carregando sistema...</div>
+</div>
+
+<!-- MODAL INICIAL -->
+<div id="modal-inicio">
+  <div class="mi-logo">VITALBOR</div>
+  <div class="mi-sub">Sistema de Controle de Produção</div>
+  <div class="mi-titulo">Como deseja acessar o sistema?</div>
+  <div class="mi-botoes">
+    <button class="mi-btn mi-btn-op" onclick="entrarComoOperador()">
+      <div class="ico">👷</div>
+      <div class="txt">OPERADOR</div>
+      <div class="desc">Registrar produção e imprimir etiquetas</div>
+    </button>
+    <button class="mi-btn mi-btn-mov" onclick="entrarComoMovimentacao()">
+      <div class="ico">📦</div>
+      <div class="txt">MOVIMENTAÇÃO</div>
+      <div class="desc">Bipar entrada e saída de estoque</div>
+    </button>
+    <button class="mi-btn mi-btn-adm" onclick="entrarComoAdmin()">
+      <div class="ico">🔐</div>
+      <div class="txt">ADMINISTRADOR</div>
+      <div class="desc">Dashboard, relatórios e cadastros</div>
+    </button>
+  </div>
+</div>
+
+<!-- TOPBAR -->
+<div id="topbar" style="display:none">
+  <div class="tb-brand">VITALBOR <span class="tb-tag">Embalagem</span></div>
+  <div class="tb-right">
+    <div class="tb-usuario">
+      <span id="tb-modo-label">—</span>
+      <span class="u-badge" id="tb-badge">—</span>
+    </div>
+    <button class="btn-sair" onclick="voltarInicio()">↩ Sair</button>
+  </div>
+</div>
+
+<div id="tc"></div>
+
+<!-- ════════ PRODUÇÃO ════════ -->
+<div id="pag-producao" class="pag">
+  <div class="pos-sidebar">
+    <div class="pos-logo">
+      <div class="pos-logo-txt">VITALBOR</div>
+      <div class="pos-logo-sub">Controle de Produção</div>
+    </div>
+    <div class="pos-sels">
+      <div class="pos-sel-item"><div class="ps-label">Operador</div><div class="ps-val vazio" id="sel-op-txt">Não selecionado</div></div>
+      <div class="pos-sel-item"><div class="ps-label">Peça</div><div class="ps-val vazio" id="sel-peca-txt">Não selecionado</div></div>
+      <div class="pos-sel-item"><div class="ps-label">Material</div><div class="ps-val vazio" id="sel-mat-txt">Não selecionado</div></div>
+      <div class="pos-sel-item"><div class="ps-label">Máquina</div><div class="ps-val vazio" id="sel-maq-txt">—</div></div>
+      <div class="pos-sel-item"><div class="ps-label">Trimestre / Lote</div><div class="ps-val vazio" id="sel-lote-txt">Não selecionado</div></div>
+      <div class="pos-sel-item"><div class="ps-label">Peças/Cx × Caixas</div><div class="ps-val vazio" id="sel-qtd-txt">—</div></div>
+    </div>
+    <button class="pos-registrar" id="btn-registrar" onclick="confirmarProd()">✅ REGISTRAR</button>
+    <button class="pos-imprimir" id="btn-imprimir" onclick="imprimirTodas()">🖨️ IMPRIMIR</button>
+    <button class="pos-nova" id="btn-nova" onclick="novaProd()">+ Nova Produção</button>
+  </div>
+
+  <div class="pos-main">
+    <div class="pos-steps">
+      <div class="pstep ativo" id="pst1" onclick="irStepSe(1)"><div class="sn">1</div><span>Oper.</span></div>
+      <div class="pstep-sep"></div>
+      <div class="pstep" id="pst2" onclick="irStepSe(2)"><div class="sn">2</div><span>Peça</span></div>
+      <div class="pstep-sep"></div>
+      <div class="pstep" id="pst3" onclick="irStepSe(3)"><div class="sn">3</div><span>Mat.</span></div>
+      <div class="pstep-sep"></div>
+      <div class="pstep" id="pst4" onclick="irStepSe(4)"><div class="sn">4</div><span>Máq.</span></div>
+      <div class="pstep-sep"></div>
+      <div class="pstep" id="pst5" onclick="irStepSe(5)"><div class="sn">5</div><span>Lote</span></div>
+      <div class="pstep-sep"></div>
+      <div class="pstep" id="pst6" onclick="irStepSe(6)"><div class="sn">6</div><span>Qtd</span></div>
+    </div>
+
+    <!-- SP1 Operador -->
+    <div id="sp1" style="display:flex;flex-direction:column;flex:1;min-height:0">
+      <div class="pos-panel-head"><div><div class="pph-titulo">Selecione o Operador</div><div class="pph-sub">Toque no seu nome</div></div></div>
+      <div class="pos-grid-wrap"><div class="pos-grid" id="g-op"></div><div class="pos-paginacao" id="pag-op" style="display:none"><button class="ppag-btn" id="pag-op-prev" onclick="pgOp(-1)">◀</button><div class="ppag-info" id="pag-op-info">1/1</div><button class="ppag-btn" id="pag-op-next" onclick="pgOp(1)">▶</button></div></div>
+    </div>
+    <!-- SP2 Peça -->
+    <div id="sp2" style="display:none;flex-direction:column;flex:1;min-height:0">
+      <div class="pos-panel-head"><button class="pos-back-btn" onclick="goStep(1)">◀ Voltar</button><div><div class="pph-titulo">Selecione a Peça</div><div class="pph-sub">Produto a ser embalado</div></div></div>
+      <div class="pos-grid-wrap"><div class="pos-grid" id="g-peca"></div><div class="pos-paginacao" id="pag-peca" style="display:none"><button class="ppag-btn" id="pag-peca-prev" onclick="pgPeca(-1)">◀</button><div class="ppag-info" id="pag-peca-info">1/1</div><button class="ppag-btn" id="pag-peca-next" onclick="pgPeca(1)">▶</button></div></div>
+    </div>
+    <!-- SP3 Material -->
+    <div id="sp3" style="display:none;flex-direction:column;flex:1;min-height:0">
+      <div class="pos-panel-head"><button class="pos-back-btn" onclick="goStep(2)">◀ Voltar</button><div><div class="pph-titulo">Matéria-Prima</div><div class="pph-sub">Composto sendo utilizado</div></div></div>
+      <div class="pos-grid-wrap"><div class="pos-grid" id="g-mat"></div><div class="pos-paginacao" id="pag-mat" style="display:none"><button class="ppag-btn" id="pag-mat-prev" onclick="pgMat(-1)">◀</button><div class="ppag-info" id="pag-mat-info">1/1</div><button class="ppag-btn" id="pag-mat-next" onclick="pgMat(1)">▶</button></div></div>
+    </div>
+    <!-- SP4 Máquina -->
+    <div id="sp4" style="display:none;flex-direction:column;flex:1;min-height:0">
+      <div class="pos-panel-head"><button class="pos-back-btn" onclick="goStep(3)">◀ Voltar</button><div><div class="pph-titulo">Máquina</div><div class="pph-sub">Injetora em operação</div></div></div>
+      <div class="pos-grid-wrap"><div class="pos-grid" id="g-maq"></div></div>
+    </div>
+    <!-- SP5 Trimestre/Lote -->
+    <div id="sp5" style="display:none;flex-direction:column;flex:1;min-height:0">
+      <div class="pos-panel-head"><button class="pos-back-btn" onclick="voltarS5()">◀ Voltar</button><div><div class="pph-titulo">Trimestre e Lote</div></div></div>
+      <div class="pos-grid-wrap" style="overflow-y:auto">
+        <div class="grid-trim"><div class="tbtn" onclick="selTrim('T1')">T1</div><div class="tbtn" onclick="selTrim('T2')">T2</div><div class="tbtn" onclick="selTrim('T3')">T3</div><div class="tbtn" onclick="selTrim('T4')">T4</div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px">
+          <div><span class="lbl-pos">Ano</span><select id="sel-ano" class="inp-pos"><option value="2024">2024</option><option value="2025">2025</option><option value="2026" selected>2026</option><option value="2027">2027</option></select></div>
+          <div><span class="lbl-pos">Número do Lote</span><input type="text" id="inp-lote" class="inp-pos" placeholder="Ex: 13590"/></div>
+        </div>
+        <button onclick="goS6()" style="margin-top:12px;width:100%;background:var(--azul3);color:#fff;border:none;border-radius:var(--radius);padding:14px;font-size:15px;font-weight:900;cursor:pointer">Próximo →</button>
+      </div>
+    </div>
+    <!-- SP6 Quantidade -->
+    <div id="sp6" style="display:none;flex-direction:column;flex:1;min-height:0">
+      <div class="pos-panel-head"><button class="pos-back-btn" onclick="goStep(5)">◀ Voltar</button><div><div class="pph-titulo">Quantidade e Caixas</div></div></div>
+      <div class="pos-grid-wrap" style="overflow-y:auto">
+        <div class="cx-row">
+          <div>
+            <span class="lbl-pos">Peças por Caixa</span>
+            <input type="number" id="inp-qtd" class="qtd-big" value="0" min="1" oninput="chkAdj()"/>
+            <div class="qtd-btns"><div class="qbtn" onclick="adjQ(-10)">−10</div><div class="qbtn" onclick="adjQ(-1)">−1</div><div class="qbtn" onclick="adjQ(1)">+1</div><div class="qbtn" onclick="adjQ(10)">+10</div></div>
+            <div class="aviso-adj" id="aviso-adj">⚠️ Diferente do padrão — senha admin necessária</div>
+            <div class="info-pill">Padrão: <strong id="lbl-pad">—</strong></div>
+          </div>
+          <div>
+            <span class="lbl-pos">Número de Caixas</span>
+            <input type="number" id="inp-cx" class="qtd-big" value="1" min="1" oninput="updSidebar()"/>
+            <div class="qtd-btns"><div class="qbtn" onclick="adjC(-5)">−5</div><div class="qbtn" onclick="adjC(-1)">−1</div><div class="qbtn" onclick="adjC(1)">+1</div><div class="qbtn" onclick="adjC(5)">+5</div></div>
+            <div class="info-pill">Total peças: <strong id="lbl-tot" style="color:var(--verde)">—</strong></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- SP7 Etiquetas -->
+    <div id="sp7" style="display:none;flex-direction:column;flex:1;min-height:0">
+      <div class="pos-panel-head"><div><div class="pph-titulo" style="color:var(--verde)">✅ Produção Registrada!</div><div class="pph-sub" id="etiq-sub"></div></div></div>
+      <div class="pos-grid-wrap" style="overflow-y:auto;gap:12px">
+        <div style="color:rgba(255,255,255,.4);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:-4px">🏷️ Etiquetas de Peça</div>
+        <div id="lista-etiq" style="display:flex;flex-direction:column;gap:12px;align-items:center"></div>
+        <div style="color:rgba(255,255,255,.4);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin:6px 0 -4px">✅ Etiquetas de Conferência</div>
+        <div id="lista-conf" style="display:flex;flex-direction:column;gap:12px;align-items:center"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ MOVIMENTAÇÃO DE ESTOQUE ════════ -->
+<div id="pag-movimentacao" class="pag">
+  <div class="mov-top">
+    <div class="mov-tabs">
+      <div class="mov-tab entrada ativo" id="mtab-entrada" onclick="movSetTipo('ENTRADA')">📥 ENTRADA</div>
+      <div class="mov-tab saida" id="mtab-saida" onclick="movSetTipo('SAIDA')">📤 SAÍDA</div>
+    </div>
+  </div>
+  <div class="mov-body">
+
+    <div class="mov-ultima" id="mov-ultima">
+      <div class="mov-ultima-hd">Última bipagem</div>
+      <div class="mov-ultima-corpo">
+        <div class="mov-ultima-ico" id="mov-ultima-ico">✅</div>
+        <div class="mov-ultima-txt">
+          <div class="mov-ultima-peca" id="mov-ultima-peca">—</div>
+          <div class="mov-ultima-det" id="mov-ultima-det">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mov-scan-box">
+      <div class="mov-scan-lbl">🔫 Aponte o leitor e bipe a etiqueta</div>
+      <input type="text" id="mov-scan-inp" class="mov-scan-inp" placeholder="Aguardando leitura..." autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();movProcessarScan();}"/>
+      <div class="mov-scan-hint">O leitor USB digita o código e aperta Enter automaticamente</div>
+      <div class="mov-fallback"><button onclick="movAbrirManual()">Etiqueta rasgada ou ilegível? Movimentar manualmente →</button></div>
+    </div>
+
+    <div class="mov-manual-box" id="mov-manual-box">
+      <div class="mov-manual-aviso">⚠️ <span>Movimentação manual (sem leitura de etiqueta) exige senha de administrador, pois não há como o sistema confirmar sozinho a informação.</span></div>
+      <div class="fg"><label>Peça</label><select id="mm-peca" class="inp-mm" onchange="movAtualizarMateriaisManual()"></select></div>
+      <div class="fg"><label>Material</label><select id="mm-mat" class="inp-mm"></select></div>
+      <div class="fg-row">
+        <div class="fg"><label>Lote (opcional)</label><input type="text" id="mm-lote" placeholder="Ex: 13590"/></div>
+        <div class="fg"><label>Qtd. de Caixas</label><input type="number" id="mm-qtd" value="1" min="1"/></div>
+      </div>
+      <div class="fg"><label>Motivo</label><input type="text" id="mm-motivo" placeholder="Ex: Etiqueta rasgada / Perda / Contagem física"/></div>
+      <div class="fg"><label>Senha Admin</label><input type="password" id="mm-senha" placeholder="••••••••"/></div>
+      <div class="mb-acts">
+        <button class="mb-cancel" onclick="movFecharManual()">Cancelar</button>
+        <button class="mb-save" onclick="movConfirmarManual()">💾 Registrar Manual</button>
+      </div>
+    </div>
+
+    <div class="mov-estoque-hd">
+      <div class="mov-estoque-titulo">📊 Estoque atual (em caixas) — Peça × Material</div>
+      <button class="mov-refresh" onclick="movCarregarEstoque()">↻ Atualizar</button>
+    </div>
+    <div class="mov-tabela-wrap">
+      <table class="mov-tabela" id="mov-tabela"><thead><tr><th>Peça</th></tr></thead><tbody><tr><td>Carregando...</td></tr></tbody></table>
+    </div>
+
+  </div>
+</div>
+
+<!-- ════════ ADMIN ════════ -->
+<div id="pag-admin" class="pag">
+
+  <!-- Sidebar de navegação do admin -->
+  <div class="adm-nav">
+    <div class="adm-nav-titulo">Menu</div>
+    <button class="adm-nav-btn ativo" id="adm-nav-dash" onclick="admNavIr('dashboard')">
+      📊 Dashboard
+    </button>
+    <div class="adm-nav-sep"></div>
+    <div class="adm-nav-titulo" style="margin-top:4px">Cadastros</div>
+    <button class="adm-nav-btn" id="adm-nav-operadores" onclick="admNavIr('operadores')">👤 Operadores</button>
+    <button class="adm-nav-btn" id="adm-nav-pecas" onclick="admNavIr('pecas')">🔩 Peças</button>
+    <button class="adm-nav-btn" id="adm-nav-materiais" onclick="admNavIr('materiais')">🧪 Materiais</button>
+    <button class="adm-nav-btn" id="adm-nav-maquinas" onclick="admNavIr('maquinas')">⚙️ Máquinas</button>
+    <button class="adm-nav-btn" id="adm-nav-movimentacoes" onclick="admNavIr('movimentacoes')">📦 Movimentações</button>
+    <button class="adm-nav-btn" id="adm-nav-modelos" onclick="admNavIr('modelos')">🎨 Modelos de Etiqueta</button>
+    <button class="adm-nav-btn" id="adm-nav-logs" onclick="admNavIr('logs')">📋 Logs</button>
+  </div>
+
+  <!-- Área de conteúdo do admin -->
+  <div class="adm-content" id="adm-content"></div>
+</div>
+
+<!-- LOGIN senha admin -->
+<div class="lo" id="lo">
+  <div class="lb">
+    <div class="lb-ico"><svg width="22" height="22" fill="none" stroke="#fff" stroke-width="2.5" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></div>
+    <div class="lb-t">Acesso Administrador</div>
+    <div class="lb-s">Digite a senha para continuar</div>
+    <div class="fg" style="text-align:left"><label>Senha</label><input type="password" id="inp-senha" placeholder="••••••••" onkeydown="if(event.key==='Enter')tentarLogin()"/></div>
+    <div class="lb-err" id="lb-err">Senha incorreta</div>
+    <div style="display:flex;gap:8px">
+      <button class="mb-cancel" style="flex:1;padding:13px;border-radius:var(--radius-sm);border:none;font-size:14px;font-weight:800;cursor:pointer" onclick="fecharLogin()">Cancelar</button>
+      <button class="mb-save" style="flex:1;padding:13px;border-radius:var(--radius-sm);border:none;font-size:14px;font-weight:800;cursor:pointer" onclick="tentarLogin()">Entrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL AJUSTE -->
+<div class="mo" id="mo-adj">
+  <div class="mb">
+    <div class="mb-t">🔐 Autorizar Ajuste de Quantidade</div>
+    <p style="font-size:13px;color:var(--texto2);margin-bottom:12px">Quantidade diferente do padrão. Informe a senha de admin.</p>
+    <div class="fg"><label>Senha Admin</label><input type="password" id="inp-adj-s" placeholder="••••••••" onkeydown="if(event.key==='Enter')autorizarAdj()"/></div>
+    <div style="color:#c0392b;font-size:12px;margin-bottom:6px;display:none;font-weight:700" id="adj-err">Senha incorreta</div>
+    <div class="mb-acts"><button class="mb-cancel" onclick="fecharAdj()">Cancelar</button><button class="mb-auth" onclick="autorizarAdj()">Autorizar</button></div>
+  </div>
+</div>
+
+<!-- MODAL CADASTRO -->
+<div class="mo" id="mo-cad">
+  <div class="mb">
+    <div class="mb-t" id="cad-t">Cadastrar</div>
+    <div id="cad-body"></div>
+    <div class="mb-acts"><button class="mb-cancel" onclick="fecharCad()">Cancelar</button><button class="mb-save" onclick="salvarCad()">💾 Salvar</button></div>
+  </div>
+</div>
+
+<div id="print-area" style="display:none"></div>
+
+<script>
+// ═══════════════════════════════════════
+// ESTADO
+// ═══════════════════════════════════════
+var S = {
+  modo: null, // 'operador' | 'admin' | 'movimentacao'
+  adm: false,
+  op:[], pecas:[], mats:[], maqs:[], todosProd:[],
+  prodCarregado: false, // flag: já buscou produção
+  sel:{matricula:'',op:'',peca:'',codPeca:'',qtdPad:0,mat:'',maq:'',trim:'',ano:'2026',lote:''},
+  hasMaq:false,
+  admNav:'dashboard',
+  cadTipo:'', cadId:null,
+  pgOp:0, pgPeca:0, pgMat:0,
+  movTipo:'ENTRADA',
+  modelosEtiqueta:{}
+};
+var POR_PAG = 12;
+
+// ═══════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════
+window.onload = function() {
+  S.sel.ano = String(new Date().getFullYear());
+  var hoje = new Date();
+  var ini  = new Date(); ini.setDate(hoje.getDate()-30);
+  carregarDados();
+};
+
+function fmtDI(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+function pad(n){ return String(n).padStart(2,'0'); }
+
+function carregarDados(){
+  var done=0;
+  function ck(){ if(++done>=5){ document.getElementById('loader').style.display='none'; } }
+  google.script.run.withSuccessHandler(function(d){ S.op=d||[];    ck(); }).withFailureHandler(function(){ S.op=[];    ck(); }).getOperadores();
+  google.script.run.withSuccessHandler(function(d){ S.pecas=d||[]; ck(); }).withFailureHandler(function(){ S.pecas=[]; ck(); }).getPecas();
+  google.script.run.withSuccessHandler(function(d){ S.mats=d||[];  ck(); }).withFailureHandler(function(){ S.mats=[];  ck(); }).getMateriais();
+  google.script.run.withSuccessHandler(function(d){ S.maqs=d||[];  S.hasMaq=d&&d.length>0; ck(); }).withFailureHandler(function(){ S.maqs=[]; ck(); }).getMaquinas();
+  google.script.run.withSuccessHandler(function(d){ S.modelosEtiqueta=d||{}; ck(); }).withFailureHandler(function(){ S.modelosEtiqueta={}; ck(); }).getModelosEtiqueta();
+  setTimeout(function(){ var l=document.getElementById('loader'); if(l.style.display!=='none'){l.style.display='none';} },20000);
+}
+
+// ═══════════════════════════════════════
+// MODAL INICIAL
+// ═══════════════════════════════════════
+function entrarComoOperador(){
+  S.modo='operador'; S.adm=false;
+  document.getElementById('modal-inicio').style.display='none';
+  document.getElementById('topbar').style.display='flex';
+  document.getElementById('tb-modo-label').textContent='Modo:';
+  var b=document.getElementById('tb-badge'); b.textContent='OPERADOR'; b.className='u-badge';
+  mostrarPag('producao');
+  renderGridOp();
+}
+
+function entrarComoMovimentacao(){
+  S.modo='movimentacao';
+  document.getElementById('modal-inicio').style.display='none';
+  document.getElementById('topbar').style.display='flex';
+  document.getElementById('tb-modo-label').textContent='Modo:';
+  var b=document.getElementById('tb-badge'); b.textContent='MOVIMENTAÇÃO'; b.className='u-badge';
+  mostrarPag('movimentacao');
+  movInit();
+}
+
+function entrarComoAdmin(){
+  // Pede senha antes
+  S.modo='admin';
+  abrirLoginAdmin(function(){
+    document.getElementById('modal-inicio').style.display='none';
+    document.getElementById('topbar').style.display='flex';
+    document.getElementById('tb-modo-label').textContent='Modo:';
+    var b=document.getElementById('tb-badge'); b.textContent='ADMINISTRADOR'; b.className='u-badge adm';
+    mostrarPag('admin');
+    admNavIr('dashboard');
+  });
+}
+
+function voltarInicio(){
+  S.modo=null; S.adm=false;
+  document.getElementById('topbar').style.display='none';
+  document.querySelectorAll('.pag').forEach(function(p){p.classList.remove('ativa');});
+  document.getElementById('modal-inicio').style.display='flex';
+}
+
+// ═══════════════════════════════════════
+// NAVEGAÇÃO
+// ═══════════════════════════════════════
+function mostrarPag(pag){
+  document.querySelectorAll('.pag').forEach(function(p){p.classList.remove('ativa');});
+  document.getElementById('pag-'+pag).classList.add('ativa');
+}
+
+// ═══════════════════════════════════════
+// LOGIN SENHA ADMIN
+// ═══════════════════════════════════════
+var _loginCb = null;
+function abrirLoginAdmin(cb){
+  _loginCb = cb || null;
+  document.getElementById('lo').classList.add('aberto');
+  document.getElementById('inp-senha').value='';
+  document.getElementById('lb-err').style.display='none';
+  setTimeout(function(){document.getElementById('inp-senha').focus();},200);
+}
+function fecharLogin(){
+  document.getElementById('lo').classList.remove('aberto');
+  // Se fechou sem logar e estava tentando entrar como admin, volta ao início
+  if(S.modo==='admin'&&!S.adm){ S.modo=null; }
+  _loginCb=null;
+}
+function tentarLogin(){
+  var s=document.getElementById('inp-senha').value;
+  google.script.run
+    .withSuccessHandler(function(ok){
+      if(ok){
+        S.adm=true;
+        document.getElementById('lo').classList.remove('aberto');
+        if(_loginCb){ var cb=_loginCb; _loginCb=null; cb(); }
+      } else { document.getElementById('lb-err').style.display='block'; }
+    })
+    .withFailureHandler(function(){ document.getElementById('lb-err').style.display='block'; })
+    .verificarSenhaAdmin(s);
+}
+
+// ═══════════════════════════════════════
+// NAVEGAÇÃO ADMIN
+// ═══════════════════════════════════════
+function admNavIr(secao){
+  S.admNav=secao;
+  // Atualiza botões
+  document.querySelectorAll('.adm-nav-btn').forEach(function(b){ b.classList.remove('ativo'); });
+  var btn=document.getElementById('adm-nav-'+secao);
+  if(btn) btn.classList.add('ativo');
+
+  var content=document.getElementById('adm-content');
+
+  if(secao==='dashboard'){
+    content.innerHTML='<div class="adm-dash" id="adm-dash-inner"></div>';
+    renderDash();
+    return;
+  }
+
+  if(secao==='movimentacoes'){
+    content.innerHTML='<div class="adm-dash" id="adm-mov-inner"></div>';
+    renderAdmMovimentacoes();
+    return;
+  }
+
+  if(secao==='modelos'){
+    content.innerHTML='<div class="adm-dash" id="adm-modelos-inner"></div>';
+    renderModelos();
+    return;
+  }
+
+  // Cadastros
+  content.innerHTML=
+    '<div class="adm-cadastros">'+
+      '<div class="adm-sec" id="adm-sec">'+
+        '<div class="adm-sec-hd">'+
+          '<div class="adm-sec-t" id="adm-sec-t">Carregando...</div>'+
+          '<button class="btn-novo" id="btn-novo-cad" style="display:none">+ Novo</button>'+
+        '</div>'+
+        '<div id="adm-lista"><div style="padding:16px;color:var(--texto2)">Carregando...</div></div>'+
+      '</div>'+
+    '</div>';
+
+  var cfgs={
+    operadores:{fn:'getOperadoresTodos',render:rOps,  titulo:'👤 Operadores',label:'Operador'},
+    pecas:     {fn:'getPecasTodas',     render:rPecas, titulo:'🔩 Peças',     label:'Peça'},
+    materiais: {fn:'getMateriaisTodos', render:rMats2, titulo:'🧪 Materiais', label:'Material'},
+    maquinas:  {fn:'getMaquinasTodas',  render:rMaqs2, titulo:'⚙️ Máquinas',  label:'Máquina'},
+    logs:      {fn:'getLogs',           render:rLogs,  titulo:'📋 Logs',       label:''}
+  };
+  var cfg=cfgs[secao];
+  if(!cfg) return;
+
+  document.getElementById('adm-sec-t').textContent=cfg.titulo;
+  var btnNovo=document.getElementById('btn-novo-cad');
+  if(cfg.label){
+    btnNovo.style.display='';
+    btnNovo.textContent='+ '+cfg.label;
+    btnNovo.onclick=function(){ abrirCad(secao); };
+  }
+
+  google.script.run
+    .withSuccessHandler(function(d){ cfg.render(d||[]); })
+    .withFailureHandler(function(){ document.getElementById('adm-lista').innerHTML='<p style="padding:12px;color:#c0392b">Erro ao carregar.</p>'; })
+    [cfg.fn]();
+}
+
+// ═══════════════════════════════════════
+// ADMIN — HISTÓRICO DE MOVIMENTAÇÕES
+// ═══════════════════════════════════════
+function renderAdmMovimentacoes(){
+  var inner=document.getElementById('adm-mov-inner');
+  inner.innerHTML='<div class="dash-empty"><div class="spinner" style="border-top-color:var(--azul3);margin:0 auto"></div></div>';
+  google.script.run
+    .withSuccessHandler(function(d){
+      var regs=d||[];
+      if(!regs.length){ inner.innerHTML='<div class="dash-empty"><div class="dei">📭</div><div>Nenhuma movimentação registrada ainda.</div></div>'; return; }
+      var html='<div class="mov-tabela-wrap"><table class="mov-tabela"><thead><tr>'+
+        '<th>Data/Hora</th><th>Tipo</th><th>Peça</th><th>Material</th><th>Lote</th><th>Qtd (cx)</th><th>Origem</th><th>Usuário</th><th>Motivo</th>'+
+        '</tr></thead><tbody>';
+      regs.forEach(function(r){
+        html+='<tr><td>'+r.DataHora+'</td><td>'+(r.Tipo==='ENTRADA'?'📥 Entrada':'📤 Saída')+'</td><td>'+r.Peca+'</td><td>'+r.Material+'</td><td>'+(r.Lote||'—')+'</td><td>'+r.QtdCaixas+'</td><td>'+(r.Origem==='MANUAL'?'✋ Manual':'🔫 Bipado')+'</td><td>'+(r.Usuario||'—')+'</td><td>'+(r.Motivo||'—')+'</td></tr>';
+      });
+      html+='</tbody></table></div>';
+      inner.innerHTML=html;
+    })
+    .withFailureHandler(function(){ inner.innerHTML='<p style="padding:12px;color:#c0392b">Erro ao carregar movimentações.</p>'; })
+    .getMovimentacoes(null);
+}
+
+// ═══════════════════════════════════════
+// ADMIN — MODELOS DE ETIQUETA
+// ═══════════════════════════════════════
+var _mdlTab = 'PECA';
+var _mdlPadrao = null; // cache dos modelos padrão (pra "Restaurar")
+
+var DADOS_EXEMPLO_PECA = {
+  EMPRESA:'VITALBOR', TRIMESTRE:'2° TRIMESTRE 2026', CODIGO:'PBA-75',
+  DESCRICAO:'ANEL DE BORRACHA PBA 70/80 MM', MATERIAL:'NBR-60', COR:'VERDE',
+  NORMA:'NBR 7676', QUANTIDADE:'640', DATA:'06/07/2026', LOTE:'999', OP:'1',
+  REFERENCIA:'A6C6-76D6-BF41', QR_CODE:'<div style="width:22mm;height:22mm;background:repeating-linear-gradient(45deg,#000,#000 2px,#fff 2px,#fff 4px)"></div>'
+};
+var DADOS_EXEMPLO_CONF = {
+  EMPRESA:'VITALBOR', CONFERENTE_1:'1 — João Silva', DATA_CONF:'06/07/2026'
+};
+
+function renderModelos(){
+  var inner=document.getElementById('adm-modelos-inner');
+  inner.innerHTML=
+    '<div class="mdl-legenda">'+
+      '<b>{{CODIGO}}</b> <b>{{DESCRICAO}}</b> <b>{{MATERIAL}}</b> <b>{{COR}}</b> <b>{{NORMA}}</b> <b>{{QUANTIDADE}}</b> <b>{{QR_CODE}}</b> '+
+      '<b>{{DATA}}</b> <b>{{LOTE}}</b> <b>{{OP}}</b> <b>{{REFERENCIA}}</b> <b>{{TRIMESTRE}}</b> <b>{{EMPRESA}}</b> '+
+      '<b>{{CONFERENTE_1}}</b> <b>{{DATA_CONF}}</b>'+
+      '<div style="margin-top:6px">Edite o HTML/CSS livremente — só não invente nomes fora dessa lista, eles não vão ser substituídos. {{QR_CODE}} é especial: vira a imagem do QR, não apague o token.</div>'+
+    '</div>'+
+    '<div class="mdl-tabs">'+
+      '<div class="mdl-tab" id="mdltab-PECA" onclick="mdlSetTab(\'PECA\')">🏷️ Etiqueta de Peça</div>'+
+      '<div class="mdl-tab" id="mdltab-CONFERENCIA" onclick="mdlSetTab(\'CONFERENCIA\')">✅ Etiqueta de Conferência (1 canhoto)</div>'+
+    '</div>'+
+    '<div class="mdl-cols">'+
+      '<div class="mdl-editor">'+
+        '<textarea id="mdl-textarea" spellcheck="false"></textarea>'+
+        '<div class="mdl-acts">'+
+          '<button class="mdl-btn-prev" onclick="mdlPreview()">👁️ Pré-visualizar</button>'+
+          '<button class="mdl-btn-save" onclick="mdlSalvar()">💾 Salvar Modelo</button>'+
+          '<button class="mdl-btn-reset" onclick="mdlRestaurarPadrao()">↺ Restaurar Padrão</button>'+
+          '<button class="mdl-btn-dl" onclick="mdlBaixar()">⬇️ Baixar Modelo Atual (.html)</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="mdl-preview-wrap"><div class="mdl-preview-box" id="mdl-preview-box"></div></div>'+
+    '</div>';
+
+  google.script.run
+    .withSuccessHandler(function(padrao){
+      _mdlPadrao = padrao || {};
+      google.script.run
+        .withSuccessHandler(function(atuais){
+          S.modelosEtiqueta = atuais || {};
+          mdlSetTab('PECA');
+        })
+        .withFailureHandler(function(){ toast('Erro ao carregar modelos salvos','erro'); })
+        .getModelosEtiqueta();
+    })
+    .withFailureHandler(function(){ toast('Erro ao carregar modelos padrão','erro'); })
+    .getModelosPadrao();
+}
+
+function mdlSetTab(tipo){
+  _mdlTab = tipo;
+  document.getElementById('mdltab-PECA').classList.toggle('ativo', tipo==='PECA');
+  document.getElementById('mdltab-CONFERENCIA').classList.toggle('ativo', tipo==='CONFERENCIA');
+  var ta = document.getElementById('mdl-textarea');
+  ta.value = (S.modelosEtiqueta && S.modelosEtiqueta[tipo]) || (_mdlPadrao && _mdlPadrao[tipo]) || '';
+  mdlPreview();
+}
+
+function mdlPreencher(template, dados){
+  var html = template;
+  Object.keys(dados).forEach(function(k){
+    var re = new RegExp('\\{\\{'+k+'\\}\\}','g');
+    html = html.replace(re, dados[k]);
+  });
+  return html;
+}
+
+function mdlPreview(){
+  var html = document.getElementById('mdl-textarea').value;
+  var dados = _mdlTab==='PECA' ? DADOS_EXEMPLO_PECA : DADOS_EXEMPLO_CONF;
+  var box = document.getElementById('mdl-preview-box');
+  if(_mdlTab==='CONFERENCIA'){
+    box.innerHTML = '<div style="display:flex;flex-direction:column;width:100%;height:100%">'+
+      '<div style="flex:1;border-bottom:1mm dashed #000">'+mdlPreencher(html,dados)+'</div>'+
+      '<div style="flex:1">'+mdlPreencher(html,dados)+'</div>'+
+    '</div>';
+  } else {
+    box.innerHTML = mdlPreencher(html, dados);
+  }
+}
+
+function mdlSalvar(){
+  var html = document.getElementById('mdl-textarea').value;
+  if(!html.trim()){ toast('O modelo não pode ficar vazio','aviso'); return; }
+  google.script.run
+    .withSuccessHandler(function(r){
+      if(!r||!r.ok){ toast(r&&r.erro?r.erro:'Erro ao salvar','erro'); return; }
+      S.modelosEtiqueta = S.modelosEtiqueta || {};
+      S.modelosEtiqueta[_mdlTab] = html;
+      toast('Modelo salvo! Já vale pra próxima impressão.','sucesso');
+    })
+    .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); })
+    .salvarModeloEtiqueta(_mdlTab, html);
+}
+
+function mdlRestaurarPadrao(){
+  if(!confirm('Isso substitui o texto no editor pelo modelo padrão de fábrica (não salva ainda). Continuar?')) return;
+  document.getElementById('mdl-textarea').value = (_mdlPadrao && _mdlPadrao[_mdlTab]) || '';
+  mdlPreview();
+}
+
+function mdlBaixar(){
+  var html = document.getElementById('mdl-textarea').value;
+  var blob = new Blob([html], {type:'text/html'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'modelo_etiqueta_'+_mdlTab.toLowerCase()+'.html';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+
+// DASHBOARD — renderiza dentro do admin
+// ═══════════════════════════════════════
+function renderDash(){
+  var hoje = new Date();
+  var ini  = new Date(); ini.setDate(hoje.getDate()-30);
+
+  var inner=document.getElementById('adm-dash-inner');
+  inner.innerHTML=
+    '<div class="dash-filtro">'+
+      '<div class="df-titulo">📅 Filtrar período</div>'+
+      '<div class="df-row">'+
+        '<div class="df-campo"><label>Data inicial</label><input type="date" id="f-inicio" value="'+fmtDI(ini)+'"/></div>'+
+        '<div class="df-campo"><label>Data final</label><input type="date" id="f-fim" value="'+fmtDI(hoje)+'"/></div>'+
+      '</div>'+
+      '<div class="df-row">'+
+        '<div class="df-campo"><label>Operador</label><select id="f-op"><option value="">Todos</option></select></div>'+
+        '<div class="df-campo"><label>Peça</label><select id="f-peca"><option value="">Todas</option></select></div>'+
+      '</div>'+
+      '<button class="btn-filtrar" onclick="aplicarFiltro()">🔍 Aplicar Filtro</button>'+
+    '</div>'+
+    '<div class="kpi-grid">'+
+      '<div class="kpi"><div class="kl">Período</div><div class="kv" id="kp-per">—</div><div class="ks">caixas</div></div>'+
+      '<div class="kpi v"><div class="kl">Hoje</div><div class="kv" id="kp-hj">—</div><div class="ks">caixas</div></div>'+
+      '<div class="kpi o"><div class="kl">Semana</div><div class="kv" id="kp-sm">—</div><div class="ks">caixas</div></div>'+
+      '<div class="kpi"><div class="kl">Total Geral</div><div class="kv" id="kp-tt">—</div><div class="ks">histórico</div></div>'+
+    '</div>'+
+    '<div class="hist-row"><div class="hist-titulo">👥 Histórico por Operador</div><div class="hist-periodo" id="hist-lbl"></div></div>'+
+    '<div id="hist-ops"><div class="dash-empty"><div class="dei">⏳</div><div style="font-size:13px">Carregando dados...</div></div></div>';
+
+  // Popula selects APÓS o HTML estar no DOM
+  popFiltroOp();
+  popFiltroPeca();
+
+  // Sempre busca dados frescos — invalida cache
+  S.todosProd = [];
+  buscarProducaoEFiltrar();
+}
+
+function popFiltroOp(){
+  var s=document.getElementById('f-op'); if(!s) return;
+  var val=s.value;
+  s.innerHTML='<option value="">Todos</option>';
+  S.op.forEach(function(o){ var opt=document.createElement('option'); opt.value=o.Nome; opt.textContent=(o.Matricula?o.Matricula+' — ':'')+o.Nome; s.appendChild(opt); });
+  s.value=val;
+}
+function popFiltroPeca(){
+  var s=document.getElementById('f-peca'); if(!s) return;
+  var val=s.value;
+  s.innerHTML='<option value="">Todas</option>';
+  S.pecas.forEach(function(p){ var opt=document.createElement('option'); opt.value=p.Nome; opt.textContent=p.Codigo+' — '+p.Nome; s.appendChild(opt); });
+  s.value=val;
+}
+
+function buscarProducaoEFiltrar(){
+  var hist=document.getElementById('hist-ops');
+  if(hist) hist.innerHTML='<div class="dash-empty"><div class="spinner" style="border-top-color:var(--azul3);margin:0 auto"></div></div>';
+
+  google.script.run
+    .withSuccessHandler(function(d){
+      S.todosProd = d || [];
+      S.prodCarregado = true;
+      aplicarFiltro();
+    })
+    .withFailureHandler(function(e){
+      S.todosProd = [];
+      aplicarFiltro();
+      toast('Erro ao buscar produção: '+(e?e.message:''),'erro');
+    })
+    .getProducao(null);
+}
+
+// Converte "dd/MM/yyyy HH:mm:ss" → timestamp meia-noite local
+function parseBR(str){
+  if(!str) return null;
+  var s = String(str).trim();
+  // Tenta formato "dd/MM/yyyy ..."
+  var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m){
+    var d=parseInt(m[1],10), mo=parseInt(m[2],10)-1, y=parseInt(m[3],10);
+    if(isNaN(d)||isNaN(mo)||isNaN(y)) return null;
+    var dt=new Date(y,mo,d,0,0,0,0);
+    return isNaN(dt.getTime())?null:dt;
+  }
+  // Tenta formato ISO "yyyy-MM-dd"
+  var m2 = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m2){
+    var dt2=new Date(parseInt(m2[1]),parseInt(m2[2])-1,parseInt(m2[3]),0,0,0,0);
+    return isNaN(dt2.getTime())?null:dt2;
+  }
+  return null;
+}
+
+function aplicarFiltro(){
+  var iniEl = document.getElementById('f-inicio');
+  var fimEl = document.getElementById('f-fim');
+  var fOpEl = document.getElementById('f-op');
+  var fPcEl = document.getElementById('f-peca');
+  if(!iniEl) return;
+
+  var ini = iniEl.value; // "yyyy-MM-dd"
+  var fim = fimEl.value;
+  var fOp = fOpEl ? fOpEl.value.trim() : '';
+  var fPc = fPcEl ? fPcEl.value.trim() : '';
+
+  // Datas do filtro como meia-noite local
+  var dI = null, dF = null;
+  if(ini){
+    var pi=ini.split('-');
+    dI = new Date(+pi[0], +pi[1]-1, +pi[2], 0, 0, 0, 0);
+  }
+  if(fim){
+    var pf=fim.split('-');
+    dF = new Date(+pf[0], +pf[1]-1, +pf[2], 23, 59, 59, 999);
+  }
+
+  var fil = S.todosProd.filter(function(r){
+    var d = parseBR(r.DataHora);
+    if(!d) return false;
+    if(dI && d < dI) return false;
+    if(dF && d > dF) return false;
+    // Operador: compara nome exato
+    if(fOp && String(r.Operador||'').trim() !== fOp) return false;
+    if(fPc && String(r.Peca||'').trim() !== fPc) return false;
+    return true;
+  });
+
+  var hoje   = new Date(); hoje.setHours(0,0,0,0);
+  var iniSem = new Date(hoje); iniSem.setDate(hoje.getDate()-hoje.getDay());
+
+  var totalHj = S.todosProd.filter(function(r){ var d=parseBR(r.DataHora); return d&&d>=hoje; }).length;
+  var totalSm = S.todosProd.filter(function(r){ var d=parseBR(r.DataHora); return d&&d>=iniSem; }).length;
+
+  var kpPer=document.getElementById('kp-per'); if(kpPer) kpPer.textContent=fil.length;
+  var kpHj=document.getElementById('kp-hj');   if(kpHj)  kpHj.textContent=totalHj;
+  var kpSm=document.getElementById('kp-sm');   if(kpSm)  kpSm.textContent=totalSm;
+  var kpTt=document.getElementById('kp-tt');   if(kpTt)  kpTt.textContent=S.todosProd.length;
+
+  var lbl='';
+  if(ini&&fim) lbl=ini.split('-').reverse().join('/')+' → '+fim.split('-').reverse().join('/');
+  else if(ini) lbl='a partir de '+ini.split('-').reverse().join('/');
+  else if(fim) lbl='até '+fim.split('-').reverse().join('/');
+  var hlEl=document.getElementById('hist-lbl'); if(hlEl) hlEl.textContent=lbl;
+
+  renderHistOps(fil);
+}
+
+function renderHistOps(regs){
+  var el=document.getElementById('hist-ops');
+  if(!el) return;
+  if(!regs.length){
+    el.innerHTML='<div class="dash-empty"><div class="dei">📭</div><div style="font-size:13px">Nenhum registro no período selecionado</div></div>';
+    return;
+  }
+  var por={};
+  regs.forEach(function(r){
+    var ok=(r.Matricula?r.Matricula+' — ':'')+r.Operador;
+    var pk=r.CodigoPeca+'|'+r.Peca;
+    if(!por[ok]) por[ok]={nome:r.Operador,mat:r.Matricula,total:0,pecas:{}};
+    por[ok].total++;
+    if(!por[ok].pecas[pk]) por[ok].pecas[pk]={cod:r.CodigoPeca,nome:r.Peca,total:0,lotes:{}};
+    por[ok].pecas[pk].total++;
+    var lote=r.Lote||'—';
+    if(!por[ok].pecas[pk].lotes[lote]) por[ok].pecas[pk].lotes[lote]=0;
+    por[ok].pecas[pk].lotes[lote]++;
+  });
+  var keys=Object.keys(por).sort(function(a,b){return por[b].total-por[a].total;});
+  el.innerHTML=keys.map(function(ok,idx){
+    var op=por[ok];
+    var pks=Object.keys(op.pecas).sort(function(a,b){return op.pecas[b].total-op.pecas[a].total;});
+    var pecasHtml=pks.map(function(pk){
+      var p=op.pecas[pk];
+      var lks=Object.keys(p.lotes).sort();
+      return '<div class="peca-row">'+
+        '<div class="peca-hd"><div><span class="peca-cod">'+p.cod+'</span> <span class="peca-nm">'+p.nome+'</span></div><div class="peca-cx">'+p.total+' cx</div></div>'+
+        '<div class="lotes-wrap">'+lks.map(function(lk){ return '<div class="lote-chip"><span class="lcn">'+lk+'</span><span>('+p.lotes[lk]+'cx)</span></div>'; }).join('')+'</div>'+
+        '</div>';
+    }).join('');
+    return '<div class="op-card">'+
+      '<div class="op-hd" onclick="togOp(\'ob-'+idx+'\',\'oc-'+idx+'\')">'+
+        '<div class="op-nome">'+(op.mat?'<span class="op-mat-badge">'+op.mat+'</span>':'')+op.nome+'</div>'+
+        '<div style="display:flex;align-items:center;gap:5px"><div class="op-tot">'+op.total+' cx</div><div class="op-chev" id="oc-'+idx+'">▼</div></div>'+
+      '</div>'+
+      '<div class="op-body" id="ob-'+idx+'">'+pecasHtml+'</div>'+
+    '</div>';
+  }).join('');
+}
+
+function togOp(bid,cid){
+  var b=document.getElementById(bid); var c=document.getElementById(cid);
+  if(!b) return;
+  var o=b.classList.contains('open');
+  b.classList.toggle('open',!o); if(c) c.classList.toggle('open',!o);
+}
+
+// ═══════════════════════════════════════
+// STEPS PRODUÇÃO
+// ═══════════════════════════════════════
+function goStep(n){
+  for(var i=1;i<=7;i++){
+    var el=document.getElementById('sp'+i);
+    if(el) el.style.display=i===n?'flex':'none';
+    var st=document.getElementById('pst'+i);
+    if(st) st.className='pstep'+(i===n?' ativo':i<n?' done':'');
+  }
+}
+function irStepSe(n){
+  var ok={1:true,2:!!S.sel.op,3:!!S.sel.peca,4:!!S.sel.mat,5:true,6:!!S.sel.trim};
+  if(n<=6&&ok[n]) goStep(n);
+}
+
+function updSidebar(){
+  function set(id,txt,vazio){ var el=document.getElementById(id); if(!el) return; el.textContent=txt; el.className='ps-val'+(vazio?' vazio':''); }
+  set('sel-op-txt',   S.sel.op   ? (S.sel.matricula?S.sel.matricula+' — ':'')+S.sel.op : 'Não selecionado', !S.sel.op);
+  set('sel-peca-txt', S.sel.peca ? S.sel.codPeca+' — '+S.sel.peca : 'Não selecionado', !S.sel.peca);
+  set('sel-mat-txt',  S.sel.mat  || 'Não selecionado', !S.sel.mat);
+  set('sel-maq-txt',  S.sel.maq  || '—', false);
+  var lote=S.sel.trim&&S.sel.lote ? S.sel.trim+'/'+S.sel.ano+' | '+S.sel.lote : 'Não selecionado';
+  set('sel-lote-txt', lote, !S.sel.trim);
+  var q=Number(document.getElementById('inp-qtd')&&document.getElementById('inp-qtd').value)||0;
+  var c=Number(document.getElementById('inp-cx')&&document.getElementById('inp-cx').value)||1;
+  var ltEl=document.getElementById('lbl-tot'); if(ltEl) ltEl.textContent=(q*c).toLocaleString('pt-BR')+' peças';
+  set('sel-qtd-txt', q&&c ? q+' × '+c+' = '+(q*c).toLocaleString('pt-BR')+' pç' : '—', !q);
+  var pronto=S.sel.op&&S.sel.peca&&S.sel.mat&&S.sel.trim&&S.sel.lote&&q>0;
+  document.getElementById('btn-registrar').classList.toggle('pronto',!!pronto);
+}
+
+// ═══════════════════════════════════════
+// GRIDS POS
+// ═══════════════════════════════════════
+function calcCols(n){
+  if(n<=3)  return 3;
+  if(n<=4)  return 4;
+  if(n<=6)  return 3;
+  if(n<=8)  return 4;
+  if(n<=9)  return 3;
+  return 4;
+}
+
+function renderGridPag(items, gridId, pagId, infoId, pgIdx, genItem, emptyMsg){
+  var pg    = Math.max(0,pgIdx);
+  var total = items.length;
+  var totPg = Math.ceil(total/POR_PAG)||1;
+  if(pg>=totPg) pg=totPg-1;
+  var slice = items.slice(pg*POR_PAG,(pg+1)*POR_PAG);
+
+  var g=document.getElementById(gridId);
+  if(!g) return;
+  g.style.gridTemplateColumns='repeat('+calcCols(slice.length)+',1fr)';
+  g.innerHTML = slice.length ? slice.map(genItem).join('') : '<p style="color:rgba(255,255,255,.4);padding:16px;grid-column:1/-1;text-align:center;font-size:13px">'+emptyMsg+'</p>';
+
+  var pagEl=document.getElementById(pagId);
+  if(total>POR_PAG){
+    pagEl.style.display='flex';
+    document.getElementById(infoId).textContent=(pg+1)+'/'+totPg;
+    pagEl.querySelector('[id$="-prev"]').disabled=pg===0;
+    pagEl.querySelector('[id$="-next"]').disabled=pg>=totPg-1;
+  } else {
+    pagEl.style.display='none';
+  }
+}
+
+function renderGridOp(){
+  renderGridPag(S.op,'g-op','pag-op','pag-op-info',S.pgOp,function(o){
+    var m=o.Matricula||'';
+    return '<div class="pbtn" onclick="selOp(\''+esc(o.Nome)+'\',\''+esc(m)+'\')">' +
+      '<div class="pbtn-chk">✓</div><div class="pi">👤</div>'+
+      (m?'<div class="pmat">'+m+'</div>':'')+
+      '<div class="pn">'+o.Nome+'</div></div>';
+  },'Nenhum operador cadastrado. Acesse Admin.');
+}
+function pgOp(d){ S.pgOp=Math.max(0,S.pgOp+d); renderGridOp(); }
+function selOp(n,m){ S.sel.op=n; S.sel.matricula=m; updSidebar(); renderGridPeca(); goStep(2); }
+
+function renderGridPeca(){
+  renderGridPag(S.pecas,'g-peca','pag-peca','pag-peca-info',S.pgPeca,function(p){
+    return '<div class="pbtn" onclick="selPeca(\''+esc(p.Nome)+'\',\''+esc(p.Codigo)+'\','+Number(p.QtdPadrao)+')">' +
+      '<div class="pbtn-chk">✓</div><div class="pc">'+p.Codigo+'</div>'+
+      '<div class="pn">'+p.Nome+'</div><div class="pd">'+p.QtdPadrao+' pç/cx</div></div>';
+  },'Nenhuma peça cadastrada.');
+}
+function pgPeca(d){ S.pgPeca=Math.max(0,S.pgPeca+d); renderGridPeca(); }
+function selPeca(n,c,q){ S.sel.peca=n; S.sel.codPeca=c; S.sel.qtdPad=Number(q); updSidebar(); renderGridMat(); goStep(3); }
+
+function renderGridMat(){
+  renderGridPag(S.mats,'g-mat','pag-mat','pag-mat-info',S.pgMat,function(m){
+    return '<div class="pbtn" onclick="selMat(\''+esc(m.Nome)+'\')">' +
+      '<div class="pbtn-chk">✓</div><div class="pi">🧪</div>'+
+      '<div class="pn">'+m.Nome+'</div>'+
+      (m.Descricao?'<div class="pd">'+m.Descricao+'</div>':'')+
+      '</div>';
+  },'Nenhum material cadastrado.');
+}
+function pgMat(d){ S.pgMat=Math.max(0,S.pgMat+d); renderGridMat(); }
+function selMat(n){ S.sel.mat=n; updSidebar(); if(S.hasMaq){ renderGridMaq(); goStep(4); } else { S.sel.maq=''; goStep(5); } }
+
+function renderGridMaq(){
+  var g=document.getElementById('g-maq'); if(!g) return;
+  g.style.gridTemplateColumns='repeat('+calcCols(S.maqs.length)+',1fr)';
+  g.innerHTML=S.maqs.map(function(m){
+    return '<div class="pbtn" onclick="selMaq(\''+esc(m.Nome)+'\')">' +
+      '<div class="pbtn-chk">✓</div><div class="pi">⚙️</div>'+
+      '<div class="pn">'+m.Nome+'</div>'+(m.Descricao?'<div class="pd">'+m.Descricao+'</div>':'')+
+      '</div>';
+  }).join('');
+}
+function selMaq(n){ S.sel.maq=n; updSidebar(); goStep(5); }
+
+function voltarS5(){ goStep(S.hasMaq?4:3); }
+function selTrim(t){
+  S.sel.trim=t;
+  document.querySelectorAll('.tbtn').forEach(function(b){ b.classList.toggle('sel',b.textContent.trim()===t); });
+  updSidebar();
+}
+function goS6(){
+  if(!S.sel.trim){ toast('Selecione o trimestre','aviso'); return; }
+  var l=document.getElementById('inp-lote').value.trim();
+  if(!l){ toast('Informe o número do lote','aviso'); return; }
+  S.sel.lote=l; S.sel.ano=document.getElementById('sel-ano').value;
+  document.getElementById('inp-qtd').value=S.sel.qtdPad;
+  document.getElementById('lbl-pad').textContent=S.sel.qtdPad+' peças';
+  document.getElementById('inp-cx').value=1;
+  document.getElementById('aviso-adj').style.display='none';
+  updSidebar(); goStep(6);
+}
+
+function adjQ(d){ var i=document.getElementById('inp-qtd'); i.value=Math.max(1,(Number(i.value)||0)+d); chkAdj(); }
+function adjC(d){ var i=document.getElementById('inp-cx');  i.value=Math.max(1,(Number(i.value)||1)+d); updSidebar(); }
+function chkAdj(){ var q=Number(document.getElementById('inp-qtd').value)||0; document.getElementById('aviso-adj').style.display=(q!==S.sel.qtdPad)?'block':'none'; updSidebar(); }
+
+function confirmarProd(){
+  var q=Number(document.getElementById('inp-qtd').value)||0;
+  var c=Number(document.getElementById('inp-cx').value)||1;
+  if(!S.sel.op||!S.sel.peca||!S.sel.mat||!S.sel.trim||!S.sel.lote){ toast('Complete todas as seleções','aviso'); return; }
+  if(q<1){ toast('Informe a quantidade','aviso'); return; }
+  if(q!==S.sel.qtdPad&&!S.adm){
+    document.getElementById('inp-adj-s').value='';
+    document.getElementById('adj-err').style.display='none';
+    document.getElementById('mo-adj').classList.add('aberto');
+    return;
+  }
+  enviarProd(q,c,null);
+}
+function fecharAdj(){ document.getElementById('mo-adj').classList.remove('aberto'); }
+function autorizarAdj(){
+  var s=document.getElementById('inp-adj-s').value;
+  var q=Number(document.getElementById('inp-qtd').value)||0;
+  var c=Number(document.getElementById('inp-cx').value)||1;
+  document.getElementById('mo-adj').classList.remove('aberto');
+  enviarProd(q,c,s);
+}
+function enviarProd(qtd,cx,senha){
+  var d={Matricula:S.sel.matricula,Operador:S.sel.op,Peca:S.sel.peca,CodigoPeca:S.sel.codPeca,Material:S.sel.mat,Maquina:S.sel.maq,Lote:S.sel.lote,Trimestre:S.sel.trim,Ano:S.sel.ano,QtdPecas:qtd,QtdPadrao:S.sel.qtdPad,NumeroDeCaixas:cx};
+  toast('Registrando...','aviso');
+  document.getElementById('btn-registrar').classList.remove('pronto');
+  google.script.run
+    .withSuccessHandler(function(r){
+      if(!r||!r.ok){ toast(r&&r.erro?r.erro:'Erro ao registrar','erro'); document.getElementById('btn-registrar').classList.add('pronto'); return; }
+      toast(r.caixas.length+' caixa(s) registrada(s)!','sucesso');
+      document.getElementById('etiq-sub').textContent=r.caixas.length+' etiqueta(s) — '+S.sel.peca;
+      gerarEtiquetas(d,r.caixas);
+      goStep(7);
+      document.getElementById('btn-registrar').style.display='none';
+      document.getElementById('btn-imprimir').classList.add('vis');
+      document.getElementById('btn-nova').classList.add('vis');
+      S.todosProd=[];
+    })
+    .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); document.getElementById('btn-registrar').classList.add('pronto'); })
+    .registrarProducao(d,senha);
+}
+function novaProd(){
+  S.sel={matricula:'',op:'',peca:'',codPeca:'',qtdPad:0,mat:'',maq:'',trim:'',ano:String(new Date().getFullYear()),lote:''};
+  document.getElementById('inp-lote').value='';
+  document.querySelectorAll('.tbtn').forEach(function(b){b.classList.remove('sel');});
+  document.getElementById('btn-registrar').style.display='';
+  document.getElementById('btn-registrar').classList.remove('pronto');
+  document.getElementById('btn-imprimir').classList.remove('vis');
+  document.getElementById('btn-nova').classList.remove('vis');
+  updSidebar(); renderGridOp(); goStep(1);
+}
+
+// ═══════════════════════════════════════
+// ETIQUETAS
+// ═══════════════════════════════════════
+function corDoMaterial(nomeMaterial){
+  for(var i=0;i<S.mats.length;i++){ if(S.mats[i].Nome===nomeMaterial) return S.mats[i].Cor||''; }
+  return '';
+}
+function normaDoMaterial(nomeMaterial){
+  for(var i=0;i<S.mats.length;i++){ if(S.mats[i].Nome===nomeMaterial) return S.mats[i].Descricao||''; }
+  return '';
+}
+
+function formatarReferencia(id){
+  var s=String(id||'').replace(/[^A-Za-z0-9]/g,'').toUpperCase();
+  return s.replace(/(.{4})(?=.)/g,'$1-');
+}
+
+function gerarEtiquetas(dados,caixas){
+  var lista=document.getElementById('lista-etiq'); lista.innerHTML='';
+  var tns=['','1° TRIMESTRE ','2° TRIMESTRE ','3° TRIMESTRE ','4° TRIMESTRE '];
+  var ti=parseInt((dados.Trimestre||'T1').replace('T',''),10)||1;
+  var trimFmt=tns[ti]+(dados.Ano||'');
+  var cor=corDoMaterial(dados.Material);
+  var norma=normaDoMaterial(dados.Material);
+  var template=(S.modelosEtiqueta&&S.modelosEtiqueta.PECA)||'';
+  caixas.forEach(function(cx){
+    var qrData=JSON.stringify({id:cx.id,peca:dados.Peca,cod:dados.CodigoPeca,lote:dados.Lote,cx:cx.numCaixa,qtd:dados.QtdPecas,op:dados.Matricula||dados.Operador,trim:dados.Trimestre+'/'+dados.Ano,mat:dados.Material});
+    var qrId='qr-'+cx.id;
+    var valores={
+      EMPRESA:'VITALBOR', TRIMESTRE:trimFmt, CODIGO:dados.CodigoPeca, DESCRICAO:dados.Peca,
+      MATERIAL:dados.Material, COR:cor?cor.toUpperCase():'', NORMA:norma||'',
+      QUANTIDADE:String(dados.QtdPecas), DATA:new Date().toLocaleDateString('pt-BR'),
+      LOTE:dados.Lote, OP:(dados.Matricula||dados.Operador), REFERENCIA:formatarReferencia(cx.id),
+      QR_CODE:'<div id="'+qrId+'"></div>'
+    };
+    var el=document.createElement('div'); el.className='etiq-fisica';
+    el.innerHTML=mdlPreencher(template,valores);
+    lista.appendChild(el);
+    setTimeout(function(){
+      try{ new QRCode(document.getElementById(qrId),{text:qrData,width:256,height:256,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.M}); }catch(e){}
+    },200);
+  });
+  gerarConferencia(dados,caixas.length);
+}
+
+// Gera as etiquetas de conferência: 2 canhotos por folha (150x70mm).
+// Se pedirem N caixas, imprime ceil(N/2) folhas — a última pode sobrar 1 canhoto.
+function gerarConferencia(dados,numCaixas){
+  var lista=document.getElementById('lista-conf'); lista.innerHTML='';
+  var numFolhas=Math.ceil(numCaixas/2);
+  var dataHoje=new Date().toLocaleDateString('pt-BR');
+  var conferente1=dados.Matricula?(dados.Matricula+' — '+(dados.Operador||S.sel.op)):(dados.Operador||S.sel.op);
+  var template=(S.modelosEtiqueta&&S.modelosEtiqueta.CONFERENCIA)||'';
+  var valores={ EMPRESA:'VITALBOR', CONFERENTE_1:esc(conferente1), DATA_CONF:dataHoje };
+  var canhotoHtml=mdlPreencher(template,valores);
+
+  for(var i=0;i<numFolhas;i++){
+    var el=document.createElement('div'); el.className='etiq-conf';
+    el.innerHTML='<div style="flex:1;min-height:0">'+canhotoHtml+'</div><div style="flex:1;min-height:0;border-top:1mm dashed #000">'+canhotoHtml+'</div>';
+    lista.appendChild(el);
+  }
+}
+
+function imprimirTodas(){
+  var pa=document.getElementById('print-area');
+  pa.innerHTML=document.getElementById('lista-etiq').innerHTML+document.getElementById('lista-conf').innerHTML;
+  pa.style.display='block'; window.print(); pa.style.display='none';
+}
+
+// ═══════════════════════════════════════
+// MOVIMENTAÇÃO DE ESTOQUE
+// ═══════════════════════════════════════
+function movInit(){
+  movSetTipo('ENTRADA');
+  document.getElementById('mov-ultima').classList.remove('vis');
+  movMontarSelectManual();
+  movCarregarEstoque();
+  setTimeout(function(){ var i=document.getElementById('mov-scan-inp'); if(i) i.focus(); },150);
+}
+function movSetTipo(tipo){
+  S.movTipo=tipo;
+  document.getElementById('mtab-entrada').classList.toggle('ativo',tipo==='ENTRADA');
+  document.getElementById('mtab-saida').classList.toggle('ativo',tipo==='SAIDA');
+  var i=document.getElementById('mov-scan-inp'); if(i){ i.value=''; i.focus(); }
+}
+function movMontarSelectManual(){
+  var sp=document.getElementById('mm-peca'); if(!sp) return;
+  sp.innerHTML=S.pecas.map(function(p){ return '<option value="'+esc(p.Codigo)+'|'+esc(p.Nome)+'">'+p.Codigo+' — '+p.Nome+'</option>'; }).join('');
+  movAtualizarMateriaisManual();
+}
+function movAtualizarMateriaisManual(){
+  var sm=document.getElementById('mm-mat'); if(!sm) return;
+  sm.innerHTML=S.mats.map(function(m){ return '<option value="'+esc(m.Nome)+'">'+m.Nome+'</option>'; }).join('');
+}
+function movAbrirManual(){ document.getElementById('mov-manual-box').classList.add('vis'); }
+function movFecharManual(){
+  document.getElementById('mov-manual-box').classList.remove('vis');
+  document.getElementById('mm-lote').value='';
+  document.getElementById('mm-qtd').value=1;
+  document.getElementById('mm-motivo').value='';
+  document.getElementById('mm-senha').value='';
+  var i=document.getElementById('mov-scan-inp'); if(i) i.focus();
+}
+
+function movProcessarScan(){
+  var inp=document.getElementById('mov-scan-inp');
+  var raw=inp.value.trim();
+  inp.value='';
+  if(!raw) return;
+  // O código de barras traz só o CaixaID; o QR traria um JSON — aceitamos os dois formatos.
+  var caixaId=raw;
+  try{ var j=JSON.parse(raw); if(j&&j.id) caixaId=j.id; }catch(e){}
+
+  var dados={ CaixaID:caixaId, Tipo:S.movTipo, Origem:'BIPADO', Usuario:'Movimentação' };
+  google.script.run
+    .withSuccessHandler(function(r){ movTratarResultado(r,caixaId); })
+    .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); inp.focus(); })
+    .registrarMovimentacao(dados,null);
+}
+
+function movTratarResultado(r,caixaId){
+  var inp=document.getElementById('mov-scan-inp');
+  if(!r||!r.ok){
+    if(r&&r.precisaForcar){
+      if(confirm((r.erro||'Divergência de estoque')+'\n\nDeseja FORÇAR esta movimentação? Isso exige senha de administrador.')){
+        var senha=prompt('Senha de administrador:');
+        if(senha){
+          google.script.run
+            .withSuccessHandler(function(r2){ movTratarResultado(r2,caixaId); })
+            .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); })
+            .registrarMovimentacao({CaixaID:caixaId,Tipo:S.movTipo,Origem:'BIPADO',Usuario:'Movimentação',Forcar:true},senha);
+        }
+      }
+    } else {
+      toast(r&&r.erro?r.erro:'Erro ao bipar','erro');
+    }
+    if(inp) inp.focus();
+    return;
+  }
+  toast((r.tipo==='ENTRADA'?'Entrada':'Saída')+' registrada: '+r.peca,'sucesso');
+  document.getElementById('mov-ultima').classList.add('vis');
+  document.getElementById('mov-ultima-ico').textContent=r.tipo==='ENTRADA'?'📥':'📤';
+  document.getElementById('mov-ultima-peca').textContent=r.peca+' ('+r.material+')';
+  document.getElementById('mov-ultima-det').textContent=(r.tipo==='ENTRADA'?'Entrada':'Saída')+' de 1 caixa — agora';
+  movCarregarEstoque();
+  if(inp) inp.focus();
+}
+
+function movConfirmarManual(){
+  var pv=document.getElementById('mm-peca').value;
+  if(!pv){ toast('Cadastre ao menos uma peça em Admin','aviso'); return; }
+  var partes=pv.split('|');
+  var dados={
+    Tipo:S.movTipo, Origem:'MANUAL',
+    CodigoPeca:partes[0], Peca:partes[1],
+    Material:document.getElementById('mm-mat').value,
+    Lote:document.getElementById('mm-lote').value.trim(),
+    QtdCaixas:Number(document.getElementById('mm-qtd').value)||1,
+    Motivo:document.getElementById('mm-motivo').value.trim(),
+    Usuario:'Movimentação'
+  };
+  var senha=document.getElementById('mm-senha').value;
+  if(!senha){ toast('Informe a senha de administrador','aviso'); return; }
+  google.script.run
+    .withSuccessHandler(function(r){
+      if(!r||!r.ok){ toast(r&&r.erro?r.erro:'Erro ao registrar','erro'); return; }
+      toast('Movimentação manual registrada: '+r.peca,'sucesso');
+      movFecharManual();
+      document.getElementById('mov-manual-box').classList.remove('vis');
+      document.getElementById('mov-ultima').classList.add('vis');
+      document.getElementById('mov-ultima-ico').textContent=r.tipo==='ENTRADA'?'📥':'📤';
+      document.getElementById('mov-ultima-peca').textContent=r.peca+' ('+r.material+')';
+      document.getElementById('mov-ultima-det').textContent='Manual — '+dados.QtdCaixas+' caixa(s)';
+      movCarregarEstoque();
+    })
+    .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); })
+    .registrarMovimentacao(dados,senha);
+}
+
+function movCarregarEstoque(){
+  google.script.run
+    .withSuccessHandler(movRenderTabela)
+    .withFailureHandler(function(){ document.getElementById('mov-tabela').innerHTML='<tbody><tr><td>Erro ao carregar estoque.</td></tr></tbody>'; })
+    .getEstoqueAtual();
+}
+function movRenderTabela(dados){
+  dados=dados||[];
+  var tb=document.getElementById('mov-tabela');
+  if(!dados.length){
+    tb.innerHTML='<thead><tr><th>Peça</th></tr></thead><tbody><tr><td style="text-align:center;color:var(--texto2);padding:20px">Nenhuma movimentação registrada ainda.</td></tr></tbody>';
+    return;
+  }
+  var materiais=[]; var porPeca={};
+  dados.forEach(function(d){
+    if(materiais.indexOf(d.Material)===-1) materiais.push(d.Material);
+    var k=d.Peca;
+    if(!porPeca[k]) porPeca[k]={Peca:d.Peca,CodigoPeca:d.CodigoPeca,mats:{}};
+    porPeca[k].mats[d.Material]=(porPeca[k].mats[d.Material]||0)+d.Saldo;
+  });
+  materiais.sort();
+  var pecasKeys=Object.keys(porPeca).sort();
+
+  var thead='<thead><tr><th>Peça</th>'+materiais.map(function(m){ return '<th>'+m+'</th>'; }).join('')+'</tr></thead>';
+  var tbody='<tbody>'+pecasKeys.map(function(pk){
+    var linha=porPeca[pk];
+    var cels=materiais.map(function(m){
+      var v=linha.mats[m]||0;
+      var cls=v<0?'mov-cel-neg':(v===0?'mov-cel-zero':'');
+      return '<td class="'+cls+'">'+v+'</td>';
+    }).join('');
+    return '<tr><td>'+(linha.CodigoPeca?linha.CodigoPeca+' — ':'')+linha.Peca+'</td>'+cels+'</tr>';
+  }).join('')+'</tbody>';
+
+  tb.innerHTML=thead+tbody;
+}
+
+// ═══════════════════════════════════════
+// ADMIN — CRUD RENDERS
+// ═══════════════════════════════════════
+function bA(v){ return v===true||String(v).toUpperCase()==='TRUE'; }
+// Cache temporário para edição — evita quebrar onclick com caracteres especiais
+var _editCache = {};
+
+function rOps(d){
+  var el=document.getElementById('adm-lista');
+  if(!el) return;
+  if(!d.length){el.innerHTML='<p style="padding:12px;color:var(--texto2)">Nenhum operador.</p>';return;}
+  el.innerHTML=d.map(function(o,i){
+    var a=bA(o.Ativo);
+    _editCache['op_'+i]=o;
+    return '<div class="ic"><div class="ic-info"><div class="ic-nome">'+(o.Matricula?'<span class="ic-mat">'+o.Matricula+'</span>':'')+o.Nome+'</div>'+
+      '<div class="ic-det"><span class="badge '+(a?'ba':'bi2')+'">'+(a?'Ativo':'Inativo')+'</span><span>'+o.DataCadastro+'</span></div></div>'+
+      '<div class="ic-acts">'+
+      '<button class="bic bic-e" onclick="editFromCache(\'op\','+i+')">✏️</button>'+
+      '<button class="bic bic-d" onclick="delItem(\'operadores\',\''+o.ID+'\')">🗑️</button>'+
+      '</div></div>';
+  }).join('');
+}
+function rPecas(d){
+  var el=document.getElementById('adm-lista');
+  if(!el) return;
+  if(!d.length){el.innerHTML='<p style="padding:12px;color:var(--texto2)">Nenhuma peça.</p>';return;}
+  el.innerHTML=d.map(function(p,i){
+    var a=bA(p.Ativo);
+    _editCache['peca_'+i]=p;
+    return '<div class="ic"><div class="ic-info"><div class="ic-nome">'+p.Nome+'</div>'+
+      '<div class="ic-det"><span class="badge '+(a?'ba':'bi2')+'">'+(a?'Ativo':'Inativo')+'</span>'+
+      '<span style="font-family:monospace;background:var(--cinza2);padding:1px 5px;border-radius:3px;font-size:10px">'+p.Codigo+'</span>'+
+      '<span>'+p.QtdPadrao+' pç/cx</span></div></div>'+
+      '<div class="ic-acts">'+
+      '<button class="bic bic-e" onclick="editFromCache(\'peca\','+i+')">✏️</button>'+
+      '<button class="bic bic-d" onclick="delItem(\'pecas\',\''+p.ID+'\')">🗑️</button>'+
+      '</div></div>';
+  }).join('');
+}
+function rMats2(d){
+  var el=document.getElementById('adm-lista');
+  if(!el) return;
+  if(!d.length){el.innerHTML='<p style="padding:12px;color:var(--texto2)">Nenhum material.</p>';return;}
+  el.innerHTML=d.map(function(m,i){
+    var a=bA(m.Ativo);
+    _editCache['mat_'+i]=m;
+    return '<div class="ic"><div class="ic-info"><div class="ic-nome">'+m.Nome+(m.Cor?' <span class="ic-mat">'+m.Cor+'</span>':'')+'</div>'+
+      '<div class="ic-det"><span class="badge '+(a?'ba':'bi2')+'">'+(a?'Ativo':'Inativo')+'</span>'+(m.Descricao?'<span>'+m.Descricao+'</span>':'')+
+      '</div></div>'+
+      '<div class="ic-acts">'+
+      '<button class="bic bic-e" onclick="editFromCache(\'mat\','+i+')">✏️</button>'+
+      '<button class="bic bic-d" onclick="delItem(\'materiais\',\''+m.ID+'\')">🗑️</button>'+
+      '</div></div>';
+  }).join('');
+}
+function rMaqs2(d){
+  var el=document.getElementById('adm-lista');
+  if(!el) return;
+  if(!d.length){el.innerHTML='<p style="padding:12px;color:var(--texto2)">Nenhuma máquina.</p>';return;}
+  el.innerHTML=d.map(function(m,i){
+    var a=bA(m.Ativo);
+    _editCache['maq_'+i]=m;
+    return '<div class="ic"><div class="ic-info"><div class="ic-nome">'+m.Nome+'</div>'+
+      '<div class="ic-det"><span class="badge '+(a?'ba':'bi2')+'">'+(a?'Ativo':'Inativo')+'</span>'+(m.Descricao?'<span>'+m.Descricao+'</span>':'')+
+      '</div></div>'+
+      '<div class="ic-acts">'+
+      '<button class="bic bic-e" onclick="editFromCache(\'maq\','+i+')">✏️</button>'+
+      '<button class="bic bic-d" onclick="delItem(\'maquinas\',\''+m.ID+'\')">🗑️</button>'+
+      '</div></div>';
+  }).join('');
+}
+
+function editFromCache(tipo, idx){
+  var key = tipo+'_'+idx;
+  var d = _editCache[key];
+  if(!d){ toast('Erro ao carregar dados para edição','erro'); return; }
+  S.cadId = d.ID;
+  if(tipo==='op'){
+    S.cadTipo='operadores';
+    document.getElementById('cad-t').textContent='Editar Operador';
+    document.getElementById('cad-body').innerHTML=formCad('operadores',{Matricula:d.Matricula||'',Nome:d.Nome||''});
+  } else if(tipo==='peca'){
+    S.cadTipo='pecas';
+    document.getElementById('cad-t').textContent='Editar Peça';
+    document.getElementById('cad-body').innerHTML=formCad('pecas',{Codigo:d.Codigo||'',Nome:d.Nome||'',QtdPadrao:d.QtdPadrao||''});
+  } else if(tipo==='mat'){
+    S.cadTipo='materiais';
+    document.getElementById('cad-t').textContent='Editar Material';
+    document.getElementById('cad-body').innerHTML=formCad('materiais',{Nome:d.Nome||'',Descricao:d.Descricao||'',Cor:d.Cor||''});
+  } else if(tipo==='maq'){
+    S.cadTipo='maquinas';
+    document.getElementById('cad-t').textContent='Editar Máquina';
+    document.getElementById('cad-body').innerHTML=formCad('maquinas',{Nome:d.Nome||'',Descricao:d.Descricao||''});
+  }
+  document.getElementById('mo-cad').classList.add('aberto');
+}
+function rLogs(d){
+  var el=document.getElementById('adm-lista');
+  if(!el) return;
+  if(!d.length){el.innerHTML='<p style="padding:12px;color:var(--texto2)">Nenhum log.</p>';return;}
+  el.innerHTML=d.map(function(l){
+    return '<div class="ic"><div class="ic-info"><div class="ic-nome" style="font-size:12px">'+l.Descricao+'</div>'+
+      '<div class="ic-det"><span class="badge" style="background:#e8f0fe;color:#1a1a8c">'+l.Tipo+'</span><span>'+l.Usuario+'</span><span>'+l.DataHora+'</span></div></div></div>';
+  }).join('');
+}
+
+// ═══════════════════════════════════════
+// MODAL CADASTRO
+// ═══════════════════════════════════════
+function sugerirCorMaterial(){
+  var n=document.getElementById('fc-n'); var c=document.getElementById('fc-cor');
+  if(!n||!c||c.value.trim()) return; // não sobrescreve se já tem algo digitado
+  var nome=n.value.trim().toUpperCase();
+  var mapa={'NBR':'Verde','EPDM':'Amarelo','SBR':'Azul'};
+  if(mapa[nome]) c.value=mapa[nome];
+}
+function abrirCad(tipo){ S.cadTipo=tipo; S.cadId=null;
+  var t={operadores:'Novo Operador',pecas:'Nova Peça',materiais:'Novo Material',maquinas:'Nova Máquina'};
+  document.getElementById('cad-t').textContent=t[tipo];
+  document.getElementById('cad-body').innerHTML=formCad(tipo,null);
+  document.getElementById('mo-cad').classList.add('aberto');
+}
+function fecharCad(){ document.getElementById('mo-cad').classList.remove('aberto'); }
+function formCad(tipo,d){
+  if(tipo==='operadores') return '<div class="fg-row"><div class="fg"><label>Matrícula / Código</label><input type="text" id="fc-mat" placeholder="Ex: OP20" value="'+(d&&d.Matricula?d.Matricula:'')+'"/></div><div class="fg"><label>Nome</label><input type="text" id="fc-n" placeholder="Ex: João Silva" value="'+(d&&d.Nome?d.Nome:'')+'"/></div></div>';
+  if(tipo==='pecas') return '<div class="fg"><label>Código</label><input type="text" id="fc-c" placeholder="Ex: DEF-200" value="'+(d&&d.Codigo?d.Codigo:'')+'"/></div><div class="fg"><label>Nome da Peça</label><input type="text" id="fc-n" placeholder="Ex: Anel Defofo 200mm" value="'+(d&&d.Nome?d.Nome:'')+'"/></div><div class="fg"><label>Qtd Padrão por Caixa</label><input type="number" id="fc-q" placeholder="Ex: 130" value="'+(d&&d.QtdPadrao?d.QtdPadrao:'')+'"/></div>';
+  if(tipo==='materiais') return '<div class="fg"><label>Nome</label><input type="text" id="fc-n" placeholder="Ex: EPDM" value="'+(d&&d.Nome?d.Nome:'')+'" onblur="sugerirCorMaterial()"/></div><div class="fg"><label>Cor (referência impressa na etiqueta)</label><input type="text" id="fc-cor" placeholder="Ex: Verde" value="'+(d&&d.Cor?d.Cor:'')+'"/></div><div class="fg"><label>Descrição / Norma (opcional)</label><input type="text" id="fc-d" placeholder="Ex: NBR 7676" value="'+(d&&d.Descricao?d.Descricao:'')+'"/></div>';
+  if(tipo==='maquinas') return '<div class="fg"><label>Nome</label><input type="text" id="fc-n" placeholder="Ex: Injetora 01" value="'+(d&&d.Nome?d.Nome:'')+'"/></div><div class="fg"><label>Descrição (opcional)</label><input type="text" id="fc-d" placeholder="Ex: Engel 150t" value="'+(d&&d.Descricao?d.Descricao:'')+'"/></div>';
+  return '';
+}
+function salvarCad(){
+  var tipo=S.cadTipo; var dados={ID:S.cadId};
+  var cb=function(){ fecharCad(); admNavIr(tipo); relTipo(tipo); toast('Salvo!','sucesso'); };
+  var er=function(e){ toast('Erro: '+(e?e.message:''),'erro'); };
+  if(tipo==='operadores'){
+    dados.Matricula=document.getElementById('fc-mat')?document.getElementById('fc-mat').value.trim():'';
+    dados.Nome=document.getElementById('fc-n').value.trim();
+    if(!dados.Nome){ toast('Informe o nome','aviso'); return; }
+    google.script.run.withSuccessHandler(cb).withFailureHandler(er).salvarOperador(dados);
+  } else if(tipo==='pecas'){
+    dados.Codigo=document.getElementById('fc-c').value.trim();
+    dados.Nome=document.getElementById('fc-n').value.trim();
+    dados.QtdPadrao=document.getElementById('fc-q').value;
+    if(!dados.Codigo||!dados.Nome||!dados.QtdPadrao){ toast('Preencha todos os campos','aviso'); return; }
+    google.script.run.withSuccessHandler(cb).withFailureHandler(er).salvarPeca(dados);
+  } else if(tipo==='materiais'){
+    dados.Nome=document.getElementById('fc-n').value.trim();
+    dados.Cor=document.getElementById('fc-cor')?document.getElementById('fc-cor').value.trim():'';
+    dados.Descricao=document.getElementById('fc-d')?document.getElementById('fc-d').value.trim():'';
+    if(!dados.Nome){ toast('Informe o nome','aviso'); return; }
+    google.script.run.withSuccessHandler(cb).withFailureHandler(er).salvarMaterial(dados);
+  } else if(tipo==='maquinas'){
+    dados.Nome=document.getElementById('fc-n').value.trim();
+    dados.Descricao=document.getElementById('fc-d')?document.getElementById('fc-d').value.trim():'';
+    if(!dados.Nome){ toast('Informe o nome','aviso'); return; }
+    google.script.run.withSuccessHandler(cb).withFailureHandler(er).salvarMaquina(dados);
+  }
+}
+function relTipo(tipo){
+  var m={operadores:['getOperadores','op'],pecas:['getPecas','pecas'],materiais:['getMateriais','mats'],maquinas:['getMaquinas','maqs']};
+  var v=m[tipo]; if(!v) return;
+  google.script.run.withSuccessHandler(function(d){
+    S[v[1]]=d||[];
+    if(v[1]==='op') { renderGridOp(); }
+    if(v[1]==='pecas'){ renderGridPeca(); movMontarSelectManual(); }
+    if(v[1]==='mats'){ renderGridMat(); movMontarSelectManual(); }
+    if(v[1]==='maqs'){ S.hasMaq=d&&d.length>0; renderGridMaq(); }
+  })[v[0]]();
+}
+function editOp(id,mat,nome){ S.cadTipo='operadores'; S.cadId=id; document.getElementById('cad-t').textContent='Editar Operador'; document.getElementById('cad-body').innerHTML=formCad('operadores',{Matricula:mat,Nome:nome}); document.getElementById('mo-cad').classList.add('aberto'); }
+function editPeca(id,cod,nome,qtd){ S.cadTipo='pecas'; S.cadId=id; document.getElementById('cad-t').textContent='Editar Peça'; document.getElementById('cad-body').innerHTML=formCad('pecas',{Codigo:cod,Nome:nome,QtdPadrao:qtd}); document.getElementById('mo-cad').classList.add('aberto'); }
+function editMat(id,nome,desc){ S.cadTipo='materiais'; S.cadId=id; document.getElementById('cad-t').textContent='Editar Material'; document.getElementById('cad-body').innerHTML=formCad('materiais',{Nome:nome,Descricao:desc}); document.getElementById('mo-cad').classList.add('aberto'); }
+function editMaq(id,nome,desc){ S.cadTipo='maquinas'; S.cadId=id; document.getElementById('cad-t').textContent='Editar Máquina'; document.getElementById('cad-body').innerHTML=formCad('maquinas',{Nome:nome,Descricao:desc}); document.getElementById('mo-cad').classList.add('aberto'); }
+function delItem(tipo,id){
+  if(!confirm('Desativar?')) return;
+  var fns={operadores:'excluirOperador',pecas:'excluirPeca',materiais:'excluirMaterial',maquinas:'excluirMaquina'};
+  google.script.run.withSuccessHandler(function(){ admNavIr(tipo); relTipo(tipo); toast('Desativado','aviso'); }).withFailureHandler(function(){ toast('Erro','erro'); })[fns[tipo]](id);
+}
+
+// ═══════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════
+function esc(s){ if(!s) return ''; return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+function toast(msg,tipo){
+  tipo=tipo||'sucesso';
+  var tc=document.getElementById('tc');
+  var el=document.createElement('div'); el.className='toast '+tipo;
+  var ic={sucesso:'✅',erro:'❌',aviso:'⚠️'};
+  el.innerHTML='<span>'+(ic[tipo]||'ℹ️')+'</span> '+msg;
+  tc.appendChild(el);
+  setTimeout(function(){ el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(function(){ if(el.parentNode) el.parentNode.removeChild(el); },300); },3500);
+}
+</script>
+</body>
+</html>
