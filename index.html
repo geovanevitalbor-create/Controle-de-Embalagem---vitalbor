@@ -131,24 +131,29 @@ function montarTemplatePadraoPeca(escala){
 }
 var TEMPLATE_PADRAO_PECA = montarTemplatePadraoPeca(1);
 
-var TEMPLATE_PADRAO_CONFERENCIA =
-'<div style="display:flex;flex-direction:column;justify-content:center;gap:1mm;width:100%;height:100%;font-family:Arial,sans-serif;color:#000;padding:2mm 3mm;box-sizing:border-box">' +
-  '<div style="font-size:3.6mm;font-weight:900;text-align:center;letter-spacing:.6mm">{{EMPRESA}}</div>' +
-  '<div style="font-size:2.4mm;font-weight:800;text-align:center;line-height:1.2">CERTIFICADO DE QUALIDADE CONFERIDO</div>' +
-  '<div style="display:flex;gap:1.5mm;font-size:2.6mm;font-weight:700;margin-top:1mm">' +
+function montarTemplatePadraoConferencia(escala){
+  escala = escala || 1;
+  return '<div style="display:flex;flex-direction:column;justify-content:space-between;width:100%;height:100%;font-family:Arial,sans-serif;color:#000;padding:3mm 4mm;box-sizing:border-box">' +
+  '<div>' +
+    '<div style="font-size:'+fsz(3.6,escala)+';font-weight:900;text-align:center;letter-spacing:.6mm">{{EMPRESA}}</div>' +
+    '<div style="font-size:'+fsz(2.4,escala)+';font-weight:800;text-align:center;line-height:1.2;margin-top:.5mm">CERTIFICADO DE QUALIDADE CONFERIDO</div>' +
+  '</div>' +
+  '<div style="display:flex;gap:1.5mm;font-size:'+fsz(2.6,escala)+';font-weight:700">' +
     '<span>CONFERENTE Nº1:</span><span style="flex:1;border-bottom:.4mm solid #000;font-weight:900">{{CONFERENTE_1}}</span>' +
   '</div>' +
-  '<div style="display:flex;gap:1.5mm;font-size:2.6mm;font-weight:700">' +
+  '<div style="display:flex;gap:1.5mm;font-size:'+fsz(2.6,escala)+';font-weight:700">' +
     '<span>CONFERENTE Nº2:</span><span style="flex:1;border-bottom:.4mm solid #000;min-height:3.5mm"></span>' +
   '</div>' +
-  '<div style="display:flex;gap:1.5mm;font-size:2.6mm;font-weight:700">' +
+  '<div style="display:flex;gap:1.5mm;font-size:'+fsz(2.6,escala)+';font-weight:700">' +
     '<span>DATA:</span><span style="border-bottom:.4mm solid #000;font-weight:900;min-width:20mm">{{DATA_CONF}}</span>' +
   '</div>' +
-  '<div style="display:flex;gap:3mm;font-size:2.1mm;font-weight:800;align-items:center;flex-wrap:wrap;margin-top:.5mm">' +
+  '<div style="display:flex;gap:3mm;font-size:'+fsz(2.1,escala)+';font-weight:800;align-items:center;flex-wrap:wrap">' +
     '<span><span style="width:2.6mm;height:2.6mm;border:.4mm solid #000;display:inline-block;margin-right:1mm"></span>B.P ESTOQUE</span>' +
     '<span><span style="width:2.6mm;height:2.6mm;border:.4mm solid #000;display:inline-block;margin-right:1mm"></span>B.P SAÍDA</span>' +
   '</div>' +
 '</div>';
+}
+var TEMPLATE_PADRAO_CONFERENCIA = montarTemplatePadraoConferencia(1);
 
 async function getModeloEtiquetaInterno(tipo) {
   try {
@@ -432,6 +437,9 @@ var backend = {
       if (filtros && filtros.operador) q += '&usuario=eq.' + encodeURIComponent(filtros.operador);
       if (filtros && filtros.dataInicioISO) q += '&data_hora=gte.' + encodeURIComponent(filtros.dataInicioISO);
       if (filtros && filtros.dataFimISO) q += '&data_hora=lte.' + encodeURIComponent(filtros.dataFimISO);
+      if (filtros && filtros.tipo) q += '&tipo=eq.' + encodeURIComponent(filtros.tipo);
+      if (filtros && filtros.origem) q += '&origem=eq.' + encodeURIComponent(filtros.origem);
+      if (filtros && filtros.notaFiscal) q += '&nota_fiscal=eq.' + encodeURIComponent(filtros.notaFiscal);
       var rows = await sbGet(q);
       return rows.map(function (r) {
         return { ID: r.id, DataHora: fmtDataHoraBR(r.data_hora), Tipo: r.tipo, CaixaID: r.caixa_id, Peca: r.peca, CodigoPeca: r.codigo_peca,
@@ -441,9 +449,22 @@ var backend = {
     } catch (e) { return []; }
   },
 
+  async getCaixaPorId(id) {
+    try {
+      var rows = await sbGet('producao?id=eq.' + id);
+      if (!rows.length) return null;
+      var r = rows[0];
+      return {
+        ID: r.id, DataHora: fmtDataHoraBR(r.data_hora), Matricula: r.matricula || '', Operador: r.operador,
+        Peca: r.peca, CodigoPeca: r.codigo_peca, Material: r.material, Maquina: r.maquina || '', Lote: r.lote,
+        Trimestre: r.trimestre, Ano: r.ano, NumeroCaixa: r.numero_caixa, QtdPecas: r.qtd_pecas, QtdPadrao: r.qtd_padrao
+      };
+    } catch (e) { return null; }
+  },
+
   async getModelosPadrao() { return { PECA: TEMPLATE_PADRAO_PECA, CONFERENCIA: TEMPLATE_PADRAO_CONFERENCIA }; },
   async getModelosEtiqueta() {
-    var config = { qrSizeMm: 22, escalaTexto: 100, normaFixa: 'NBR 7676' };
+    var config = { qrSizeMm: 22, escalaTexto: 100, normaFixa: 'NBR 7676', escalaTextoConf: 100 };
     try {
       var rows = await sbGet('modelos_etiqueta?tipo=eq.CONFIG&select=html');
       if (rows.length && rows[0].html) config = Object.assign(config, JSON.parse(rows[0].html));
@@ -1282,6 +1303,14 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
           <div class="df-campo"><label>Data início</label><input type="date" id="estmov-f-ini"/></div>
           <div class="df-campo"><label>Data fim</label><input type="date" id="estmov-f-fim"/></div>
         </div>
+        <div class="df-row">
+          <div class="df-campo"><label>Tipo</label><select id="estmov-f-tipo"><option value="">Entrada e Saída</option><option value="ENTRADA">Só Entrada</option><option value="SAIDA">Só Saída</option></select></div>
+          <div class="df-campo"><label>Origem</label><select id="estmov-f-origem"><option value="">Manual e Bipada</option><option value="MANUAL">Só Manual</option><option value="BIPADO">Só Bipada</option></select></div>
+        </div>
+        <div class="df-row">
+          <div class="df-campo"><label>Nº da Nota Fiscal</label><input type="text" id="estmov-f-nf" placeholder="Ex: 13590"/></div>
+          <div></div>
+        </div>
         <button class="btn-filtrar" onclick="estMovFiltrar()">🔍 Aplicar Filtro</button>
       </div>
       <div class="mov-tabela-wrap" style="margin-top:12px">
@@ -1547,6 +1576,9 @@ function estMovFiltrar(){
   var operador=document.getElementById('estmov-f-op').value;
   var ini=document.getElementById('estmov-f-ini').value;
   var fim=document.getElementById('estmov-f-fim').value;
+  var tipo=document.getElementById('estmov-f-tipo').value;
+  var origem=document.getElementById('estmov-f-origem').value;
+  var nf=document.getElementById('estmov-f-nf').value.trim();
   var filtros={ limite:2000 };
   if(peca) filtros.peca=peca;
   if(operador) filtros.operador=operador;
@@ -1555,15 +1587,19 @@ function estMovFiltrar(){
     var d=new Date(fim+'T00:00:00'); d.setDate(d.getDate()+1);
     filtros.dataFimISO=d.toISOString().slice(0,10)+'T02:59:59.999Z'; // 23:59:59 America/Sao_Paulo do dia fim
   }
+  if(tipo) filtros.tipo=tipo;
+  if(origem) filtros.origem=origem;
+  if(nf) filtros.notaFiscal=nf;
   var tabela=document.getElementById('estmov-tabela');
   tabela.innerHTML='<thead><tr><th>Data/Hora</th></tr></thead><tbody><tr><td>Carregando...</td></tr></tbody>';
   google.script.run
     .withSuccessHandler(function(regs){
       regs=regs||[];
       if(!regs.length){ tabela.innerHTML='<thead><tr><th>Data/Hora</th></tr></thead><tbody><tr><td style="text-align:center;color:var(--texto2);padding:20px">Nenhuma movimentação encontrada com esse filtro.</td></tr></tbody>'; return; }
-      var html='<thead><tr><th>Data/Hora</th><th>Tipo</th><th>Peça</th><th>Material</th><th>Lote</th><th>Qtd</th><th>Origem</th><th>Operador</th><th>Conferente 2</th><th>Tipo Saída</th><th>NF</th><th>Motivo</th></tr></thead><tbody>';
+      var html='<thead><tr><th>Data/Hora</th><th>Tipo</th><th>Peça</th><th>Material</th><th>Lote</th><th>Qtd</th><th>Origem</th><th>Operador</th><th>Conferente 2</th><th>Tipo Saída</th><th>NF</th><th>Motivo</th><th>Etiqueta</th></tr></thead><tbody>';
       regs.forEach(function(r){
-        html+='<tr><td>'+r.DataHora+'</td><td>'+(r.Tipo==='ENTRADA'?'📥 Entrada':'📤 Saída')+'</td><td>'+r.Peca+'</td><td>'+r.Material+'</td><td>'+(r.Lote||'—')+'</td><td>'+r.QtdCaixas+'</td><td>'+(r.Origem==='MANUAL'?'✋ Manual':'🔫 Bipado')+'</td><td>'+(r.Usuario||'—')+'</td><td>'+(r.Conferente2||'—')+'</td><td>'+(r.TipoSaida==='CORRECAO'?'Correção':r.TipoSaida==='PEDIDO'?'Pedido':'—')+'</td><td>'+(r.NotaFiscal||'—')+'</td><td>'+(r.Motivo||'—')+'</td></tr>';
+        var btnReimp = r.Origem==='BIPADO' && r.CaixaID ? '<button class="bic bic-e" onclick="reimprimirPorCaixaId(\''+r.CaixaID+'\')" title="Reimprimir etiqueta">🖨️</button>' : '—';
+        html+='<tr><td>'+r.DataHora+'</td><td>'+(r.Tipo==='ENTRADA'?'📥 Entrada':'📤 Saída')+'</td><td>'+r.Peca+'</td><td>'+r.Material+'</td><td>'+(r.Lote||'—')+'</td><td>'+r.QtdCaixas+'</td><td>'+(r.Origem==='MANUAL'?'✋ Manual':'🔫 Bipado')+'</td><td>'+(r.Usuario||'—')+'</td><td>'+(r.Conferente2||'—')+'</td><td>'+(r.TipoSaida==='CORRECAO'?'Correção':r.TipoSaida==='PEDIDO'?'Pedido':'—')+'</td><td>'+(r.NotaFiscal||'—')+'</td><td>'+(r.Motivo||'—')+'</td><td>'+btnReimp+'</td></tr>';
       });
       html+='</tbody>';
       tabela.innerHTML=html;
@@ -1807,22 +1843,73 @@ function admNavIr(secao){
 // ═══════════════════════════════════════
 function renderAdmMovimentacoes(){
   var inner=document.getElementById('adm-mov-inner');
-  inner.innerHTML='<div class="dash-empty"><div class="spinner" style="border-top-color:var(--azul3);margin:0 auto"></div></div>';
+  inner.innerHTML=
+    '<div class="dash-filtro">'+
+      '<div class="df-titulo">🔍 Filtrar movimentações</div>'+
+      '<div class="df-row">'+
+        '<div class="df-campo"><label>Peça</label><select id="admmov-f-peca"><option value="">Todas</option></select></div>'+
+        '<div class="df-campo"><label>Operador</label><select id="admmov-f-op"><option value="">Todos</option></select></div>'+
+      '</div>'+
+      '<div class="df-row">'+
+        '<div class="df-campo"><label>Data início</label><input type="date" id="admmov-f-ini"/></div>'+
+        '<div class="df-campo"><label>Data fim</label><input type="date" id="admmov-f-fim"/></div>'+
+      '</div>'+
+      '<div class="df-row">'+
+        '<div class="df-campo"><label>Tipo</label><select id="admmov-f-tipo"><option value="">Entrada e Saída</option><option value="ENTRADA">Só Entrada</option><option value="SAIDA">Só Saída</option></select></div>'+
+        '<div class="df-campo"><label>Origem</label><select id="admmov-f-origem"><option value="">Manual e Bipada</option><option value="MANUAL">Só Manual</option><option value="BIPADO">Só Bipada</option></select></div>'+
+      '</div>'+
+      '<div class="df-row">'+
+        '<div class="df-campo"><label>Nº da Nota Fiscal</label><input type="text" id="admmov-f-nf" placeholder="Ex: 13590"/></div>'+
+        '<div></div>'+
+      '</div>'+
+      '<button class="btn-filtrar" onclick="admMovFiltrar()">🔍 Aplicar Filtro</button>'+
+    '</div>'+
+    '<div class="mov-tabela-wrap" style="margin-top:12px" id="admmov-tabela-wrap">'+
+      '<table class="mov-tabela" id="admmov-tabela"><thead><tr><th>Data/Hora</th></tr></thead><tbody><tr><td style="text-align:center;color:var(--texto2);padding:20px">Carregando...</td></tr></tbody></table>'+
+    '</div>';
+  var sp=document.getElementById('admmov-f-peca');
+  sp.innerHTML='<option value="">Todas</option>'+S.pecas.map(function(p){ return '<option value="'+esc(p.Nome)+'">'+p.Codigo+' — '+p.Nome+'</option>'; }).join('');
+  var so=document.getElementById('admmov-f-op');
+  so.innerHTML='<option value="">Todos</option>'+S.op.map(function(o){ return '<option value="'+esc(o.Nome)+'">'+(o.Matricula?o.Matricula+' — ':'')+o.Nome+'</option>'; }).join('');
+  admMovFiltrar();
+}
+function admMovFiltrar(){
+  var peca=document.getElementById('admmov-f-peca').value;
+  var operador=document.getElementById('admmov-f-op').value;
+  var ini=document.getElementById('admmov-f-ini').value;
+  var fim=document.getElementById('admmov-f-fim').value;
+  var tipo=document.getElementById('admmov-f-tipo').value;
+  var origem=document.getElementById('admmov-f-origem').value;
+  var nf=document.getElementById('admmov-f-nf').value.trim();
+  var filtros={ limite:2000 };
+  if(peca) filtros.peca=peca;
+  if(operador) filtros.operador=operador;
+  if(ini) filtros.dataInicioISO=ini+'T03:00:00.000Z';
+  if(fim){
+    var d=new Date(fim+'T00:00:00'); d.setDate(d.getDate()+1);
+    filtros.dataFimISO=d.toISOString().slice(0,10)+'T02:59:59.999Z';
+  }
+  if(tipo) filtros.tipo=tipo;
+  if(origem) filtros.origem=origem;
+  if(nf) filtros.notaFiscal=nf;
+  var wrap=document.getElementById('admmov-tabela-wrap');
+  wrap.innerHTML='<table class="mov-tabela" id="admmov-tabela"><thead><tr><th>Data/Hora</th></tr></thead><tbody><tr><td>Carregando...</td></tr></tbody></table>';
   google.script.run
     .withSuccessHandler(function(d){
       var regs=d||[];
-      if(!regs.length){ inner.innerHTML='<div class="dash-empty"><div class="dei">📭</div><div>Nenhuma movimentação registrada ainda.</div></div>'; return; }
-      var html='<div class="mov-tabela-wrap"><table class="mov-tabela"><thead><tr>'+
-        '<th>Data/Hora</th><th>Tipo</th><th>Peça</th><th>Material</th><th>Lote</th><th>Qtd (cx)</th><th>Origem</th><th>Usuário</th><th>Conferente 2</th><th>Tipo Saída</th><th>NF</th><th>Motivo</th>'+
+      if(!regs.length){ wrap.innerHTML='<div class="dash-empty"><div class="dei">📭</div><div>Nenhuma movimentação encontrada com esse filtro.</div></div>'; return; }
+      var html='<table class="mov-tabela"><thead><tr>'+
+        '<th>Data/Hora</th><th>Tipo</th><th>Peça</th><th>Material</th><th>Lote</th><th>Qtd (cx)</th><th>Origem</th><th>Usuário</th><th>Conferente 2</th><th>Tipo Saída</th><th>NF</th><th>Motivo</th><th>Etiqueta</th>'+
         '</tr></thead><tbody>';
       regs.forEach(function(r){
-        html+='<tr><td>'+r.DataHora+'</td><td>'+(r.Tipo==='ENTRADA'?'📥 Entrada':'📤 Saída')+'</td><td>'+r.Peca+'</td><td>'+r.Material+'</td><td>'+(r.Lote||'—')+'</td><td>'+r.QtdCaixas+'</td><td>'+(r.Origem==='MANUAL'?'✋ Manual':'🔫 Bipado')+'</td><td>'+(r.Usuario||'—')+'</td><td>'+(r.Conferente2||'—')+'</td><td>'+(r.TipoSaida==='CORRECAO'?'Correção':r.TipoSaida==='PEDIDO'?'Pedido':'—')+'</td><td>'+(r.NotaFiscal||'—')+'</td><td>'+(r.Motivo||'—')+'</td></tr>';
+        var btnReimp = r.Origem==='BIPADO' && r.CaixaID ? '<button class="bic bic-e" onclick="reimprimirPorCaixaId(\''+r.CaixaID+'\')" title="Reimprimir etiqueta">🖨️</button>' : '—';
+        html+='<tr><td>'+r.DataHora+'</td><td>'+(r.Tipo==='ENTRADA'?'📥 Entrada':'📤 Saída')+'</td><td>'+r.Peca+'</td><td>'+r.Material+'</td><td>'+(r.Lote||'—')+'</td><td>'+r.QtdCaixas+'</td><td>'+(r.Origem==='MANUAL'?'✋ Manual':'🔫 Bipado')+'</td><td>'+(r.Usuario||'—')+'</td><td>'+(r.Conferente2||'—')+'</td><td>'+(r.TipoSaida==='CORRECAO'?'Correção':r.TipoSaida==='PEDIDO'?'Pedido':'—')+'</td><td>'+(r.NotaFiscal||'—')+'</td><td>'+(r.Motivo||'—')+'</td><td>'+btnReimp+'</td></tr>';
       });
-      html+='</tbody></table></div>';
-      inner.innerHTML=html;
+      html+='</tbody></table>';
+      wrap.innerHTML=html;
     })
-    .withFailureHandler(function(){ inner.innerHTML='<p style="padding:12px;color:#c0392b">Erro ao carregar movimentações.</p>'; })
-    .getMovimentacoes(null);
+    .withFailureHandler(function(){ wrap.innerHTML='<p style="padding:12px;color:#c0392b">Erro ao carregar movimentações.</p>'; })
+    .getMovimentacoes(filtros);
 }
 
 // ═══════════════════════════════════════
@@ -1865,6 +1952,11 @@ function renderModelos(){
           '<div class="fg" style="margin-bottom:8px"><label>Norma fixa (aparece igual em toda etiqueta)</label><input type="text" id="facil-norma" placeholder="Ex: NBR 7676" value="NBR 7676" oninput="mdlPreview()"/></div>'+
           '<button type="button" class="mdl-btn-save" style="width:100%" onclick="mdlAplicarFacil()">Aplicar e Salvar</button>'+
         '</div>'+
+        '<div id="mdl-facil-conf" style="display:none;background:#fff;border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)">'+
+          '<div style="font-size:12px;font-weight:800;color:var(--azul);margin-bottom:8px">🔧 Ajustes fáceis (sem mexer em HTML)</div>'+
+          '<div class="fg" style="margin-bottom:8px"><label>Escala do texto (%)</label><input type="number" id="facil-escala-conf" min="50" max="200" value="100"/></div>'+
+          '<button type="button" class="mdl-btn-save" style="width:100%" onclick="mdlAplicarFacilConf()">Aplicar e Salvar</button>'+
+        '</div>'+
         '<textarea id="mdl-textarea" spellcheck="false"></textarea>'+
         '<div class="mdl-acts">'+
           '<button class="mdl-btn-prev" onclick="mdlPreview()">👁️ Pré-visualizar</button>'+
@@ -1896,12 +1988,16 @@ function mdlSetTab(tipo){
   document.getElementById('mdltab-PECA').classList.toggle('ativo', tipo==='PECA');
   document.getElementById('mdltab-CONFERENCIA').classList.toggle('ativo', tipo==='CONFERENCIA');
   var painelFacil=document.getElementById('mdl-facil-peca');
+  var painelFacilConf=document.getElementById('mdl-facil-conf');
   if(painelFacil) painelFacil.style.display = (tipo==='PECA') ? '' : 'none';
+  if(painelFacilConf) painelFacilConf.style.display = (tipo==='CONFERENCIA') ? '' : 'none';
+  var cfg=(S.modelosEtiqueta&&S.modelosEtiqueta.CONFIG)||{qrSizeMm:22,escalaTexto:100,normaFixa:'NBR 7676',escalaTextoConf:100};
   if(tipo==='PECA'){
-    var cfg=(S.modelosEtiqueta&&S.modelosEtiqueta.CONFIG)||{qrSizeMm:22,escalaTexto:100,normaFixa:'NBR 7676'};
     var iQr=document.getElementById('facil-qr'); if(iQr) iQr.value=cfg.qrSizeMm;
     var iEsc=document.getElementById('facil-escala'); if(iEsc) iEsc.value=cfg.escalaTexto;
     var iNorma=document.getElementById('facil-norma'); if(iNorma) iNorma.value=cfg.normaFixa;
+  } else if(tipo==='CONFERENCIA'){
+    var iEscC=document.getElementById('facil-escala-conf'); if(iEscC) iEscC.value=cfg.escalaTextoConf||100;
   }
   var ta = document.getElementById('mdl-textarea');
   ta.value = (S.modelosEtiqueta && S.modelosEtiqueta[tipo]) || (_mdlPadrao && _mdlPadrao[tipo]) || '';
@@ -1916,6 +2012,8 @@ function mdlAplicarFacil(){
   var novoTemplate=montarTemplatePadraoPeca(escalaTexto/100);
   document.getElementById('mdl-textarea').value=novoTemplate;
   mdlPreview();
+  var cfgAtual=(S.modelosEtiqueta&&S.modelosEtiqueta.CONFIG)||{};
+  var novoCfg=Object.assign({},cfgAtual,{qrSizeMm:qrSizeMm,escalaTexto:escalaTexto,normaFixa:normaFixa});
   google.script.run
     .withSuccessHandler(function(r1){
       if(!r1||!r1.ok){ toast(r1&&r1.erro?r1.erro:'Erro ao salvar modelo','erro'); return; }
@@ -1924,14 +2022,39 @@ function mdlAplicarFacil(){
           if(!r2||!r2.ok){ toast(r2&&r2.erro?r2.erro:'Modelo salvo, mas config falhou','erro'); return; }
           S.modelosEtiqueta=S.modelosEtiqueta||{};
           S.modelosEtiqueta.PECA=novoTemplate;
-          S.modelosEtiqueta.CONFIG={qrSizeMm:qrSizeMm,escalaTexto:escalaTexto,normaFixa:normaFixa};
+          S.modelosEtiqueta.CONFIG=novoCfg;
           toast('Tamanhos aplicados e salvos!','sucesso');
         })
         .withFailureHandler(function(e){ toast('Modelo salvo, mas config falhou: '+(e?e.message:''),'erro'); })
-        .salvarModeloEtiqueta('CONFIG', JSON.stringify({qrSizeMm:qrSizeMm,escalaTexto:escalaTexto,normaFixa:normaFixa}));
+        .salvarModeloEtiqueta('CONFIG', JSON.stringify(novoCfg));
     })
     .withFailureHandler(function(e){ toast('Erro ao salvar modelo: '+(e?e.message:''),'erro'); })
     .salvarModeloEtiqueta('PECA', novoTemplate);
+}
+function mdlAplicarFacilConf(){
+  var escalaTextoConf=Number(document.getElementById('facil-escala-conf').value)||100;
+  if(!confirm('Isso gera um modelo novo de Etiqueta de Conferência com esse tamanho, substituindo o texto atual no editor (perde edições manuais de HTML feitas nele). Continuar?')) return;
+  var novoTemplate=montarTemplatePadraoConferencia(escalaTextoConf/100);
+  document.getElementById('mdl-textarea').value=novoTemplate;
+  mdlPreview();
+  var cfgAtual=(S.modelosEtiqueta&&S.modelosEtiqueta.CONFIG)||{};
+  var novoCfg=Object.assign({},cfgAtual,{escalaTextoConf:escalaTextoConf});
+  google.script.run
+    .withSuccessHandler(function(r1){
+      if(!r1||!r1.ok){ toast(r1&&r1.erro?r1.erro:'Erro ao salvar modelo','erro'); return; }
+      google.script.run
+        .withSuccessHandler(function(r2){
+          if(!r2||!r2.ok){ toast(r2&&r2.erro?r2.erro:'Modelo salvo, mas config falhou','erro'); return; }
+          S.modelosEtiqueta=S.modelosEtiqueta||{};
+          S.modelosEtiqueta.CONFERENCIA=novoTemplate;
+          S.modelosEtiqueta.CONFIG=novoCfg;
+          toast('Tamanho aplicado e salvo!','sucesso');
+        })
+        .withFailureHandler(function(e){ toast('Modelo salvo, mas config falhou: '+(e?e.message:''),'erro'); })
+        .salvarModeloEtiqueta('CONFIG', JSON.stringify(novoCfg));
+    })
+    .withFailureHandler(function(e){ toast('Erro ao salvar modelo: '+(e?e.message:''),'erro'); })
+    .salvarModeloEtiqueta('CONFERENCIA', novoTemplate);
 }
 
 function mdlPreencher(template, dados){
@@ -3016,6 +3139,32 @@ function editarCaixa(id){
   resetBtnSalvarCad();
   document.getElementById('mo-cad').classList.add('aberto');
 }
+function reimprimirCaixa(id){
+  var d=_histCaixasCache[id];
+  if(!d){ toast('Caixa não encontrada no cache','erro'); return; }
+  toast('Preparando etiquetas para reimpressão...','aviso');
+  var dadosImpressao={
+    Peca:d.Peca, CodigoPeca:d.CodigoPeca, Material:d.Material, Lote:d.Lote,
+    Trimestre:d.Trimestre, Ano:d.Ano, Matricula:d.Matricula, Operador:d.Operador, QtdPecas:d.QtdPecas
+  };
+  gerarEtiquetas(dadosImpressao,[{id:d.ID,numCaixa:d.NumeroCaixa}]);
+  setTimeout(function(){
+    var pa=document.getElementById('print-area');
+    pa.innerHTML=document.getElementById('lista-etiq').innerHTML+document.getElementById('lista-conf').innerHTML;
+    pa.style.display='block'; window.print(); pa.style.display='none';
+  },500); // espera o QR (assíncrono) renderizar antes de montar a área de impressão
+}
+function reimprimirPorCaixaId(caixaId){
+  toast('Buscando dados da caixa...','aviso');
+  google.script.run
+    .withSuccessHandler(function(d){
+      if(!d){ toast('Caixa não encontrada na produção (pode ter sido excluída).','erro'); return; }
+      _histCaixasCache[d.ID]=d;
+      reimprimirCaixa(d.ID);
+    })
+    .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); })
+    .getCaixaPorId(caixaId);
+}
 function excluirCaixaConfirm(id){
   var d=_histCaixasCache[id];
   var desc=d?('Cx '+(d.NumeroCaixa||'—')+' de '+d.Peca+' ('+d.QtdPecas+' pç)'):id;
@@ -3083,11 +3232,13 @@ function formCad(tipo,d){
   if(tipo==='caixa') return '<div class="fg" style="background:var(--cinza);padding:9px 12px;border-radius:8px;font-size:12px;color:var(--texto2)">'+
       '<div><b style="color:var(--azul)">'+(d&&d.CodigoPeca?d.CodigoPeca:'')+'</b> — '+(d&&d.Peca?d.Peca:'')+'</div>'+
       '<div>Operador: '+(d&&d.Operador?d.Operador:'')+' • Caixa Nº '+(d&&d.NumeroCaixa?d.NumeroCaixa:'')+' • '+(d&&d.DataHora?d.DataHora:'')+'</div>'+
+      '<div style="margin-top:4px;font-family:monospace;font-weight:800;color:var(--azul3)">Código único: '+(d&&d.ID?formatarReferencia(d.ID):'—')+'</div>'+
     '</div>'+
     '<div class="fg"><label>Material</label><select id="fc-cx-mat">'+S.mats.map(function(m){ return '<option value="'+esc(m.Nome)+'"'+(d&&d.Material===m.Nome?' selected':'')+'>'+m.Nome+'</option>'; }).join('')+'</select></div>'+
     '<div class="fg"><label>Lote</label><input type="text" id="fc-cx-lote" value="'+(d&&d.Lote?d.Lote:'')+'"/></div>'+
     '<div class="fg"><label>Quantidade de Peças</label><input type="number" id="fc-cx-qtd" min="1" value="'+(d&&d.QtdPecas?d.QtdPecas:'')+'"/></div>'+
-    '<div style="font-size:11px;color:#e67e22;font-weight:700">⚠️ Editar aqui não reimprime a etiqueta física — a caixa já rotulada continua com os dados antigos impressos nela.</div>';
+    '<div style="font-size:11px;color:#e67e22;font-weight:700;margin-bottom:8px">⚠️ Editar aqui não reimprime a etiqueta física — a caixa já rotulada continua com os dados antigos impressos nela.</div>'+
+    '<button type="button" class="btn-novo" style="width:100%" onclick="reimprimirCaixa(\''+(d&&d.ID?d.ID:'')+'\')">🖨️ Reimprimir Etiquetas desta Caixa</button>';
   return '';
 }
 var _salvandoCad = false;
