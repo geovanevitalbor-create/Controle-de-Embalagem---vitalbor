@@ -604,11 +604,12 @@ select.inp-pos option{color:#000;background:#fff}
 .ppag-info{color:rgba(255,255,255,.4);font-size:12px;font-weight:700;min-width:60px;text-align:center}
 
 /* Etiqueta */
-/* Etiqueta principal — 100mm (largura, travada pelo cabeçote do L42 Pro)
-   x 150mm (altura, sentido do avanço do papel). RETRATO — confirmado
-   por medição física da bobina. Código no topo, material no meio,
-   quantidade + QR numa linha, data/lote/op/referência embaixo. */
-.etiq-fisica{width:100mm;height:150mm;margin:0 auto;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.3);border:3px solid #000;background:#fff;color:#000;font-family:'Arial Black','Arial',sans-serif;display:flex;flex-direction:column}
+/* Etiqueta principal — 150mm (largura, passa pelo cabeçote do L42 Pro)
+   x 100mm (altura, sentido do avanço/corte do papel). PAISAGEM —
+   medido fisicamente 2x pelo Thiago, confirmado em 14/09/2026.
+   Substitui a versão anterior (100x150 retrato), que era baseada
+   numa medição equivocada. */
+.etiq-fisica{width:150mm;height:100mm;margin:0 auto;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.3);border:3px solid #000;background:#fff;color:#000;font-family:'Arial Black','Arial',sans-serif;display:flex;flex-direction:column}
 .ef-top{padding:.6mm 3mm;display:flex;justify-content:space-between;align-items:center;border-bottom:.6mm solid #000;flex-shrink:0}
 .ef-empresa{font-size:2.6mm;font-weight:900;letter-spacing:.6mm}
 .ef-trim{font-size:2.3mm;font-weight:700}
@@ -636,12 +637,12 @@ select.inp-pos option{color:#000;background:#fff}
 .ef-foot-val{font-size:2.8mm;font-weight:900;letter-spacing:.1mm}
 .ef-foot-val.ef-ref{font-size:2.6mm;font-family:'Courier New',monospace;letter-spacing:0}
 
-/* Etiqueta de conferência — 100mm x 150mm retrato, 2 canhotos
-   empilhados verticalmente (75mm de altura cada), separados por
-   linha tracejada horizontal. */
-.etiq-conf{width:100mm;height:150mm;margin:0 auto;box-shadow:0 4px 20px rgba(0,0,0,.3);border:3px solid #000;display:flex;flex-direction:column;font-family:'Arial',sans-serif;color:#000;background:#fff}
+/* Etiqueta de conferência — 150mm x 100mm paisagem, 2 canhotos
+   lado a lado (75mm de largura cada), separados por linha
+   tracejada vertical. */
+.etiq-conf{width:150mm;height:100mm;margin:0 auto;box-shadow:0 4px 20px rgba(0,0,0,.3);border:3px solid #000;display:flex;flex-direction:row;font-family:'Arial',sans-serif;color:#000;background:#fff}
 .conf-canhoto{flex:1;padding:2mm 3mm;display:flex;flex-direction:column;justify-content:center;gap:1mm;min-width:0;min-height:0}
-.conf-canhoto:first-child{border-bottom:1mm dashed #000}
+.conf-canhoto:first-child{border-right:1mm dashed #000}
 .conf-marca{font-size:3.6mm;font-weight:900;text-align:center;letter-spacing:.6mm}
 .conf-titulo{font-size:2.4mm;font-weight:800;text-align:center;line-height:1.2}
 .conf-linha{display:flex;align-items:baseline;gap:1.5mm;font-size:2.6mm;font-weight:700;margin-top:1mm}
@@ -790,7 +791,7 @@ select.inp-pos option{color:#000;background:#fff}
 .mdl-btn-reset{background:var(--cinza2);color:var(--texto2)}
 .mdl-btn-dl{background:rgba(0,0,0,.06);color:var(--texto)}
 .mdl-preview-wrap{background:#e4e6ea;border-radius:var(--radius);padding:16px;display:flex;align-items:center;justify-content:center;min-height:200px}
-.mdl-preview-box{width:100mm;height:150mm;background:#fff;border:3px solid #000;box-shadow:0 4px 16px rgba(0,0,0,.15);overflow:hidden;transform:scale(.9)}
+.mdl-preview-box{width:150mm;height:100mm;background:#fff;border:3px solid #000;box-shadow:0 4px 16px rgba(0,0,0,.15);overflow:hidden;transform:scale(1)}
 .mdl-legenda{background:#fff;border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;font-size:11px;color:var(--texto2);max-height:110px;overflow-y:auto}
 .mdl-legenda b{color:var(--azul3);font-family:monospace}
 
@@ -897,7 +898,7 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
 .mov-cel-zero{color:var(--cinza3)!important}
 .mov-cel-neg{color:#c0392b!important}
 
-@page{ size:100mm 150mm; margin:0; }
+@page{ size:150mm 100mm; margin:0; }
 @media print{
   html,body{height:auto!important;overflow:visible!important}
   body>*:not(#print-area){display:none!important}
@@ -1820,8 +1821,8 @@ function mdlPreview(){
   var dados = _mdlTab==='PECA' ? DADOS_EXEMPLO_PECA : DADOS_EXEMPLO_CONF;
   var box = document.getElementById('mdl-preview-box');
   if(_mdlTab==='CONFERENCIA'){
-    box.innerHTML = '<div style="display:flex;flex-direction:column;width:100%;height:100%">'+
-      '<div style="flex:1;border-bottom:1mm dashed #000">'+mdlPreencher(html,dados)+'</div>'+
+    box.innerHTML = '<div style="display:flex;width:100%;height:100%">'+
+      '<div style="flex:1;border-right:1mm dashed #000">'+mdlPreencher(html,dados)+'</div>'+
       '<div style="flex:1">'+mdlPreencher(html,dados)+'</div>'+
     '</div>';
   } else {
@@ -2310,7 +2311,7 @@ function gerarConferencia(dados,numCaixas){
 
   for(var i=0;i<numFolhas;i++){
     var el=document.createElement('div'); el.className='etiq-conf';
-    el.innerHTML='<div style="flex:1;min-height:0">'+canhotoHtml+'</div><div style="flex:1;min-height:0;border-top:1mm dashed #000">'+canhotoHtml+'</div>';
+    el.innerHTML='<div style="flex:1;min-width:0">'+canhotoHtml+'</div><div style="flex:1;min-width:0;border-left:1mm dashed #000">'+canhotoHtml+'</div>';
     lista.appendChild(el);
   }
 }
