@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <title>Vitalbor — Produção</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
 <script>
 // ============================================================
 // ADAPTADOR SUPABASE — substitui o backend Google Apps Script
@@ -354,9 +355,13 @@ var backend = {
 
   async getMovimentacoes(filtros) {
     try {
-      var q = 'movimentacoes?order=data_hora.desc&limit=300';
+      var lim = (filtros && filtros.limite) ? filtros.limite : 300;
+      var q = 'movimentacoes?order=data_hora.desc&limit=' + lim;
       if (filtros && filtros.peca) q += '&peca=eq.' + encodeURIComponent(filtros.peca);
       if (filtros && filtros.material) q += '&material=eq.' + encodeURIComponent(filtros.material);
+      if (filtros && filtros.operador) q += '&usuario=eq.' + encodeURIComponent(filtros.operador);
+      if (filtros && filtros.dataInicioISO) q += '&data_hora=gte.' + encodeURIComponent(filtros.dataInicioISO);
+      if (filtros && filtros.dataFimISO) q += '&data_hora=lte.' + encodeURIComponent(filtros.dataFimISO);
       var rows = await sbGet(q);
       return rows.map(function (r) {
         return { ID: r.id, DataHora: fmtDataHoraBR(r.data_hora), Tipo: r.tipo, CaixaID: r.caixa_id, Peca: r.peca, CodigoPeca: r.codigo_peca,
@@ -756,6 +761,51 @@ select.inp-pos option{color:#000;background:#fff}
 .mov-scan-lbl{font-size:11px;font-weight:800;color:var(--texto2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:6px}
 .mov-scan-inp{width:100%;padding:16px;border:3px solid var(--azul3);border-radius:var(--radius-sm);font-size:18px;font-weight:800;text-align:center;letter-spacing:1px;outline:none;background:#f8f9fb}
 .mov-scan-inp:focus{border-color:var(--verde)}
+.mov-cam-wrap{position:relative;width:100%;height:280px;border-radius:var(--radius-sm);overflow:hidden;background:#000}
+.mov-cam-wrap video{width:100%;height:100%;object-fit:cover;display:block}
+.mov-cam-mira{position:absolute;top:15%;left:15%;right:15%;bottom:15%;border:3px solid rgba(255,255,255,.8);border-radius:12px;box-shadow:0 0 0 999px rgba(0,0,0,.25);pointer-events:none}
+.mov-cam-status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700;background:rgba(0,0,0,.55);text-align:center;padding:12px;box-sizing:border-box}
+.mov-cam-status.oculto{display:none}
+.op-sel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
+.op-sel-btn{background:#fff;border:2px solid var(--cinza3);border-radius:var(--radius);padding:16px 8px;text-align:center;cursor:pointer;font-weight:800;color:var(--azul);transition:all .12s;display:flex;flex-direction:column;align-items:center;gap:5px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.op-sel-btn:active{transform:scale(.95);background:var(--cinza2)}
+.op-sel-btn .mat{font-size:9px;font-weight:800;color:#fff;background:var(--azul3);padding:1px 7px;border-radius:5px}
+
+/* ══════════════════════════════
+   CONSULTA — busca de peças
+══════════════════════════════ */
+.cq-search-wrap{position:relative;margin-bottom:14px}
+.cq-search-ico{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--texto2);pointer-events:none;display:flex}
+.cq-search-inp{width:100%;padding:14px 44px 14px 42px;border:2px solid var(--cinza3);border-radius:var(--radius);font-size:15px;font-weight:600;color:var(--texto);outline:none;background:#fff;transition:border-color .15s;box-sizing:border-box}
+.cq-search-inp:focus{border-color:var(--azul3)}
+.cq-search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:var(--cinza2);border:none;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--texto2)}
+.cq-search-clear:active{background:var(--cinza3)}
+
+.cq-lista{display:flex;flex-direction:column;gap:8px}
+.cq-item{background:#fff;border:2px solid transparent;border-radius:var(--radius-sm);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.06);transition:all .12s;min-height:44px;box-sizing:border-box}
+.cq-item:active{transform:scale(.98)}
+.cq-item.sel{border-color:var(--azul3);background:#eef4fb}
+.cq-item-esq{display:flex;align-items:center;gap:10px;min-width:0}
+.cq-item-cod{font-family:monospace;font-weight:800;font-size:11px;color:#fff;background:var(--azul3);padding:3px 8px;border-radius:5px;flex-shrink:0;white-space:nowrap}
+.cq-item-nome{font-size:13px;font-weight:700;color:var(--texto);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cq-item-chev{color:var(--texto2);flex-shrink:0;display:flex}
+
+.cq-vazio{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 16px;color:var(--texto2);text-align:center;gap:10px}
+.cq-vazio svg{opacity:.35}
+.cq-vazio-txt{font-size:13px;font-weight:600}
+
+.cq-detalhe{background:#fff;border-radius:var(--radius);padding:18px;margin-top:14px;box-shadow:0 2px 10px rgba(0,0,0,.09);border-left:4px solid var(--azul3)}
+.cq-detalhe-hd{display:flex;align-items:center;gap:9px;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--cinza2)}
+.cq-detalhe-cod{font-family:monospace;font-weight:900;font-size:13px;color:#fff;background:var(--azul3);padding:3px 9px;border-radius:6px;flex-shrink:0}
+.cq-detalhe-nome{font-size:15px;font-weight:900;color:var(--azul)}
+.cq-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.cq-stat{display:flex;flex-direction:column;align-items:center;text-align:center;gap:7px;padding:14px 6px;border-radius:var(--radius-sm);background:var(--cinza)}
+.cq-stat-ico{color:var(--azul3);display:flex}
+.cq-stat.cantoneira-sim .cq-stat-ico{color:var(--verde)}
+.cq-stat.cantoneira-nao .cq-stat-ico{color:var(--laranja)}
+.cq-stat-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--texto2)}
+.cq-stat-val{font-size:19px;font-weight:900;color:var(--azul);line-height:1.15}
+.cq-stat-val.sm{font-size:13px}
 .mov-scan-hint{font-size:11px;color:var(--texto2);margin-top:8px;text-align:center}
 .mov-fallback{text-align:center;margin-top:10px}
 .mov-fallback button{background:none;border:none;color:var(--azul3);font-size:12px;font-weight:800;text-decoration:underline;cursor:pointer;padding:6px}
@@ -955,12 +1005,23 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
 <!-- ════════ MOVIMENTAÇÃO DE ESTOQUE ════════ -->
 <div id="pag-movimentacao" class="pag">
   <div class="mov-top">
-    <div class="mov-tabs">
+    <div class="mov-tabs" id="mov-tabs-tipo" style="display:none">
       <div class="mov-tab entrada ativo" id="mtab-entrada" onclick="movSetTipo('ENTRADA')">📥 ENTRADA</div>
       <div class="mov-tab saida" id="mtab-saida" onclick="movSetTipo('SAIDA')">📤 SAÍDA</div>
     </div>
+    <div id="mov-op-atual-bar" style="display:none;justify-content:space-between;align-items:center;padding-top:6px">
+      <span id="mov-op-atual-txt" style="color:#fff;font-size:12px;font-weight:700">—</span>
+      <button onclick="movTrocarOperador()" style="background:rgba(255,255,255,.15);border:none;color:#fff;padding:5px 11px;border-radius:6px;font-size:11px;font-weight:800;cursor:pointer">Trocar operador</button>
+    </div>
   </div>
   <div class="mov-body">
+
+    <div id="mov-sel-operador">
+      <div class="hist-titulo" style="margin-bottom:10px">👤 Quem está bipando?</div>
+      <div class="op-sel-grid" id="mov-g-op"></div>
+    </div>
+
+    <div id="mov-conteudo" style="display:none">
 
     <div class="mov-ultima" id="mov-ultima">
       <div class="mov-ultima-hd">Última bipagem</div>
@@ -974,9 +1035,13 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
     </div>
 
     <div class="mov-scan-box">
-      <div class="mov-scan-lbl">🔫 Aponte o leitor e bipe a etiqueta</div>
-      <input type="text" id="mov-scan-inp" class="mov-scan-inp" placeholder="Aguardando leitura..." autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();movProcessarScan();}"/>
-      <div class="mov-scan-hint">O leitor USB digita o código e aperta Enter automaticamente</div>
+      <div class="mov-scan-lbl">📷 Aponte a câmera para o QR Code da etiqueta</div>
+      <div class="mov-cam-wrap">
+        <video id="mov-cam-video" autoplay playsinline muted></video>
+        <div class="mov-cam-mira"></div>
+        <div class="mov-cam-status" id="mov-cam-status">Iniciando câmera...</div>
+      </div>
+      <canvas id="mov-cam-canvas" style="display:none"></canvas>
       <div class="mov-fallback"><button onclick="movAbrirManual()">Etiqueta rasgada ou ilegível? Movimentar manualmente →</button></div>
     </div>
 
@@ -1004,34 +1069,68 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
       <table class="mov-tabela" id="mov-tabela"><thead><tr><th>Peça</th></tr></thead><tbody><tr><td>Carregando...</td></tr></tbody></table>
     </div>
 
+    </div>
   </div>
 </div>
 
 <!-- ════════ CONSULTA (pública) ════════ -->
 <div id="pag-consulta" class="pag">
   <div class="mov-top">
-    <div style="color:#fff;font-size:14px;font-weight:800">🔍 Consulta de Peças</div>
+    <div style="color:#fff;font-size:14px;font-weight:800;display:flex;align-items:center;gap:8px">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      Consulta de Peças
+    </div>
   </div>
   <div class="mov-body">
-    <div class="mov-scan-box">
-      <div class="mov-scan-lbl">Buscar por código ou nome</div>
-      <input type="text" id="consulta-busca" class="mov-scan-inp" style="font-size:15px;letter-spacing:normal" placeholder="Ex: COL-250 ou Anel..." autocomplete="off" oninput="renderConsultaLista(this.value)"/>
+    <div class="cq-search-wrap">
+      <span class="cq-search-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+      <input type="text" id="consulta-busca" class="cq-search-inp" placeholder="Buscar por código ou nome..." autocomplete="off" oninput="consultaOnInput(this.value)"/>
+      <button class="cq-search-clear" id="consulta-clear" onclick="consultaLimparBusca()" style="display:none" aria-label="Limpar busca"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
-    <div id="consulta-lista"></div>
+    <div id="consulta-lista" class="cq-lista"></div>
     <div id="consulta-detalhe"></div>
   </div>
 </div>
 
 <!-- ════════ ESTOQUE (quadro público) ════════ -->
 <div id="pag-estoque" class="pag" style="background:var(--cinza)">
+  <div class="mov-top">
+    <div class="mov-tabs">
+      <div class="mov-tab entrada ativo" id="est-tab-quadro" onclick="estoqueSetAba('quadro')">📊 QUADRO</div>
+      <div class="mov-tab saida" id="est-tab-mov" onclick="estoqueSetAba('mov')">🔄 MOVIMENTAÇÕES</div>
+    </div>
+  </div>
   <div class="mov-body" style="padding:16px">
-    <div class="mov-estoque-hd">
-      <div class="mov-estoque-titulo" style="font-size:18px">📊 Quadro de Estoque — Peça × Material (em caixas)</div>
-      <button class="mov-refresh" onclick="renderQuadroEstoque()">↻ Atualizar</button>
+
+    <div id="est-aba-quadro">
+      <div class="mov-estoque-hd">
+        <div class="mov-estoque-titulo" style="font-size:18px">📊 Quadro de Estoque — Peça × Material (em caixas)</div>
+        <button class="mov-refresh" onclick="renderQuadroEstoque()">↻ Atualizar</button>
+      </div>
+      <div style="font-size:11px;color:var(--texto2);margin-bottom:8px">Clique no cabeçalho de uma coluna pra ordenar por ela.</div>
+      <div class="mov-tabela-wrap">
+        <table class="mov-tabela" id="quadro-estoque-tabela"><thead><tr><th>Peça</th></tr></thead><tbody><tr><td>Carregando...</td></tr></tbody></table>
+      </div>
     </div>
-    <div class="mov-tabela-wrap">
-      <table class="mov-tabela" id="quadro-estoque-tabela"><thead><tr><th>Peça</th></tr></thead><tbody><tr><td>Carregando...</td></tr></tbody></table>
+
+    <div id="est-aba-mov" style="display:none">
+      <div class="dash-filtro">
+        <div class="df-titulo">🔍 Filtrar movimentações</div>
+        <div class="df-row">
+          <div class="df-campo"><label>Peça</label><select id="estmov-f-peca"><option value="">Todas</option></select></div>
+          <div class="df-campo"><label>Operador</label><select id="estmov-f-op"><option value="">Todos</option></select></div>
+        </div>
+        <div class="df-row">
+          <div class="df-campo"><label>Data início</label><input type="date" id="estmov-f-ini"/></div>
+          <div class="df-campo"><label>Data fim</label><input type="date" id="estmov-f-fim"/></div>
+        </div>
+        <button class="btn-filtrar" onclick="estMovFiltrar()">🔍 Aplicar Filtro</button>
+      </div>
+      <div class="mov-tabela-wrap" style="margin-top:12px">
+        <table class="mov-tabela" id="estmov-tabela"><thead><tr><th>Data/Hora</th></tr></thead><tbody><tr><td style="text-align:center;color:var(--texto2);padding:20px">Escolha um filtro e clique em Aplicar</td></tr></tbody></table>
+      </div>
     </div>
+
   </div>
 </div>
 
@@ -1170,12 +1269,27 @@ function entrarComoConsulta(){
   var b=document.getElementById('tb-badge'); b.textContent='CONSULTA'; b.className='u-badge';
   mostrarPag('consulta');
   document.getElementById('consulta-busca').value='';
+  document.getElementById('consulta-clear').style.display='none';
   document.getElementById('consulta-detalhe').innerHTML='';
+  S.consultaSelId=null;
   renderConsultaLista('');
   setTimeout(function(){ document.getElementById('consulta-busca').focus(); },150);
 }
 
 function semAcentoConsulta(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
+
+function consultaOnInput(valor){
+  document.getElementById('consulta-clear').style.display=valor?'flex':'none';
+  renderConsultaLista(valor);
+}
+function consultaLimparBusca(){
+  var inp=document.getElementById('consulta-busca');
+  inp.value=''; inp.focus();
+  document.getElementById('consulta-clear').style.display='none';
+  renderConsultaLista('');
+}
+
+var ICO_CHEVRON_D='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
 
 function renderConsultaLista(filtro){
   var lista=document.getElementById('consulta-lista');
@@ -1184,27 +1298,41 @@ function renderConsultaLista(filtro){
     return !termo || semAcentoConsulta(p.Codigo).indexOf(termo)>=0 || semAcentoConsulta(p.Nome).indexOf(termo)>=0;
   });
   if(!itens.length){
-    lista.innerHTML='<div class="dash-empty" style="margin-top:12px"><div class="dei">🔍</div><div style="font-size:13px">Nenhuma peça encontrada</div></div>';
+    lista.innerHTML='<div class="cq-vazio">'+
+      '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'+
+      '<div class="cq-vazio-txt">Nenhuma peça encontrada'+(termo?' para "'+esc(filtro)+'"':'')+'</div>'+
+      '</div>';
     return;
   }
   lista.innerHTML=itens.map(function(p){
-    return '<div class="ic" style="cursor:pointer" onclick="selecionarConsultaPeca(\''+esc(p.ID)+'\')"><div class="ic-info">'+
-      '<div class="ic-nome"><span style="font-family:monospace;background:var(--cinza2);padding:1px 6px;border-radius:4px;font-size:11px">'+p.Codigo+'</span> '+p.Nome+'</div>'+
-      '</div><div style="color:var(--texto2);font-size:18px">›</div></div>';
+    var sel=S.consultaSelId===p.ID?' sel':'';
+    return '<div class="cq-item'+sel+'" onclick="selecionarConsultaPeca(\''+esc(p.ID)+'\')">'+
+      '<div class="cq-item-esq"><span class="cq-item-cod">'+p.Codigo+'</span><span class="cq-item-nome">'+p.Nome+'</span></div>'+
+      '<span class="cq-item-chev">'+ICO_CHEVRON_D+'</span></div>';
   }).join('');
 }
 
 function selecionarConsultaPeca(id){
   var p=S.pecas.find(function(x){ return x.ID===id; });
   if(!p) return;
+  S.consultaSelId=id;
+  renderConsultaLista(document.getElementById('consulta-busca').value);
+
+  var temCantoneira=!!p.Cantoneira;
+  var icoTubo='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>';
+  var icoCaixa='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>';
+  var icoCantoneira=temCantoneira
+    ? '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="8 12 11 15 16 9"/></svg>'
+    : '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>';
+
   var det=document.getElementById('consulta-detalhe');
   det.innerHTML=
-    '<div class="dash-filtro" style="margin-top:12px">'+
-      '<div class="df-titulo">'+p.Codigo+' — '+p.Nome+'</div>'+
-      '<div class="kpi-grid" style="grid-template-columns:1fr 1fr 1fr">'+
-        '<div class="kpi"><div class="kl">Peças por Tubo</div><div class="kv">'+(p.PecasPorTubo!=null&&p.PecasPorTubo!==''?p.PecasPorTubo:'—')+'</div></div>'+
-        '<div class="kpi o"><div class="kl">Tamanho da Caixa</div><div class="kv" style="font-size:16px">'+(p.TamanhoCaixa||'—')+'</div></div>'+
-        '<div class="kpi '+(p.Cantoneira?'v':'r')+'"><div class="kl">Cantoneira</div><div class="kv" style="font-size:20px">'+(p.Cantoneira?'SIM':'NÃO')+'</div></div>'+
+    '<div class="cq-detalhe">'+
+      '<div class="cq-detalhe-hd"><span class="cq-detalhe-cod">'+p.Codigo+'</span><span class="cq-detalhe-nome">'+p.Nome+'</span></div>'+
+      '<div class="cq-stats">'+
+        '<div class="cq-stat"><span class="cq-stat-ico">'+icoTubo+'</span><span class="cq-stat-label">Peças / Tubo</span><span class="cq-stat-val">'+(p.PecasPorTubo!=null&&p.PecasPorTubo!==''?p.PecasPorTubo:'—')+'</span></div>'+
+        '<div class="cq-stat"><span class="cq-stat-ico">'+icoCaixa+'</span><span class="cq-stat-label">Tamanho da Caixa</span><span class="cq-stat-val sm">'+(p.TamanhoCaixa||'—')+'</span></div>'+
+        '<div class="cq-stat '+(temCantoneira?'cantoneira-sim':'cantoneira-nao')+'"><span class="cq-stat-ico">'+icoCantoneira+'</span><span class="cq-stat-label">Cantoneira</span><span class="cq-stat-val">'+(temCantoneira?'SIM':'NÃO')+'</span></div>'+
       '</div>'+
     '</div>';
   det.scrollIntoView({behavior:'smooth',block:'nearest'});
@@ -1217,7 +1345,61 @@ function entrarComoEstoque(){
   document.getElementById('tb-modo-label').textContent='Modo:';
   var b=document.getElementById('tb-badge'); b.textContent='ESTOQUE'; b.className='u-badge';
   mostrarPag('estoque');
+  estoqueSetAba('quadro');
   renderQuadroEstoque();
+}
+
+var _estAbaAtual='quadro';
+function estoqueSetAba(aba){
+  _estAbaAtual=aba;
+  document.getElementById('est-tab-quadro').classList.toggle('ativo',aba==='quadro');
+  document.getElementById('est-tab-mov').classList.toggle('ativo',aba==='mov');
+  document.getElementById('est-aba-quadro').style.display=aba==='quadro'?'':'none';
+  document.getElementById('est-aba-mov').style.display=aba==='mov'?'':'none';
+  if(aba==='mov') estMovPopularFiltros();
+}
+
+function estMovPopularFiltros(){
+  var sp=document.getElementById('estmov-f-peca');
+  if(sp && !sp.dataset.pop){
+    sp.innerHTML='<option value="">Todas</option>'+S.pecas.map(function(p){ return '<option value="'+esc(p.Nome)+'">'+p.Codigo+' — '+p.Nome+'</option>'; }).join('');
+    sp.dataset.pop='1';
+  }
+  var so=document.getElementById('estmov-f-op');
+  if(so && !so.dataset.pop){
+    so.innerHTML='<option value="">Todos</option>'+S.op.map(function(o){ return '<option value="'+esc(o.Nome)+'">'+(o.Matricula?o.Matricula+' — ':'')+o.Nome+'</option>'; }).join('');
+    so.dataset.pop='1';
+  }
+}
+
+function estMovFiltrar(){
+  var peca=document.getElementById('estmov-f-peca').value;
+  var operador=document.getElementById('estmov-f-op').value;
+  var ini=document.getElementById('estmov-f-ini').value;
+  var fim=document.getElementById('estmov-f-fim').value;
+  var filtros={ limite:2000 };
+  if(peca) filtros.peca=peca;
+  if(operador) filtros.operador=operador;
+  if(ini) filtros.dataInicioISO=ini+'T03:00:00.000Z'; // 00:00 America/Sao_Paulo (UTC-3, sem horário de verão)
+  if(fim){
+    var d=new Date(fim+'T00:00:00'); d.setDate(d.getDate()+1);
+    filtros.dataFimISO=d.toISOString().slice(0,10)+'T02:59:59.999Z'; // 23:59:59 America/Sao_Paulo do dia fim
+  }
+  var tabela=document.getElementById('estmov-tabela');
+  tabela.innerHTML='<thead><tr><th>Data/Hora</th></tr></thead><tbody><tr><td>Carregando...</td></tr></tbody>';
+  google.script.run
+    .withSuccessHandler(function(regs){
+      regs=regs||[];
+      if(!regs.length){ tabela.innerHTML='<thead><tr><th>Data/Hora</th></tr></thead><tbody><tr><td style="text-align:center;color:var(--texto2);padding:20px">Nenhuma movimentação encontrada com esse filtro.</td></tr></tbody>'; return; }
+      var html='<thead><tr><th>Data/Hora</th><th>Tipo</th><th>Peça</th><th>Material</th><th>Lote</th><th>Qtd</th><th>Origem</th><th>Operador</th><th>Motivo</th></tr></thead><tbody>';
+      regs.forEach(function(r){
+        html+='<tr><td>'+r.DataHora+'</td><td>'+(r.Tipo==='ENTRADA'?'📥 Entrada':'📤 Saída')+'</td><td>'+r.Peca+'</td><td>'+r.Material+'</td><td>'+(r.Lote||'—')+'</td><td>'+r.QtdCaixas+'</td><td>'+(r.Origem==='MANUAL'?'✋ Manual':'🔫 Bipado')+'</td><td>'+(r.Usuario||'—')+'</td><td>'+(r.Motivo||'—')+'</td></tr>';
+      });
+      html+='</tbody>';
+      tabela.innerHTML=html;
+    })
+    .withFailureHandler(function(){ tabela.innerHTML='<thead><tr><th>Data/Hora</th></tr></thead><tbody><tr><td>Erro ao carregar.</td></tr></tbody>'; })
+    .getMovimentacoes(filtros);
 }
 
 // Mapa de cor cadastrada no Material -> paleta visual da coluna no quadro.
@@ -1235,37 +1417,84 @@ function paletaDoMaterial(corTexto){
   return PALETA_QUADRO_ESTOQUE[chave] || { header:'#5a6175', bg:'#eef0f3', texto:'#3a3f4a' };
 }
 
+// Agrupa variantes do mesmo material-base numa coluna só no quadro
+// (ex: NBR-50 e NBR-60 viram uma coluna única "NBR"). Isso é só visual
+// — o cadastro de Material continua com NBR-50 e NBR-60 separados.
+function agruparNomeMaterialQuadro(nome){
+  var n=semAcentoConsulta(nome||'').trim();
+  if(n.indexOf('nbr')===0) return 'NBR';
+  return nome;
+}
+
+var _estoqueOrdenacao={ coluna:null, dir:1 };
+function estoqueOrdenarPor(col){
+  if(_estoqueOrdenacao.coluna===col){ _estoqueOrdenacao.dir*=-1; } else { _estoqueOrdenacao.coluna=col; _estoqueOrdenacao.dir=1; }
+  renderQuadroEstoque();
+}
+
 function renderQuadroEstoque(){
   var tabela=document.getElementById('quadro-estoque-tabela');
   tabela.innerHTML='<thead><tr><th>Peça</th></tr></thead><tbody><tr><td>Carregando...</td></tr></tbody>';
   google.script.run
     .withSuccessHandler(function(estoque){
       estoque=estoque||[];
-      // Chave "Peça||Material" -> saldo, pra cruzar com o cadastro completo
       var saldos={};
       estoque.forEach(function(e){ saldos[e.Peca+'||'+e.Material]=e.Saldo; });
 
-      var pecasOrdenadas=S.pecas.slice().sort(function(a,b){ return a.Codigo.localeCompare(b.Codigo); });
-      var matsOrdenados=S.mats.slice().sort(function(a,b){ return a.Nome.localeCompare(b.Nome); });
-
-      if(!pecasOrdenadas.length||!matsOrdenados.length){
+      if(!S.pecas.length||!S.mats.length){
         tabela.innerHTML='<thead><tr><th>Peça</th></tr></thead><tbody><tr><td style="text-align:center;color:var(--texto2);padding:20px">Cadastre peças e materiais primeiro.</td></tr></tbody>';
         return;
       }
 
-      var thead='<thead><tr><th>PEÇA</th>'+matsOrdenados.map(function(m){
-        var pal=paletaDoMaterial(m.Cor);
-        return '<th style="background:'+pal.header+';color:#fff">'+m.Nome.toUpperCase()+'</th>';
-      }).join('')+'</tr></thead>';
+      // Monta os grupos de coluna (ex: NBR-50 + NBR-60 -> grupo "NBR")
+      var gruposMapa={};
+      S.mats.forEach(function(m){
+        var g=agruparNomeMaterialQuadro(m.Nome);
+        if(!gruposMapa[g]) gruposMapa[g]={ nome:g, membros:[], cor:'' };
+        gruposMapa[g].membros.push(m.Nome);
+        if(!gruposMapa[g].cor && m.Cor) gruposMapa[g].cor=m.Cor; // usa a 1ª cor cadastrada encontrada no grupo
+      });
+      var grupos=Object.keys(gruposMapa).sort().map(function(k){ return gruposMapa[k]; });
 
-      var tbody='<tbody>'+pecasOrdenadas.map(function(p){
-        var cels=matsOrdenados.map(function(m){
-          var pal=paletaDoMaterial(m.Cor);
-          var v=saldos[p.Nome+'||'+m.Nome]||0;
+      var linhas=S.pecas.map(function(p){
+        var vals={};
+        grupos.forEach(function(g){
+          var total=0;
+          g.membros.forEach(function(matNome){ total+=saldos[p.Nome+'||'+matNome]||0; });
+          vals[g.nome]=total;
+        });
+        return { peca:p, vals:vals };
+      });
+
+      if(_estoqueOrdenacao.coluna){
+        linhas.sort(function(a,b){
+          var va,vb;
+          if(_estoqueOrdenacao.coluna==='peca'){ va=a.peca.Codigo; vb=b.peca.Codigo; }
+          else { va=a.vals[_estoqueOrdenacao.coluna]||0; vb=b.vals[_estoqueOrdenacao.coluna]||0; }
+          if(va<vb) return -1*_estoqueOrdenacao.dir;
+          if(va>vb) return 1*_estoqueOrdenacao.dir;
+          return 0;
+        });
+      } else {
+        linhas.sort(function(a,b){ return a.peca.Codigo.localeCompare(b.peca.Codigo); });
+      }
+
+      function seta(col){ return _estoqueOrdenacao.coluna===col ? (_estoqueOrdenacao.dir===1?' ▲':' ▼') : ''; }
+
+      var thead='<thead><tr><th style="cursor:pointer" onclick="estoqueOrdenarPor(\'peca\')">PEÇA'+seta('peca')+'</th>'+
+        grupos.map(function(g){
+          var pal=paletaDoMaterial(g.cor);
+          return '<th style="background:'+pal.header+';color:#fff;cursor:pointer" onclick="estoqueOrdenarPor(\''+esc(g.nome)+'\')">'+g.nome.toUpperCase()+seta(g.nome)+'</th>';
+        }).join('')+'</tr></thead>';
+
+      var tbody='<tbody>'+linhas.map(function(l){
+        var cels=grupos.map(function(g){
+          var pal=paletaDoMaterial(g.cor);
+          var v=l.vals[g.nome]||0;
           var corTexto=v===0?'#8a8f99':pal.texto;
           return '<td style="background:'+pal.bg+';color:'+corTexto+';font-weight:800">'+v+'</td>';
         }).join('');
-        return '<tr><td>'+p.Codigo+'</td>'+cels+'</tr>';
+        return '<tr><td>'+l.peca.Codigo+'</td>'+cels+'</tr>';
       }).join('')+'</tbody>';
 
       tabela.innerHTML=thead+tbody;
@@ -1289,6 +1518,7 @@ function entrarComoAdmin(){
 
 function voltarInicio(){
   S.modo=null; S.adm=false;
+  movPararCamera();
   document.getElementById('topbar').style.display='none';
   document.querySelectorAll('.pag').forEach(function(p){p.classList.remove('ativa');});
   document.getElementById('modal-inicio').style.display='flex';
@@ -1996,17 +2226,50 @@ function imprimirTodas(){
 // MOVIMENTAÇÃO DE ESTOQUE
 // ═══════════════════════════════════════
 function movInit(){
+  S.movOperador=null;
+  document.getElementById('mov-conteudo').style.display='none';
+  document.getElementById('mov-tabs-tipo').style.display='none';
+  document.getElementById('mov-op-atual-bar').style.display='none';
+  document.getElementById('mov-sel-operador').style.display='';
+  renderGridMovOperador();
+}
+function renderGridMovOperador(){
+  var g=document.getElementById('mov-g-op');
+  if(!S.op.length){ g.innerHTML='<p style="color:var(--texto2);padding:12px">Nenhum operador cadastrado. Acesse Admin.</p>'; return; }
+  g.innerHTML=S.op.map(function(o){
+    var m=o.Matricula||'';
+    return '<div class="op-sel-btn" onclick="movSelecionarOperador(\''+esc(o.Nome)+'\',\''+esc(m)+'\')">'+
+      (m?'<span class="mat">'+m+'</span>':'')+
+      '<span>'+o.Nome+'</span></div>';
+  }).join('');
+}
+function movSelecionarOperador(nome,matricula){
+  S.movOperador={ nome:nome, matricula:matricula };
+  document.getElementById('mov-sel-operador').style.display='none';
+  document.getElementById('mov-conteudo').style.display='';
+  document.getElementById('mov-tabs-tipo').style.display='flex';
+  document.getElementById('mov-op-atual-bar').style.display='flex';
+  document.getElementById('mov-op-atual-txt').textContent='Operador: '+(matricula?matricula+' — ':'')+nome;
   movSetTipo('ENTRADA');
   document.getElementById('mov-ultima').classList.remove('vis');
   movMontarSelectManual();
   movCarregarEstoque();
-  setTimeout(function(){ var i=document.getElementById('mov-scan-inp'); if(i) i.focus(); },150);
+  movIniciarCamera();
 }
+function movTrocarOperador(){
+  movPararCamera();
+  S.movOperador=null;
+  document.getElementById('mov-conteudo').style.display='none';
+  document.getElementById('mov-tabs-tipo').style.display='none';
+  document.getElementById('mov-op-atual-bar').style.display='none';
+  document.getElementById('mov-sel-operador').style.display='';
+  renderGridMovOperador();
+}
+function movUsuarioAtual(){ return S.movOperador ? S.movOperador.nome : 'Movimentação'; }
 function movSetTipo(tipo){
   S.movTipo=tipo;
   document.getElementById('mtab-entrada').classList.toggle('ativo',tipo==='ENTRADA');
   document.getElementById('mtab-saida').classList.toggle('ativo',tipo==='SAIDA');
-  var i=document.getElementById('mov-scan-inp'); if(i){ i.value=''; i.focus(); }
 }
 function movMontarSelectManual(){
   var sp=document.getElementById('mm-peca'); if(!sp) return;
@@ -2017,49 +2280,105 @@ function movAtualizarMateriaisManual(){
   var sm=document.getElementById('mm-mat'); if(!sm) return;
   sm.innerHTML=S.mats.map(function(m){ return '<option value="'+esc(m.Nome)+'">'+m.Nome+'</option>'; }).join('');
 }
-function movAbrirManual(){ document.getElementById('mov-manual-box').classList.add('vis'); }
+function movAbrirManual(){ document.getElementById('mov-manual-box').classList.add('vis'); _movCamPausado=true; }
 function movFecharManual(){
   document.getElementById('mov-manual-box').classList.remove('vis');
   document.getElementById('mm-lote').value='';
   document.getElementById('mm-qtd').value=1;
   document.getElementById('mm-motivo').value='';
   document.getElementById('mm-senha').value='';
-  var i=document.getElementById('mov-scan-inp'); if(i) i.focus();
+  _movCamPausado=false;
 }
 
-function movProcessarScan(){
-  var inp=document.getElementById('mov-scan-inp');
-  var raw=inp.value.trim();
-  inp.value='';
+// ── Câmera + leitura de QR Code (substitui o leitor USB) ──
+var _movCamStream=null, _movCamRAF=null, _movCamPausado=false, _movCamCooldownAte=0;
+
+function movIniciarCamera(){
+  var status=document.getElementById('mov-cam-status');
+  if(!status) return; // página não está montada (ex: chamado fora de contexto)
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    status.textContent='Este navegador não suporta acesso à câmera. Use a movimentação manual abaixo.';
+    status.classList.remove('oculto');
+    return;
+  }
+  status.textContent='Iniciando câmera...';
+  status.classList.remove('oculto');
+  navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal:'environment' } }, audio:false })
+    .then(function(stream){
+      _movCamStream=stream;
+      var video=document.getElementById('mov-cam-video');
+      video.srcObject=stream;
+      video.onloadedmetadata=function(){
+        video.play();
+        status.classList.add('oculto');
+        movLoopCamera();
+      };
+    })
+    .catch(function(e){
+      status.textContent='Não foi possível acessar a câmera ('+(e&&e.name?e.name:'erro')+'). Use a movimentação manual abaixo.';
+      status.classList.remove('oculto');
+    });
+}
+
+function movPararCamera(){
+  if(_movCamRAF){ cancelAnimationFrame(_movCamRAF); _movCamRAF=null; }
+  if(_movCamStream){ _movCamStream.getTracks().forEach(function(t){ t.stop(); }); _movCamStream=null; }
+}
+
+function movLoopCamera(){
+  var video=document.getElementById('mov-cam-video');
+  var canvas=document.getElementById('mov-cam-canvas');
+  var ctx=canvas.getContext('2d', { willReadFrequently:true });
+  function tick(){
+    if(!_movCamStream) return; // câmera foi parada (saiu da tela) — encerra o laço
+    if(video.readyState===video.HAVE_ENOUGH_DATA && !_movCamPausado && Date.now()>=_movCamCooldownAte){
+      canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+      ctx.drawImage(video,0,0,canvas.width,canvas.height);
+      try{
+        var img=ctx.getImageData(0,0,canvas.width,canvas.height);
+        var codigo=jsQR(img.data,img.width,img.height,{ inversionAttempts:'dontInvert' });
+        if(codigo && codigo.data){
+          _movCamCooldownAte=Date.now()+2500; // evita reler a mesma etiqueta em sequência
+          movProcessarCodigo(codigo.data);
+        }
+      }catch(e){}
+    }
+    _movCamRAF=requestAnimationFrame(tick);
+  }
+  _movCamRAF=requestAnimationFrame(tick);
+}
+
+function movProcessarCodigo(raw){
+  raw=String(raw||'').trim();
   if(!raw) return;
-  // O código de barras traz só o CaixaID; o QR traria um JSON — aceitamos os dois formatos.
+  // O QR Code traz um JSON com o id da caixa; aceitamos também o id puro por segurança.
   var caixaId=raw;
   try{ var j=JSON.parse(raw); if(j&&j.id) caixaId=j.id; }catch(e){}
 
-  var dados={ CaixaID:caixaId, Tipo:S.movTipo, Origem:'BIPADO', Usuario:'Movimentação' };
+  _movCamPausado=true; // trava a leitura durante a chamada, evita disparo duplicado
+  var dados={ CaixaID:caixaId, Tipo:S.movTipo, Origem:'BIPADO', Usuario:movUsuarioAtual() };
   google.script.run
-    .withSuccessHandler(function(r){ movTratarResultado(r,caixaId); })
-    .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); inp.focus(); })
+    .withSuccessHandler(function(r){ _movCamPausado=false; movTratarResultado(r,caixaId); })
+    .withFailureHandler(function(e){ _movCamPausado=false; toast('Erro: '+(e?e.message:''),'erro'); })
     .registrarMovimentacao(dados,null);
 }
 
 function movTratarResultado(r,caixaId){
-  var inp=document.getElementById('mov-scan-inp');
   if(!r||!r.ok){
     if(r&&r.precisaForcar){
       if(confirm((r.erro||'Divergência de estoque')+'\n\nDeseja FORÇAR esta movimentação? Isso exige senha de administrador.')){
         var senha=prompt('Senha de administrador:');
         if(senha){
+          _movCamPausado=true;
           google.script.run
-            .withSuccessHandler(function(r2){ movTratarResultado(r2,caixaId); })
-            .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); })
-            .registrarMovimentacao({CaixaID:caixaId,Tipo:S.movTipo,Origem:'BIPADO',Usuario:'Movimentação',Forcar:true},senha);
+            .withSuccessHandler(function(r2){ _movCamPausado=false; movTratarResultado(r2,caixaId); })
+            .withFailureHandler(function(e){ _movCamPausado=false; toast('Erro: '+(e?e.message:''),'erro'); })
+            .registrarMovimentacao({CaixaID:caixaId,Tipo:S.movTipo,Origem:'BIPADO',Usuario:movUsuarioAtual(),Forcar:true},senha);
         }
       }
     } else {
       toast(r&&r.erro?r.erro:'Erro ao bipar','erro');
     }
-    if(inp) inp.focus();
     return;
   }
   toast((r.tipo==='ENTRADA'?'Entrada':'Saída')+' registrada: '+r.peca,'sucesso');
@@ -2068,7 +2387,6 @@ function movTratarResultado(r,caixaId){
   document.getElementById('mov-ultima-peca').textContent=r.peca+' ('+r.material+')';
   document.getElementById('mov-ultima-det').textContent=(r.tipo==='ENTRADA'?'Entrada':'Saída')+' de 1 caixa — agora';
   movCarregarEstoque();
-  if(inp) inp.focus();
 }
 
 function movConfirmarManual(){
@@ -2082,7 +2400,7 @@ function movConfirmarManual(){
     Lote:document.getElementById('mm-lote').value.trim(),
     QtdCaixas:Number(document.getElementById('mm-qtd').value)||1,
     Motivo:document.getElementById('mm-motivo').value.trim(),
-    Usuario:'Movimentação'
+    Usuario:movUsuarioAtual()
   };
   var senha=document.getElementById('mm-senha').value;
   if(!senha){ toast('Informe a senha de administrador','aviso'); return; }
