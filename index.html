@@ -16,7 +16,7 @@
 
 // PREENCHA AQUI com os dados do seu projeto Supabase:
 var SUPABASE_URL = 'https://mdskmfhbtxeynczogjvb.supabase.co';
-var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kc2ttZmhidHhleW5jem9nanZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkzNzU5ODgsImV4cCI6MjEwNDk1MTk4OH0.7DyPNZPrCTImxntpxiNDXIbbhQqxEB3vRp3CAQi2Xr4';
+var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kc2ttZmhidHhleW5jem9nanZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkzNzU5ODgsImV4cCI6MjEwNDk1MTk4OH0.7DyPNZPrCTImxntpxiNDXIbbhQqxEB3vRp3CAQi2Xr4;
 
 // Senha de admin — decisão sua: fica em texto puro aqui, visível
 // pra qualquer um que abrir "Ver código-fonte" da página. Se
@@ -49,6 +49,13 @@ async function sbPatch(table, filtro, body) {
     method: 'PATCH',
     headers: sbHeaders({ Prefer: 'return=minimal' }),
     body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error(await r.text());
+}
+async function sbDelete(table, filtro) {
+  var r = await fetch(SUPABASE_URL + '/rest/v1/' + table + '?' + filtro, {
+    method: 'DELETE',
+    headers: sbHeaders({ Prefer: 'return=minimal' })
   });
   if (!r.ok) throw new Error(await r.text());
 }
@@ -147,6 +154,20 @@ async function getModeloEtiquetaInterno(tipo) {
   return tipo === 'PECA' ? TEMPLATE_PADRAO_PECA : TEMPLATE_PADRAO_CONFERENCIA;
 }
 
+// Carrega todos os arranjos de tubo de uma vez e agrupa por peca_id.
+// Evita 1 chamada por peça — busca tudo junto e distribui em memória.
+async function backendArranjosPorPeca() {
+  try {
+    var rows = await sbGet('arranjos_tubo?select=id,peca_id,grupos&order=ordem.asc');
+    var mapa = {};
+    rows.forEach(function (a) {
+      if (!mapa[a.peca_id]) mapa[a.peca_id] = [];
+      mapa[a.peca_id].push({ ID: a.id, Grupos: a.grupos || [] });
+    });
+    return mapa;
+  } catch (e) { return {}; }
+}
+
 // ── BACKEND: mesma assinatura de função do Code.gs original ──
 var backend = {
 
@@ -173,11 +194,13 @@ var backend = {
 
   async getPecas() {
     var rows = await sbGet('pecas?ativo=eq.true&order=codigo.asc');
-    return rows.map(function (p) { return { ID: p.id, Codigo: p.codigo, Nome: p.nome, QtdPadrao: p.qtd_padrao, PecasPorTubo: p.pecas_por_tubo, TamanhoCaixa: p.tamanho_caixa || '', Cantoneira: !!p.cantoneira, Ativo: true, DataCadastro: fmtDataBR(p.data_cadastro) }; });
+    var arranjosPorPeca = await backendArranjosPorPeca();
+    return rows.map(function (p) { return { ID: p.id, Codigo: p.codigo, Nome: p.nome, QtdPadrao: p.qtd_padrao, PecasPorTubo: p.pecas_por_tubo, TamanhoCaixa: p.tamanho_caixa || '', Cantoneira: !!p.cantoneira, Arranjos: arranjosPorPeca[p.id] || [], Ativo: true, DataCadastro: fmtDataBR(p.data_cadastro) }; });
   },
   async getPecasTodas() {
     var rows = await sbGet('pecas?order=codigo.asc');
-    return rows.map(function (p) { return { ID: p.id, Codigo: p.codigo, Nome: p.nome, QtdPadrao: p.qtd_padrao, PecasPorTubo: p.pecas_por_tubo, TamanhoCaixa: p.tamanho_caixa || '', Cantoneira: !!p.cantoneira, Ativo: p.ativo, DataCadastro: fmtDataBR(p.data_cadastro) }; });
+    var arranjosPorPeca = await backendArranjosPorPeca();
+    return rows.map(function (p) { return { ID: p.id, Codigo: p.codigo, Nome: p.nome, QtdPadrao: p.qtd_padrao, PecasPorTubo: p.pecas_por_tubo, TamanhoCaixa: p.tamanho_caixa || '', Cantoneira: !!p.cantoneira, Arranjos: arranjosPorPeca[p.id] || [], Ativo: p.ativo, DataCadastro: fmtDataBR(p.data_cadastro) }; });
   },
   async salvarPeca(dados) {
     try {
@@ -197,6 +220,20 @@ var backend = {
   async excluirPeca(id) {
     try { await sbPatch('pecas', 'id=eq.' + id, { ativo: false }); return { ok: true }; }
     catch (e) { return { ok: false, erro: e.message }; }
+  },
+
+  // Substitui TODOS os arranjos de uma peça pela lista enviada (apaga e recria).
+  // Mais simples e seguro que tentar diferenciar o que mudou — a lista de
+  // arranjos de uma peça é sempre pequena, então recriar tudo não pesa.
+  async salvarArranjosDaPeca(pecaId, arranjos) {
+    try {
+      await sbDelete('arranjos_tubo', 'peca_id=eq.' + pecaId);
+      var validos = (arranjos || []).filter(function (a) { return a.grupos && a.grupos.length; });
+      for (var i = 0; i < validos.length; i++) {
+        await sbPost('arranjos_tubo', { peca_id: pecaId, grupos: validos[i].grupos, ordem: i }, 'return=minimal');
+      }
+      return { ok: true };
+    } catch (e) { return { ok: false, erro: e.message }; }
   },
 
   async getMateriais() {
@@ -718,6 +755,15 @@ select.inp-pos option{color:#000;background:#fff}
 .fg input,.fg select{width:100%;padding:12px;border:2px solid var(--cinza3);border-radius:var(--radius-sm);font-size:15px;color:var(--texto);outline:none;background:#fff;-webkit-appearance:none}
 .fg input:focus,.fg select:focus{border-color:var(--azul3)}
 .fg-row{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.arr-card{background:var(--cinza);border:1px solid var(--cinza3);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px}
+.arr-card-hd{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:800;color:var(--azul);margin-bottom:8px}
+.arr-card-hd button{background:none;border:none;cursor:pointer;font-size:14px;padding:2px 6px}
+.arr-grupo-row{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.arr-grupo-row input{flex:1;min-width:0;padding:8px;border:2px solid var(--cinza3);border-radius:6px;font-size:13px;text-align:center}
+.arr-grupo-row span{font-size:12px;color:var(--texto2);font-weight:800}
+.arr-grupo-row button{background:#fde8e8;border:none;width:26px;height:26px;border-radius:6px;cursor:pointer;color:#c0392b;flex-shrink:0}
+.arr-add-grupo{background:none;border:1px dashed var(--cinza3);border-radius:6px;padding:6px 10px;font-size:11px;font-weight:700;color:var(--azul3);cursor:pointer;width:100%;margin-bottom:6px}
+.arr-total{font-size:11px;color:var(--texto2);font-weight:700}
 
 /* LOGIN senha admin */
 .lo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9000;align-items:flex-end;justify-content:center}
@@ -806,6 +852,12 @@ select.inp-pos option{color:#000;background:#fff}
 .cq-stat-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--texto2)}
 .cq-stat-val{font-size:19px;font-weight:900;color:var(--azul);line-height:1.15}
 .cq-stat-val.sm{font-size:13px}
+.cq-arranjos-hd{font-size:11px;font-weight:800;color:var(--texto2);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px;padding-top:14px;border-top:2px solid var(--cinza2)}
+.cq-arranjo{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--cinza);border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:12px}
+.cq-arranjo-partes{display:flex;align-items:center;gap:6px;font-weight:700;color:var(--texto);flex-wrap:wrap}
+.cq-arranjo-partes svg{color:var(--azul3);flex-shrink:0}
+.cq-arranjo-total{font-weight:900;color:var(--azul);white-space:nowrap}
+.cq-arranjo-vazio{font-size:12px;color:var(--texto2);font-style:italic;padding:6px 0}
 .mov-scan-hint{font-size:11px;color:var(--texto2);margin-top:8px;text-align:center}
 .mov-fallback{text-align:center;margin-top:10px}
 .mov-fallback button{background:none;border:none;color:var(--azul3);font-size:12px;font-weight:800;text-decoration:underline;cursor:pointer;padding:6px}
@@ -1319,21 +1371,32 @@ function selecionarConsultaPeca(id){
   renderConsultaLista(document.getElementById('consulta-busca').value);
 
   var temCantoneira=!!p.Cantoneira;
-  var icoTubo='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>';
   var icoCaixa='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>';
   var icoCantoneira=temCantoneira
     ? '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="8 12 11 15 16 9"/></svg>'
     : '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>';
+  var icoTubo='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>';
+
+  var arranjos=p.Arranjos||[];
+  var arranjosHtml=arranjos.length
+    ? arranjos.map(function(a){
+        var grupos=a.Grupos||[];
+        var partes=grupos.map(function(g){ return g.qtdTubos+' tubo'+(g.qtdTubos==1?'':'s')+' × '+g.pecasPorTubo+' pç'; }).join(' + ');
+        var total=grupos.reduce(function(s,g){ return s+(Number(g.qtdTubos)||0)*(Number(g.pecasPorTubo)||0); },0);
+        return '<div class="cq-arranjo"><span class="cq-arranjo-partes">'+icoTubo+' '+partes+'</span><span class="cq-arranjo-total">= '+total+' pç</span></div>';
+      }).join('')
+    : '<div class="cq-arranjo-vazio">Nenhum arranjo de tubo cadastrado ainda.</div>';
 
   var det=document.getElementById('consulta-detalhe');
   det.innerHTML=
     '<div class="cq-detalhe">'+
       '<div class="cq-detalhe-hd"><span class="cq-detalhe-cod">'+p.Codigo+'</span><span class="cq-detalhe-nome">'+p.Nome+'</span></div>'+
-      '<div class="cq-stats">'+
-        '<div class="cq-stat"><span class="cq-stat-ico">'+icoTubo+'</span><span class="cq-stat-label">Peças / Tubo</span><span class="cq-stat-val">'+(p.PecasPorTubo!=null&&p.PecasPorTubo!==''?p.PecasPorTubo:'—')+'</span></div>'+
+      '<div class="cq-stats" style="grid-template-columns:1fr 1fr">'+
         '<div class="cq-stat"><span class="cq-stat-ico">'+icoCaixa+'</span><span class="cq-stat-label">Tamanho da Caixa</span><span class="cq-stat-val sm">'+(p.TamanhoCaixa||'—')+'</span></div>'+
         '<div class="cq-stat '+(temCantoneira?'cantoneira-sim':'cantoneira-nao')+'"><span class="cq-stat-ico">'+icoCantoneira+'</span><span class="cq-stat-label">Cantoneira</span><span class="cq-stat-val">'+(temCantoneira?'SIM':'NÃO')+'</span></div>'+
       '</div>'+
+      '<div class="cq-arranjos-hd">Arranjos de Tubo possíveis (total da caixa: '+(p.QtdPadrao||'—')+' pç)</div>'+
+      arranjosHtml+
     '</div>';
   det.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
@@ -2541,7 +2604,9 @@ function editFromCache(tipo, idx){
   } else if(tipo==='peca'){
     S.cadTipo='pecas';
     document.getElementById('cad-t').textContent='Editar Peça';
-    document.getElementById('cad-body').innerHTML=formCad('pecas',{Codigo:d.Codigo||'',Nome:d.Nome||'',QtdPadrao:d.QtdPadrao||'',PecasPorTubo:d.PecasPorTubo||'',TamanhoCaixa:d.TamanhoCaixa||'',Cantoneira:!!d.Cantoneira});
+    document.getElementById('cad-body').innerHTML=formCad('pecas',{Codigo:d.Codigo||'',Nome:d.Nome||'',QtdPadrao:d.QtdPadrao||'',TamanhoCaixa:d.TamanhoCaixa||'',Cantoneira:!!d.Cantoneira});
+    _arranjosEdicao=(d.Arranjos||[]).map(function(a){ return { grupos:(a.Grupos||[]).map(function(g){ return {qtdTubos:g.qtdTubos, pecasPorTubo:g.pecasPorTubo}; }) }; });
+    renderArranjosEdicao();
   } else if(tipo==='mat'){
     S.cadTipo='materiais';
     document.getElementById('cad-t').textContent='Editar Material';
@@ -2578,6 +2643,7 @@ function abrirCad(tipo){ S.cadTipo=tipo; S.cadId=null;
   var t={operadores:'Novo Operador',pecas:'Nova Peça',materiais:'Novo Material',maquinas:'Nova Máquina'};
   document.getElementById('cad-t').textContent=t[tipo];
   document.getElementById('cad-body').innerHTML=formCad(tipo,null);
+  if(tipo==='pecas'){ _arranjosEdicao=[]; renderArranjosEdicao(); }
   resetBtnSalvarCad();
   document.getElementById('mo-cad').classList.add('aberto');
 }
@@ -2587,9 +2653,72 @@ function resetBtnSalvarCad(){
   if(btn){ btn.disabled=false; btn.textContent='💾 Salvar'; }
 }
 function fecharCad(){ document.getElementById('mo-cad').classList.remove('aberto'); }
+
+// ── ARRANJOS DE TUBO (repetidor dentro do cadastro de Peça) ──
+var _arranjosEdicao=[]; // [{ grupos:[{qtdTubos,pecasPorTubo}, ...] }, ...]
+
+function adicionarArranjo(){
+  _arranjosEdicao.push({ grupos:[{qtdTubos:'',pecasPorTubo:''}] });
+  renderArranjosEdicao();
+}
+function removerArranjo(i){
+  _arranjosEdicao.splice(i,1);
+  renderArranjosEdicao();
+}
+function adicionarGrupo(i){
+  _arranjosEdicao[i].grupos.push({qtdTubos:'',pecasPorTubo:''});
+  renderArranjosEdicao();
+}
+function removerGrupo(i,j){
+  _arranjosEdicao[i].grupos.splice(j,1);
+  if(!_arranjosEdicao[i].grupos.length) _arranjosEdicao.splice(i,1);
+  renderArranjosEdicao();
+}
+function atualizarGrupo(i,j,campo,valor){
+  _arranjosEdicao[i].grupos[j][campo]=valor;
+  // Só atualiza os totais mostrados, sem re-renderizar os inputs
+  // (senão o campo perde o foco a cada tecla digitada).
+  atualizarTotaisArranjos();
+}
+function totalDoArranjo(arranjo){
+  return (arranjo.grupos||[]).reduce(function(s,g){ return s+(Number(g.qtdTubos)||0)*(Number(g.pecasPorTubo)||0); },0);
+}
+function atualizarTotaisArranjos(){
+  var qtdPadrao=Number(document.getElementById('fc-q')?document.getElementById('fc-q').value:0)||0;
+  _arranjosEdicao.forEach(function(a,i){
+    var el=document.getElementById('arr-total-'+i);
+    if(!el) return;
+    var total=totalDoArranjo(a);
+    var bate=qtdPadrao>0 && total===qtdPadrao;
+    el.innerHTML='Total: <b>'+total+'</b> peças'+(qtdPadrao>0?(bate?' <span style="color:var(--verde)">✓ bate com a caixa</span>':' <span style="color:#c0392b">≠ caixa tem '+qtdPadrao+'</span>'):'');
+  });
+}
+function renderArranjosEdicao(){
+  var box=document.getElementById('fc-arranjos-lista');
+  if(!box) return;
+  if(!_arranjosEdicao.length){ box.innerHTML='<p style="font-size:12px;color:var(--texto2);padding:4px 0">Nenhum arranjo cadastrado ainda.</p>'; return; }
+  box.innerHTML=_arranjosEdicao.map(function(a,i){
+    var grupos=a.grupos.map(function(g,j){
+      return '<div class="arr-grupo-row">'+
+        '<input type="number" min="1" placeholder="Qtd tubos" value="'+(g.qtdTubos!==''?g.qtdTubos:'')+'" oninput="atualizarGrupo('+i+','+j+',\'qtdTubos\',this.value)"/>'+
+        '<span>×</span>'+
+        '<input type="number" min="1" placeholder="Peças/tubo" value="'+(g.pecasPorTubo!==''?g.pecasPorTubo:'')+'" oninput="atualizarGrupo('+i+','+j+',\'pecasPorTubo\',this.value)"/>'+
+        '<button type="button" onclick="removerGrupo('+i+','+j+')">✕</button>'+
+      '</div>';
+    }).join('');
+    return '<div class="arr-card">'+
+      '<div class="arr-card-hd">Arranjo '+(i+1)+'<button type="button" onclick="removerArranjo('+i+')">🗑</button></div>'+
+      grupos+
+      '<button type="button" class="arr-add-grupo" onclick="adicionarGrupo('+i+')">+ grupo de tubo</button>'+
+      '<div class="arr-total" id="arr-total-'+i+'"></div>'+
+    '</div>';
+  }).join('');
+  atualizarTotaisArranjos();
+}
+
 function formCad(tipo,d){
   if(tipo==='operadores') return '<div class="fg-row"><div class="fg"><label>Matrícula / Código</label><input type="text" id="fc-mat" placeholder="Ex: OP20" value="'+(d&&d.Matricula?d.Matricula:'')+'"/></div><div class="fg"><label>Nome</label><input type="text" id="fc-n" placeholder="Ex: João Silva" value="'+(d&&d.Nome?d.Nome:'')+'"/></div></div>';
-  if(tipo==='pecas') return '<div class="fg"><label>Código</label><input type="text" id="fc-c" placeholder="Ex: DEF-200" value="'+(d&&d.Codigo?d.Codigo:'')+'"/></div><div class="fg"><label>Nome da Peça</label><input type="text" id="fc-n" placeholder="Ex: Anel Defofo 200mm" value="'+(d&&d.Nome?d.Nome:'')+'"/></div><div class="fg"><label>Qtd Padrão por Caixa</label><input type="number" id="fc-q" placeholder="Ex: 130" value="'+(d&&d.QtdPadrao?d.QtdPadrao:'')+'"/></div><div class="fg-row"><div class="fg"><label>Peças por Tubo</label><input type="number" id="fc-tubo" placeholder="Ex: 20" value="'+(d&&d.PecasPorTubo?d.PecasPorTubo:'')+'"/></div><div class="fg"><label>Tamanho da Caixa</label><input type="text" id="fc-caixa" placeholder="Ex: Caixa 40x30" value="'+(d&&d.TamanhoCaixa?d.TamanhoCaixa:'')+'"/></div></div><div class="fg" style="display:flex;align-items:center;gap:8px;flex-direction:row"><input type="checkbox" id="fc-cantoneira" style="width:20px;height:20px" '+(d&&d.Cantoneira?'checked':'')+'/><label style="margin:0">Usa cantoneira na caixa</label></div>';
+  if(tipo==='pecas') return '<div class="fg"><label>Código</label><input type="text" id="fc-c" placeholder="Ex: DEF-200" value="'+(d&&d.Codigo?d.Codigo:'')+'"/></div><div class="fg"><label>Nome da Peça</label><input type="text" id="fc-n" placeholder="Ex: Anel Defofo 200mm" value="'+(d&&d.Nome?d.Nome:'')+'"/></div><div class="fg"><label>Qtd Padrão por Caixa</label><input type="number" id="fc-q" oninput="renderArranjosEdicao()" placeholder="Ex: 540" value="'+(d&&d.QtdPadrao?d.QtdPadrao:'')+'"/></div><div class="fg"><label>Tamanho da Caixa</label><input type="text" id="fc-caixa" placeholder="Ex: Caixa 40x30" value="'+(d&&d.TamanhoCaixa?d.TamanhoCaixa:'')+'"/></div><div class="fg" style="display:flex;align-items:center;gap:8px;flex-direction:row"><input type="checkbox" id="fc-cantoneira" style="width:20px;height:20px" '+(d&&d.Cantoneira?'checked':'')+'/><label style="margin:0">Usa cantoneira na caixa</label></div><div class="fg"><label>Arranjos de Tubo (formas de dividir a qtd total em tubos)</label><div id="fc-arranjos-lista"></div><button type="button" class="btn-novo" style="margin-top:6px" onclick="adicionarArranjo()">+ Novo arranjo</button></div>';
   if(tipo==='materiais') return '<div class="fg"><label>Nome</label><input type="text" id="fc-n" placeholder="Ex: EPDM" value="'+(d&&d.Nome?d.Nome:'')+'" onblur="sugerirCorMaterial()"/></div><div class="fg"><label>Cor (referência impressa na etiqueta)</label><input type="text" id="fc-cor" placeholder="Ex: Verde" value="'+(d&&d.Cor?d.Cor:'')+'"/></div><div class="fg"><label>Descrição / Norma (opcional)</label><input type="text" id="fc-d" placeholder="Ex: NBR 7676" value="'+(d&&d.Descricao?d.Descricao:'')+'"/></div>';
   if(tipo==='maquinas') return '<div class="fg"><label>Nome</label><input type="text" id="fc-n" placeholder="Ex: Injetora 01" value="'+(d&&d.Nome?d.Nome:'')+'"/></div><div class="fg"><label>Descrição (opcional)</label><input type="text" id="fc-d" placeholder="Ex: Engel 150t" value="'+(d&&d.Descricao?d.Descricao:'')+'"/></div>';
   return '';
@@ -2612,12 +2741,22 @@ function salvarCad(){
     dados.Codigo=document.getElementById('fc-c').value.trim();
     dados.Nome=document.getElementById('fc-n').value.trim();
     dados.QtdPadrao=document.getElementById('fc-q').value;
-    dados.PecasPorTubo=document.getElementById('fc-tubo')?document.getElementById('fc-tubo').value.trim():'';
     dados.TamanhoCaixa=document.getElementById('fc-caixa')?document.getElementById('fc-caixa').value.trim():'';
     dados.Cantoneira=document.getElementById('fc-cantoneira')?document.getElementById('fc-cantoneira').checked:false;
     if(!dados.Codigo||!dados.Nome||!dados.QtdPadrao){ toast('Preencha todos os campos','aviso'); return; }
+    var arranjosParaSalvar=_arranjosEdicao.map(function(a){
+      return { grupos:a.grupos.filter(function(g){ return Number(g.qtdTubos)>0 && Number(g.pecasPorTubo)>0; }).map(function(g){ return {qtdTubos:Number(g.qtdTubos),pecasPorTubo:Number(g.pecasPorTubo)}; }) };
+    }).filter(function(a){ return a.grupos.length; });
+    var cbPeca=function(rPeca){
+      var pecaId=dados.ID||(rPeca&&rPeca.id);
+      if(!pecaId){ liberar(); fecharCad(); admNavIr(tipo); relTipo(tipo); toast('Salvo!','sucesso'); return; }
+      google.script.run
+        .withSuccessHandler(function(){ liberar(); fecharCad(); admNavIr(tipo); relTipo(tipo); toast('Salvo!','sucesso'); })
+        .withFailureHandler(function(e){ liberar(); fecharCad(); admNavIr(tipo); relTipo(tipo); toast('Peça salva, mas os arranjos falharam: '+(e?e.message:''),'erro'); })
+        .salvarArranjosDaPeca(pecaId,arranjosParaSalvar);
+    };
     _salvandoCad=true; if(btn){ btn.disabled=true; btn.textContent='Salvando...'; }
-    google.script.run.withSuccessHandler(cb).withFailureHandler(er).salvarPeca(dados);
+    google.script.run.withSuccessHandler(cbPeca).withFailureHandler(er).salvarPeca(dados);
   } else if(tipo==='materiais'){
     dados.Nome=document.getElementById('fc-n').value.trim();
     dados.Cor=document.getElementById('fc-cor')?document.getElementById('fc-cor').value.trim():'';
