@@ -1041,7 +1041,7 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
   <div class="mb">
     <div class="mb-t" id="cad-t">Cadastrar</div>
     <div id="cad-body"></div>
-    <div class="mb-acts"><button class="mb-cancel" onclick="fecharCad()">Cancelar</button><button class="mb-save" onclick="salvarCad()">💾 Salvar</button></div>
+    <div class="mb-acts"><button class="mb-cancel" onclick="fecharCad()">Cancelar</button><button class="mb-save" id="btn-salvar-cad" onclick="salvarCad()">💾 Salvar</button></div>
   </div>
 </div>
 
@@ -2072,6 +2072,7 @@ function editFromCache(tipo, idx){
     document.getElementById('cad-t').textContent='Editar Máquina';
     document.getElementById('cad-body').innerHTML=formCad('maquinas',{Nome:d.Nome||'',Descricao:d.Descricao||''});
   }
+  resetBtnSalvarCad();
   document.getElementById('mo-cad').classList.add('aberto');
 }
 function rLogs(d){
@@ -2098,7 +2099,13 @@ function abrirCad(tipo){ S.cadTipo=tipo; S.cadId=null;
   var t={operadores:'Novo Operador',pecas:'Nova Peça',materiais:'Novo Material',maquinas:'Nova Máquina'};
   document.getElementById('cad-t').textContent=t[tipo];
   document.getElementById('cad-body').innerHTML=formCad(tipo,null);
+  resetBtnSalvarCad();
   document.getElementById('mo-cad').classList.add('aberto');
+}
+function resetBtnSalvarCad(){
+  _salvandoCad=false;
+  var btn=document.getElementById('btn-salvar-cad');
+  if(btn){ btn.disabled=false; btn.textContent='💾 Salvar'; }
 }
 function fecharCad(){ document.getElementById('mo-cad').classList.remove('aberto'); }
 function formCad(tipo,d){
@@ -2108,31 +2115,39 @@ function formCad(tipo,d){
   if(tipo==='maquinas') return '<div class="fg"><label>Nome</label><input type="text" id="fc-n" placeholder="Ex: Injetora 01" value="'+(d&&d.Nome?d.Nome:'')+'"/></div><div class="fg"><label>Descrição (opcional)</label><input type="text" id="fc-d" placeholder="Ex: Engel 150t" value="'+(d&&d.Descricao?d.Descricao:'')+'"/></div>';
   return '';
 }
+var _salvandoCad = false;
 function salvarCad(){
+  if(_salvandoCad) return; // já tem um salvamento em andamento — ignora clique repetido
   var tipo=S.cadTipo; var dados={ID:S.cadId};
-  var cb=function(){ fecharCad(); admNavIr(tipo); relTipo(tipo); toast('Salvo!','sucesso'); };
-  var er=function(e){ toast('Erro: '+(e?e.message:''),'erro'); };
+  var btn=document.getElementById('btn-salvar-cad');
+  function liberar(){ _salvandoCad=false; if(btn){ btn.disabled=false; btn.textContent='💾 Salvar'; } }
+  var cb=function(){ liberar(); fecharCad(); admNavIr(tipo); relTipo(tipo); toast('Salvo!','sucesso'); };
+  var er=function(e){ liberar(); toast('Erro: '+(e?e.message:''),'erro'); };
   if(tipo==='operadores'){
     dados.Matricula=document.getElementById('fc-mat')?document.getElementById('fc-mat').value.trim():'';
     dados.Nome=document.getElementById('fc-n').value.trim();
     if(!dados.Nome){ toast('Informe o nome','aviso'); return; }
+    _salvandoCad=true; if(btn){ btn.disabled=true; btn.textContent='Salvando...'; }
     google.script.run.withSuccessHandler(cb).withFailureHandler(er).salvarOperador(dados);
   } else if(tipo==='pecas'){
     dados.Codigo=document.getElementById('fc-c').value.trim();
     dados.Nome=document.getElementById('fc-n').value.trim();
     dados.QtdPadrao=document.getElementById('fc-q').value;
     if(!dados.Codigo||!dados.Nome||!dados.QtdPadrao){ toast('Preencha todos os campos','aviso'); return; }
+    _salvandoCad=true; if(btn){ btn.disabled=true; btn.textContent='Salvando...'; }
     google.script.run.withSuccessHandler(cb).withFailureHandler(er).salvarPeca(dados);
   } else if(tipo==='materiais'){
     dados.Nome=document.getElementById('fc-n').value.trim();
     dados.Cor=document.getElementById('fc-cor')?document.getElementById('fc-cor').value.trim():'';
     dados.Descricao=document.getElementById('fc-d')?document.getElementById('fc-d').value.trim():'';
     if(!dados.Nome){ toast('Informe o nome','aviso'); return; }
+    _salvandoCad=true; if(btn){ btn.disabled=true; btn.textContent='Salvando...'; }
     google.script.run.withSuccessHandler(cb).withFailureHandler(er).salvarMaterial(dados);
   } else if(tipo==='maquinas'){
     dados.Nome=document.getElementById('fc-n').value.trim();
     dados.Descricao=document.getElementById('fc-d')?document.getElementById('fc-d').value.trim():'';
     if(!dados.Nome){ toast('Informe o nome','aviso'); return; }
+    _salvandoCad=true; if(btn){ btn.disabled=true; btn.textContent='Salvando...'; }
     google.script.run.withSuccessHandler(cb).withFailureHandler(er).salvarMaquina(dados);
   }
 }
