@@ -1417,7 +1417,7 @@ function selecionarConsultaPeca(id){
         '<div class="cq-stat"><span class="cq-stat-ico">'+icoCaixa+'</span><span class="cq-stat-label">Tamanho da Caixa</span><span class="cq-stat-val sm">'+(p.TamanhoCaixa||'—')+'</span></div>'+
         '<div class="cq-stat '+(temCantoneira?'cantoneira-sim':'cantoneira-nao')+'"><span class="cq-stat-ico">'+icoCantoneira+'</span><span class="cq-stat-label">Cantoneira</span><span class="cq-stat-val">'+(temCantoneira?'SIM':'NÃO')+'</span></div>'+
       '</div>'+
-      '<div class="cq-arranjos-hd">Arranjos de Tubo possíveis (total da caixa: '+(p.QtdPadrao||'—')+' pç)</div>'+
+      '<div class="cq-arranjos-hd">Divisão em Tubos (total da caixa: '+(p.QtdPadrao||'—')+' pç)</div>'+
       arranjosHtml+
     '</div>';
   det.scrollIntoView({behavior:'smooth',block:'nearest'});
@@ -2645,8 +2645,8 @@ function editFromCache(tipo, idx){
     S.cadTipo='pecas';
     document.getElementById('cad-t').textContent='Editar Peça';
     document.getElementById('cad-body').innerHTML=formCad('pecas',{Codigo:d.Codigo||'',Nome:d.Nome||'',QtdPadrao:d.QtdPadrao||'',TamanhoCaixa:d.TamanhoCaixa||'',Cantoneira:!!d.Cantoneira});
-    _arranjosEdicao=(d.Arranjos||[]).map(function(a){ return { grupos:(a.Grupos||[]).map(function(g){ return {qtdTubos:g.qtdTubos, pecasPorTubo:g.pecasPorTubo}; }) }; });
-    renderArranjosEdicao();
+    _gruposEdicao=(d.Arranjos&&d.Arranjos[0]&&d.Arranjos[0].Grupos)?d.Arranjos[0].Grupos.map(function(g){ return {qtdTubos:g.qtdTubos, pecasPorTubo:g.pecasPorTubo}; }):[];
+    renderGruposEdicao();
   } else if(tipo==='mat'){
     S.cadTipo='materiais';
     document.getElementById('cad-t').textContent='Editar Material';
@@ -2683,7 +2683,7 @@ function abrirCad(tipo){ S.cadTipo=tipo; S.cadId=null;
   var t={operadores:'Novo Operador',pecas:'Nova Peça',materiais:'Novo Material',maquinas:'Nova Máquina'};
   document.getElementById('cad-t').textContent=t[tipo];
   document.getElementById('cad-body').innerHTML=formCad(tipo,null);
-  if(tipo==='pecas'){ _arranjosEdicao=[]; renderArranjosEdicao(); }
+  if(tipo==='pecas'){ _gruposEdicao=[]; renderGruposEdicao(); }
   resetBtnSalvarCad();
   document.getElementById('mo-cad').classList.add('aberto');
 }
@@ -2694,75 +2694,54 @@ function resetBtnSalvarCad(){
 }
 function fecharCad(){ document.getElementById('mo-cad').classList.remove('aberto'); }
 
-// ── ARRANJOS DE TUBO (repetidor dentro do cadastro de Peça) ──
-var _arranjosEdicao=[]; // [{ grupos:[{qtdTubos,pecasPorTubo}, ...] }, ...]
+// ── DIVISÃO EM TUBOS (grupos que juntos fecham a caixa da peça) ──
+// Não existe mais "arranjo" — só uma lista de grupos (qtd tubos × peças/tubo)
+// que juntos devem somar o total da caixa, porque todos vão na mesma caixa.
+var _gruposEdicao=[]; // [{qtdTubos,pecasPorTubo}, ...]
 
-function adicionarArranjo(){
-  _arranjosEdicao.push({ grupos:[{qtdTubos:'',pecasPorTubo:''}] });
-  renderArranjosEdicao();
+function adicionarGrupo(){
+  _gruposEdicao.push({qtdTubos:'',pecasPorTubo:''});
+  renderGruposEdicao();
 }
-function removerArranjo(i){
-  _arranjosEdicao.splice(i,1);
-  renderArranjosEdicao();
+function removerGrupo(j){
+  _gruposEdicao.splice(j,1);
+  renderGruposEdicao();
 }
-function adicionarGrupo(i){
-  _arranjosEdicao[i].grupos.push({qtdTubos:'',pecasPorTubo:''});
-  renderArranjosEdicao();
-}
-function removerGrupo(i,j){
-  _arranjosEdicao[i].grupos.splice(j,1);
-  if(!_arranjosEdicao[i].grupos.length) _arranjosEdicao.splice(i,1);
-  renderArranjosEdicao();
-}
-function atualizarGrupo(i,j,campo,valor){
-  _arranjosEdicao[i].grupos[j][campo]=valor;
-  // Só atualiza os totais mostrados, sem re-renderizar os inputs
+function atualizarGrupo(j,campo,valor){
+  _gruposEdicao[j][campo]=valor;
+  // Só atualiza o total mostrado, sem re-renderizar os inputs
   // (senão o campo perde o foco a cada tecla digitada).
-  atualizarTotaisArranjos();
+  atualizarTotalGrupos();
 }
-function totalDoArranjo(arranjo){
-  return (arranjo.grupos||[]).reduce(function(s,g){ return s+(Number(g.qtdTubos)||0)*(Number(g.pecasPorTubo)||0); },0);
-}
-function totalTubosDoArranjo(arranjo){
-  return (arranjo.grupos||[]).reduce(function(s,g){ return s+(Number(g.qtdTubos)||0); },0);
-}
-function atualizarTotaisArranjos(){
+function atualizarTotalGrupos(){
   var qtdPadrao=Number(document.getElementById('fc-q')?document.getElementById('fc-q').value:0)||0;
-  _arranjosEdicao.forEach(function(a,i){
-    var el=document.getElementById('arr-total-'+i);
-    if(!el) return;
-    var total=totalDoArranjo(a);
-    var totalTubos=totalTubosDoArranjo(a);
-    var bate=qtdPadrao>0 && total===qtdPadrao;
-    el.innerHTML=totalTubos+' tubo'+(totalTubos===1?'':'s')+' no total — Total: <b>'+total+'</b> peças'+(qtdPadrao>0?(bate?' <span style="color:var(--verde)">✓ bate com a caixa</span>':' <span style="color:#c0392b">≠ caixa tem '+qtdPadrao+'</span>'):'');
-  });
+  var el=document.getElementById('grupos-total');
+  if(!el) return;
+  var totalPecas=_gruposEdicao.reduce(function(s,g){ return s+(Number(g.qtdTubos)||0)*(Number(g.pecasPorTubo)||0); },0);
+  var totalTubos=_gruposEdicao.reduce(function(s,g){ return s+(Number(g.qtdTubos)||0); },0);
+  var bate=qtdPadrao>0 && totalPecas===qtdPadrao;
+  el.innerHTML=totalTubos+' tubo'+(totalTubos===1?'':'s')+' no total — Total: <b>'+totalPecas+'</b> peças'+(qtdPadrao>0?(bate?' <span style="color:var(--verde)">✓ bate com a caixa</span>':' <span style="color:#c0392b">≠ caixa tem '+qtdPadrao+'</span>'):'');
 }
-function renderArranjosEdicao(){
-  var box=document.getElementById('fc-arranjos-lista');
+function renderGruposEdicao(){
+  var box=document.getElementById('fc-grupos-lista');
   if(!box) return;
-  if(!_arranjosEdicao.length){ box.innerHTML='<p style="font-size:12px;color:var(--texto2);padding:4px 0">Nenhum arranjo cadastrado ainda.</p>'; return; }
-  box.innerHTML=_arranjosEdicao.map(function(a,i){
-    var grupos=a.grupos.map(function(g,j){
+  if(!_gruposEdicao.length){ box.innerHTML='<p style="font-size:12px;color:var(--texto2);padding:4px 0">Nenhum grupo cadastrado ainda.</p>'; }
+  else {
+    box.innerHTML=_gruposEdicao.map(function(g,j){
       return '<div class="arr-grupo-row">'+
-        '<input type="number" min="1" placeholder="Qtd tubos" value="'+(g.qtdTubos!==''?g.qtdTubos:'')+'" oninput="atualizarGrupo('+i+','+j+',\'qtdTubos\',this.value)"/>'+
+        '<input type="number" min="1" placeholder="Qtd tubos" value="'+(g.qtdTubos!==''?g.qtdTubos:'')+'" oninput="atualizarGrupo('+j+',\'qtdTubos\',this.value)"/>'+
         '<span>×</span>'+
-        '<input type="number" min="1" placeholder="Peças/tubo" value="'+(g.pecasPorTubo!==''?g.pecasPorTubo:'')+'" oninput="atualizarGrupo('+i+','+j+',\'pecasPorTubo\',this.value)"/>'+
-        '<button type="button" onclick="removerGrupo('+i+','+j+')">✕</button>'+
+        '<input type="number" min="1" placeholder="Peças/tubo" value="'+(g.pecasPorTubo!==''?g.pecasPorTubo:'')+'" oninput="atualizarGrupo('+j+',\'pecasPorTubo\',this.value)"/>'+
+        '<button type="button" onclick="removerGrupo('+j+')">✕</button>'+
       '</div>';
     }).join('');
-    return '<div class="arr-card">'+
-      '<div class="arr-card-hd">Arranjo '+(i+1)+'<button type="button" onclick="removerArranjo('+i+')">🗑</button></div>'+
-      grupos+
-      '<button type="button" class="arr-add-grupo" onclick="adicionarGrupo('+i+')">+ grupo de tubo</button>'+
-      '<div class="arr-total" id="arr-total-'+i+'"></div>'+
-    '</div>';
-  }).join('');
-  atualizarTotaisArranjos();
+  }
+  atualizarTotalGrupos();
 }
 
 function formCad(tipo,d){
   if(tipo==='operadores') return '<div class="fg-row"><div class="fg"><label>Matrícula / Código</label><input type="text" id="fc-mat" placeholder="Ex: OP20" value="'+(d&&d.Matricula?d.Matricula:'')+'"/></div><div class="fg"><label>Nome</label><input type="text" id="fc-n" placeholder="Ex: João Silva" value="'+(d&&d.Nome?d.Nome:'')+'"/></div></div>';
-  if(tipo==='pecas') return '<div class="fg"><label>Código</label><input type="text" id="fc-c" placeholder="Ex: DEF-200" value="'+(d&&d.Codigo?d.Codigo:'')+'"/></div><div class="fg"><label>Nome da Peça</label><input type="text" id="fc-n" placeholder="Ex: Anel Defofo 200mm" value="'+(d&&d.Nome?d.Nome:'')+'"/></div><div class="fg"><label>Qtd Padrão por Caixa</label><input type="number" id="fc-q" oninput="renderArranjosEdicao()" placeholder="Ex: 540" value="'+(d&&d.QtdPadrao?d.QtdPadrao:'')+'"/></div><div class="fg"><label>Tamanho da Caixa</label><input type="text" id="fc-caixa" placeholder="Ex: Caixa 40x30" value="'+(d&&d.TamanhoCaixa?d.TamanhoCaixa:'')+'"/></div><div class="fg" style="display:flex;align-items:center;gap:8px;flex-direction:row"><input type="checkbox" id="fc-cantoneira" style="width:20px;height:20px" '+(d&&d.Cantoneira?'checked':'')+'/><label style="margin:0">Usa cantoneira na caixa</label></div><div class="fg"><label>Arranjos de Tubo (formas de dividir a qtd total em tubos)</label><div id="fc-arranjos-lista"></div><button type="button" class="btn-novo" style="margin-top:6px" onclick="adicionarArranjo()">+ Novo arranjo</button></div>';
+  if(tipo==='pecas') return '<div class="fg"><label>Código</label><input type="text" id="fc-c" placeholder="Ex: DEF-200" value="'+(d&&d.Codigo?d.Codigo:'')+'"/></div><div class="fg"><label>Nome da Peça</label><input type="text" id="fc-n" placeholder="Ex: Anel Defofo 200mm" value="'+(d&&d.Nome?d.Nome:'')+'"/></div><div class="fg"><label>Qtd Padrão por Caixa</label><input type="number" id="fc-q" oninput="atualizarTotalGrupos()" placeholder="Ex: 540" value="'+(d&&d.QtdPadrao?d.QtdPadrao:'')+'"/></div><div class="fg"><label>Tamanho da Caixa</label><input type="text" id="fc-caixa" placeholder="Ex: Caixa 40x30" value="'+(d&&d.TamanhoCaixa?d.TamanhoCaixa:'')+'"/></div><div class="fg" style="display:flex;align-items:center;gap:8px;flex-direction:row"><input type="checkbox" id="fc-cantoneira" style="width:20px;height:20px" '+(d&&d.Cantoneira?'checked':'')+'/><label style="margin:0">Usa cantoneira na caixa</label></div><div class="fg"><label>Divisão em Tubos (grupos que juntos fecham a caixa)</label><div id="fc-grupos-lista"></div><button type="button" class="arr-add-grupo" onclick="adicionarGrupo()">+ grupo de tubo</button><div class="arr-total" id="grupos-total"></div></div>';
   if(tipo==='materiais') return '<div class="fg"><label>Nome</label><input type="text" id="fc-n" placeholder="Ex: EPDM" value="'+(d&&d.Nome?d.Nome:'')+'" onblur="sugerirCorMaterial()"/></div><div class="fg"><label>Cor (referência impressa na etiqueta)</label><input type="text" id="fc-cor" placeholder="Ex: Verde" value="'+(d&&d.Cor?d.Cor:'')+'"/></div><div class="fg"><label>Descrição / Norma (opcional)</label><input type="text" id="fc-d" placeholder="Ex: NBR 7676" value="'+(d&&d.Descricao?d.Descricao:'')+'"/></div>';
   if(tipo==='maquinas') return '<div class="fg"><label>Nome</label><input type="text" id="fc-n" placeholder="Ex: Injetora 01" value="'+(d&&d.Nome?d.Nome:'')+'"/></div><div class="fg"><label>Descrição (opcional)</label><input type="text" id="fc-d" placeholder="Ex: Engel 150t" value="'+(d&&d.Descricao?d.Descricao:'')+'"/></div>';
   return '';
@@ -2788,9 +2767,16 @@ function salvarCad(){
     dados.TamanhoCaixa=document.getElementById('fc-caixa')?document.getElementById('fc-caixa').value.trim():'';
     dados.Cantoneira=document.getElementById('fc-cantoneira')?document.getElementById('fc-cantoneira').checked:false;
     if(!dados.Codigo||!dados.Nome||!dados.QtdPadrao){ toast('Preencha todos os campos','aviso'); return; }
-    var arranjosParaSalvar=_arranjosEdicao.map(function(a){
-      return { grupos:a.grupos.filter(function(g){ return Number(g.qtdTubos)>0 && Number(g.pecasPorTubo)>0; }).map(function(g){ return {qtdTubos:Number(g.qtdTubos),pecasPorTubo:Number(g.pecasPorTubo)}; }) };
-    }).filter(function(a){ return a.grupos.length; });
+    var gruposValidos=_gruposEdicao.filter(function(g){ return Number(g.qtdTubos)>0 && Number(g.pecasPorTubo)>0; }).map(function(g){ return {qtdTubos:Number(g.qtdTubos),pecasPorTubo:Number(g.pecasPorTubo)}; });
+    if(gruposValidos.length){
+      var totalGruposPecas=gruposValidos.reduce(function(s,g){ return s+g.qtdTubos*g.pecasPorTubo; },0);
+      var qtdPadraoNum=Number(dados.QtdPadrao);
+      if(totalGruposPecas!==qtdPadraoNum){
+        toast('Os grupos de tubo somam '+totalGruposPecas+' peças, mas a caixa tem '+qtdPadraoNum+'. Ajuste antes de salvar.','erro');
+        return;
+      }
+    }
+    var arranjosParaSalvar=gruposValidos.length ? [{grupos:gruposValidos}] : [];
     var cbPeca=function(rPeca){
       var pecaId=dados.ID||(rPeca&&rPeca.id);
       if(!pecaId){ liberar(); fecharCad(); admNavIr(tipo); relTipo(tipo); toast('Salvo!','sucesso'); return; }
