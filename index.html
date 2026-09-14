@@ -558,8 +558,8 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-fa
 .pos-back-btn{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:none;color:rgba(255,255,255,.6);font-size:12px;font-weight:700;padding:8px 12px;border-radius:var(--radius-sm);cursor:pointer;transition:all .15s}
 .pos-back-btn:active{background:rgba(255,255,255,.18);color:#fff}
 
-.pos-grid-wrap{flex:1;overflow:hidden;padding:10px;display:flex;flex-direction:column;gap:8px}
-.pos-grid{flex:1;display:grid;gap:8px}
+.pos-grid-wrap{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+.pos-grid{flex:1;display:grid;gap:8px;align-content:start}
 
 .pbtn{background:rgba(255,255,255,.07);border:2px solid rgba(255,255,255,.1);border-radius:var(--radius);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;text-align:center;padding:10px 6px;transition:all .12s;position:relative;overflow:hidden}
 .pbtn:active{transform:scale(.94);background:rgba(255,255,255,.18)}
@@ -1001,12 +1001,14 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
     <!-- SP1 Operador -->
     <div id="sp1" style="display:flex;flex-direction:column;flex:1;min-height:0">
       <div class="pos-panel-head"><div><div class="pph-titulo">Selecione o Operador</div><div class="pph-sub">Toque no seu nome</div></div></div>
-      <div class="pos-grid-wrap"><div class="pos-grid" id="g-op"></div><div class="pos-paginacao" id="pag-op" style="display:none"><button class="ppag-btn" id="pag-op-prev" onclick="pgOp(-1)">◀</button><div class="ppag-info" id="pag-op-info">1/1</div><button class="ppag-btn" id="pag-op-next" onclick="pgOp(1)">▶</button></div></div>
+      <div style="padding:0 10px"><input type="text" class="inp-pos" id="busca-op" placeholder="Buscar operador..." oninput="renderGridOp(this.value)"/></div>
+      <div class="pos-grid-wrap"><div class="pos-grid" id="g-op"></div></div>
     </div>
     <!-- SP2 Peça -->
     <div id="sp2" style="display:none;flex-direction:column;flex:1;min-height:0">
       <div class="pos-panel-head"><button class="pos-back-btn" onclick="goStep(1)">◀ Voltar</button><div><div class="pph-titulo">Selecione a Peça</div><div class="pph-sub">Produto a ser embalado</div></div></div>
-      <div class="pos-grid-wrap"><div class="pos-grid" id="g-peca"></div><div class="pos-paginacao" id="pag-peca" style="display:none"><button class="ppag-btn" id="pag-peca-prev" onclick="pgPeca(-1)">◀</button><div class="ppag-info" id="pag-peca-info">1/1</div><button class="ppag-btn" id="pag-peca-next" onclick="pgPeca(1)">▶</button></div></div>
+      <div style="padding:0 10px"><input type="text" class="inp-pos" id="busca-peca" placeholder="Buscar peça por código ou nome..." oninput="renderGridPeca(this.value)"/></div>
+      <div class="pos-grid-wrap"><div class="pos-grid" id="g-peca"></div></div>
     </div>
     <!-- SP3 Material -->
     <div id="sp3" style="display:none;flex-direction:column;flex:1;min-height:0">
@@ -1401,8 +1403,9 @@ function selecionarConsultaPeca(id){
     ? arranjos.map(function(a){
         var grupos=a.Grupos||[];
         var partes=grupos.map(function(g){ return g.qtdTubos+' tubo'+(g.qtdTubos==1?'':'s')+' × '+g.pecasPorTubo+' pç'; }).join(' + ');
+        var totalTubos=grupos.reduce(function(s,g){ return s+(Number(g.qtdTubos)||0); },0);
         var total=grupos.reduce(function(s,g){ return s+(Number(g.qtdTubos)||0)*(Number(g.pecasPorTubo)||0); },0);
-        return '<div class="cq-arranjo"><span class="cq-arranjo-partes">'+icoTubo+' '+partes+'</span><span class="cq-arranjo-total">= '+total+' pç</span></div>';
+        return '<div class="cq-arranjo"><span class="cq-arranjo-partes">'+icoTubo+' '+partes+'</span><span class="cq-arranjo-total">'+totalTubos+' tubo'+(totalTubos===1?'':'s')+' = '+total+' pç</span></div>';
       }).join('')
     : '<div class="cq-arranjo-vazio">Nenhum arranjo de tubo cadastrado ainda.</div>';
 
@@ -2119,26 +2122,36 @@ function renderGridPag(items, gridId, pagId, infoId, pgIdx, genItem, emptyMsg){
   }
 }
 
-function renderGridOp(){
-  renderGridPag(S.op,'g-op','pag-op','pag-op-info',S.pgOp,function(o){
+function renderGridOp(filtro){
+  var termo=semAcentoConsulta(filtro||'');
+  var itens=S.op.filter(function(o){ return !termo || semAcentoConsulta(o.Nome).indexOf(termo)>=0 || semAcentoConsulta(o.Matricula||'').indexOf(termo)>=0; });
+  var g=document.getElementById('g-op');
+  if(!S.op.length){ g.style.gridTemplateColumns=''; g.innerHTML='<p style="color:rgba(255,255,255,.4);padding:16px;grid-column:1/-1;text-align:center;font-size:13px">Nenhum operador cadastrado. Acesse Admin.</p>'; return; }
+  if(!itens.length){ g.style.gridTemplateColumns=''; g.innerHTML='<p style="color:rgba(255,255,255,.4);padding:16px;grid-column:1/-1;text-align:center;font-size:13px">Nenhum operador encontrado.</p>'; return; }
+  g.style.gridTemplateColumns='repeat('+calcCols(itens.length)+',1fr)';
+  g.innerHTML=itens.map(function(o){
     var m=o.Matricula||'';
     return '<div class="pbtn" onclick="selOp(\''+esc(o.Nome)+'\',\''+esc(m)+'\')">' +
       '<div class="pbtn-chk">✓</div><div class="pi">👤</div>'+
       (m?'<div class="pmat">'+m+'</div>':'')+
       '<div class="pn">'+o.Nome+'</div></div>';
-  },'Nenhum operador cadastrado. Acesse Admin.');
+  }).join('');
 }
-function pgOp(d){ S.pgOp=Math.max(0,S.pgOp+d); renderGridOp(); }
-function selOp(n,m){ S.sel.op=n; S.sel.matricula=m; updSidebar(); renderGridPeca(); goStep(2); }
+function selOp(n,m){ S.sel.op=n; S.sel.matricula=m; updSidebar(); var b=document.getElementById('busca-peca'); if(b) b.value=''; renderGridPeca(); goStep(2); }
 
-function renderGridPeca(){
-  renderGridPag(S.pecas,'g-peca','pag-peca','pag-peca-info',S.pgPeca,function(p){
+function renderGridPeca(filtro){
+  var termo=semAcentoConsulta(filtro||'');
+  var itens=S.pecas.filter(function(p){ return !termo || semAcentoConsulta(p.Codigo).indexOf(termo)>=0 || semAcentoConsulta(p.Nome).indexOf(termo)>=0; });
+  var g=document.getElementById('g-peca');
+  if(!S.pecas.length){ g.style.gridTemplateColumns=''; g.innerHTML='<p style="color:rgba(255,255,255,.4);padding:16px;grid-column:1/-1;text-align:center;font-size:13px">Nenhuma peça cadastrada.</p>'; return; }
+  if(!itens.length){ g.style.gridTemplateColumns=''; g.innerHTML='<p style="color:rgba(255,255,255,.4);padding:16px;grid-column:1/-1;text-align:center;font-size:13px">Nenhuma peça encontrada.</p>'; return; }
+  g.style.gridTemplateColumns='repeat('+calcCols(itens.length)+',1fr)';
+  g.innerHTML=itens.map(function(p){
     return '<div class="pbtn" onclick="selPeca(\''+esc(p.Nome)+'\',\''+esc(p.Codigo)+'\','+Number(p.QtdPadrao)+')">' +
       '<div class="pbtn-chk">✓</div><div class="pc">'+p.Codigo+'</div>'+
       '<div class="pn">'+p.Nome+'</div><div class="pd">'+p.QtdPadrao+' pç/cx</div></div>';
-  },'Nenhuma peça cadastrada.');
+  }).join('');
 }
-function pgPeca(d){ S.pgPeca=Math.max(0,S.pgPeca+d); renderGridPeca(); }
 function selPeca(n,c,q){ S.sel.peca=n; S.sel.codPeca=c; S.sel.qtdPad=Number(q); updSidebar(); renderGridMat(); goStep(3); }
 
 function renderGridMat(){
@@ -2230,6 +2243,7 @@ function enviarProd(qtd,cx,senha){
 function novaProd(){
   S.sel={matricula:'',op:'',peca:'',codPeca:'',qtdPad:0,mat:'',maq:'',trim:'',ano:String(new Date().getFullYear()),lote:''};
   document.getElementById('inp-lote').value='';
+  var bo=document.getElementById('busca-op'); if(bo) bo.value='';
   document.querySelectorAll('.tbtn').forEach(function(b){b.classList.remove('sel');});
   document.getElementById('btn-registrar').style.display='';
   document.getElementById('btn-registrar').classList.remove('pronto');
@@ -2709,14 +2723,18 @@ function atualizarGrupo(i,j,campo,valor){
 function totalDoArranjo(arranjo){
   return (arranjo.grupos||[]).reduce(function(s,g){ return s+(Number(g.qtdTubos)||0)*(Number(g.pecasPorTubo)||0); },0);
 }
+function totalTubosDoArranjo(arranjo){
+  return (arranjo.grupos||[]).reduce(function(s,g){ return s+(Number(g.qtdTubos)||0); },0);
+}
 function atualizarTotaisArranjos(){
   var qtdPadrao=Number(document.getElementById('fc-q')?document.getElementById('fc-q').value:0)||0;
   _arranjosEdicao.forEach(function(a,i){
     var el=document.getElementById('arr-total-'+i);
     if(!el) return;
     var total=totalDoArranjo(a);
+    var totalTubos=totalTubosDoArranjo(a);
     var bate=qtdPadrao>0 && total===qtdPadrao;
-    el.innerHTML='Total: <b>'+total+'</b> peças'+(qtdPadrao>0?(bate?' <span style="color:var(--verde)">✓ bate com a caixa</span>':' <span style="color:#c0392b">≠ caixa tem '+qtdPadrao+'</span>'):'');
+    el.innerHTML=totalTubos+' tubo'+(totalTubos===1?'':'s')+' no total — Total: <b>'+total+'</b> peças'+(qtdPadrao>0?(bate?' <span style="color:var(--verde)">✓ bate com a caixa</span>':' <span style="color:#c0392b">≠ caixa tem '+qtdPadrao+'</span>'):'');
   });
 }
 function renderArranjosEdicao(){
