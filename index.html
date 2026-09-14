@@ -172,16 +172,23 @@ var backend = {
 
   async getPecas() {
     var rows = await sbGet('pecas?ativo=eq.true&order=codigo.asc');
-    return rows.map(function (p) { return { ID: p.id, Codigo: p.codigo, Nome: p.nome, QtdPadrao: p.qtd_padrao, Ativo: true, DataCadastro: fmtDataBR(p.data_cadastro) }; });
+    return rows.map(function (p) { return { ID: p.id, Codigo: p.codigo, Nome: p.nome, QtdPadrao: p.qtd_padrao, PecasPorTubo: p.pecas_por_tubo, TamanhoCaixa: p.tamanho_caixa || '', Cantoneira: !!p.cantoneira, Ativo: true, DataCadastro: fmtDataBR(p.data_cadastro) }; });
   },
   async getPecasTodas() {
     var rows = await sbGet('pecas?order=codigo.asc');
-    return rows.map(function (p) { return { ID: p.id, Codigo: p.codigo, Nome: p.nome, QtdPadrao: p.qtd_padrao, Ativo: p.ativo, DataCadastro: fmtDataBR(p.data_cadastro) }; });
+    return rows.map(function (p) { return { ID: p.id, Codigo: p.codigo, Nome: p.nome, QtdPadrao: p.qtd_padrao, PecasPorTubo: p.pecas_por_tubo, TamanhoCaixa: p.tamanho_caixa || '', Cantoneira: !!p.cantoneira, Ativo: p.ativo, DataCadastro: fmtDataBR(p.data_cadastro) }; });
   },
   async salvarPeca(dados) {
     try {
-      if (dados.ID) { await sbPatch('pecas', 'id=eq.' + dados.ID, { codigo: dados.Codigo, nome: dados.Nome, qtd_padrao: Number(dados.QtdPadrao), ativo: true }); return { ok: true }; }
-      var rows = await sbPost('pecas', { codigo: dados.Codigo, nome: dados.Nome, qtd_padrao: Number(dados.QtdPadrao), ativo: true });
+      var payload = {
+        codigo: dados.Codigo, nome: dados.Nome, qtd_padrao: Number(dados.QtdPadrao),
+        pecas_por_tubo: (dados.PecasPorTubo === '' || dados.PecasPorTubo === undefined || dados.PecasPorTubo === null) ? null : Number(dados.PecasPorTubo),
+        tamanho_caixa: dados.TamanhoCaixa || '',
+        cantoneira: !!dados.Cantoneira,
+        ativo: true
+      };
+      if (dados.ID) { await sbPatch('pecas', 'id=eq.' + dados.ID, payload); return { ok: true }; }
+      var rows = await sbPost('pecas', payload);
       await inserirLog('CADASTRO', 'Admin', 'Peça cadastrada: ' + dados.Nome, '');
       return { ok: true, id: rows[0].id };
     } catch (e) { return { ok: false, erro: e.message }; }
@@ -437,6 +444,10 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-fa
 .mi-btn-op:hover{background:var(--laranja2)}
 .mi-btn-mov{background:var(--verde);color:#fff}
 .mi-btn-mov:hover{background:var(--verde2)}
+.mi-btn-consulta{background:var(--azul3);color:#fff}
+.mi-btn-consulta:hover{background:#0c2b52}
+.mi-btn-estoque{background:#6c3fc5;color:#fff}
+.mi-btn-estoque:hover{background:#54309a}
 .mi-btn-adm{background:rgba(255,255,255,.1);color:#fff;border:2px solid rgba(255,255,255,.15)}
 .mi-btn-adm:hover{background:rgba(255,255,255,.18)}
 .mi-btn .ico{font-size:36px}
@@ -808,6 +819,16 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
       <div class="txt">MOVIMENTAÇÃO</div>
       <div class="desc">Bipar entrada e saída de estoque</div>
     </button>
+    <button class="mi-btn mi-btn-consulta" onclick="entrarComoConsulta()">
+      <div class="ico">🔍</div>
+      <div class="txt">CONSULTA</div>
+      <div class="desc">Ver peças/tubo, caixa e cantoneira</div>
+    </button>
+    <button class="mi-btn mi-btn-estoque" onclick="entrarComoEstoque()">
+      <div class="ico">📊</div>
+      <div class="txt">ESTOQUE</div>
+      <div class="desc">Quadro de saldo por peça e material</div>
+    </button>
     <button class="mi-btn mi-btn-adm" onclick="entrarComoAdmin()">
       <div class="ico">🔐</div>
       <div class="txt">ADMINISTRADOR</div>
@@ -986,6 +1007,34 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
   </div>
 </div>
 
+<!-- ════════ CONSULTA (pública) ════════ -->
+<div id="pag-consulta" class="pag">
+  <div class="mov-top">
+    <div style="color:#fff;font-size:14px;font-weight:800">🔍 Consulta de Peças</div>
+  </div>
+  <div class="mov-body">
+    <div class="mov-scan-box">
+      <div class="mov-scan-lbl">Buscar por código ou nome</div>
+      <input type="text" id="consulta-busca" class="mov-scan-inp" style="font-size:15px;letter-spacing:normal" placeholder="Ex: COL-250 ou Anel..." autocomplete="off" oninput="renderConsultaLista(this.value)"/>
+    </div>
+    <div id="consulta-lista"></div>
+    <div id="consulta-detalhe"></div>
+  </div>
+</div>
+
+<!-- ════════ ESTOQUE (quadro público) ════════ -->
+<div id="pag-estoque" class="pag" style="background:var(--cinza)">
+  <div class="mov-body" style="padding:16px">
+    <div class="mov-estoque-hd">
+      <div class="mov-estoque-titulo" style="font-size:18px">📊 Quadro de Estoque — Peça × Material (em caixas)</div>
+      <button class="mov-refresh" onclick="renderQuadroEstoque()">↻ Atualizar</button>
+    </div>
+    <div class="mov-tabela-wrap">
+      <table class="mov-tabela" id="quadro-estoque-tabela"><thead><tr><th>Peça</th></tr></thead><tbody><tr><td>Carregando...</td></tr></tbody></table>
+    </div>
+  </div>
+</div>
+
 <!-- ════════ ADMIN ════════ -->
 <div id="pag-admin" class="pag">
 
@@ -1111,6 +1160,118 @@ function entrarComoMovimentacao(){
   var b=document.getElementById('tb-badge'); b.textContent='MOVIMENTAÇÃO'; b.className='u-badge';
   mostrarPag('movimentacao');
   movInit();
+}
+
+function entrarComoConsulta(){
+  S.modo='consulta';
+  document.getElementById('modal-inicio').style.display='none';
+  document.getElementById('topbar').style.display='flex';
+  document.getElementById('tb-modo-label').textContent='Modo:';
+  var b=document.getElementById('tb-badge'); b.textContent='CONSULTA'; b.className='u-badge';
+  mostrarPag('consulta');
+  document.getElementById('consulta-busca').value='';
+  document.getElementById('consulta-detalhe').innerHTML='';
+  renderConsultaLista('');
+  setTimeout(function(){ document.getElementById('consulta-busca').focus(); },150);
+}
+
+function semAcentoConsulta(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
+
+function renderConsultaLista(filtro){
+  var lista=document.getElementById('consulta-lista');
+  var termo=semAcentoConsulta(filtro||'');
+  var itens=S.pecas.filter(function(p){
+    return !termo || semAcentoConsulta(p.Codigo).indexOf(termo)>=0 || semAcentoConsulta(p.Nome).indexOf(termo)>=0;
+  });
+  if(!itens.length){
+    lista.innerHTML='<div class="dash-empty" style="margin-top:12px"><div class="dei">🔍</div><div style="font-size:13px">Nenhuma peça encontrada</div></div>';
+    return;
+  }
+  lista.innerHTML=itens.map(function(p){
+    return '<div class="ic" style="cursor:pointer" onclick="selecionarConsultaPeca(\''+esc(p.ID)+'\')"><div class="ic-info">'+
+      '<div class="ic-nome"><span style="font-family:monospace;background:var(--cinza2);padding:1px 6px;border-radius:4px;font-size:11px">'+p.Codigo+'</span> '+p.Nome+'</div>'+
+      '</div><div style="color:var(--texto2);font-size:18px">›</div></div>';
+  }).join('');
+}
+
+function selecionarConsultaPeca(id){
+  var p=S.pecas.find(function(x){ return x.ID===id; });
+  if(!p) return;
+  var det=document.getElementById('consulta-detalhe');
+  det.innerHTML=
+    '<div class="dash-filtro" style="margin-top:12px">'+
+      '<div class="df-titulo">'+p.Codigo+' — '+p.Nome+'</div>'+
+      '<div class="kpi-grid" style="grid-template-columns:1fr 1fr 1fr">'+
+        '<div class="kpi"><div class="kl">Peças por Tubo</div><div class="kv">'+(p.PecasPorTubo!=null&&p.PecasPorTubo!==''?p.PecasPorTubo:'—')+'</div></div>'+
+        '<div class="kpi o"><div class="kl">Tamanho da Caixa</div><div class="kv" style="font-size:16px">'+(p.TamanhoCaixa||'—')+'</div></div>'+
+        '<div class="kpi '+(p.Cantoneira?'v':'r')+'"><div class="kl">Cantoneira</div><div class="kv" style="font-size:20px">'+(p.Cantoneira?'SIM':'NÃO')+'</div></div>'+
+      '</div>'+
+    '</div>';
+  det.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function entrarComoEstoque(){
+  S.modo='estoque';
+  document.getElementById('modal-inicio').style.display='none';
+  document.getElementById('topbar').style.display='flex';
+  document.getElementById('tb-modo-label').textContent='Modo:';
+  var b=document.getElementById('tb-badge'); b.textContent='ESTOQUE'; b.className='u-badge';
+  mostrarPag('estoque');
+  renderQuadroEstoque();
+}
+
+// Mapa de cor cadastrada no Material -> paleta visual da coluna no quadro.
+// Baseado no mesmo texto livre já usado no campo "Cor" do cadastro de Material.
+var PALETA_QUADRO_ESTOQUE = {
+  'verde':   { header:'#4f9d6e', bg:'#e6f4ea', texto:'#1d7a4e' },
+  'amarelo': { header:'#d9b23c', bg:'#fbf3d9', texto:'#8a6d00' },
+  'azul':    { header:'#4a7fc1', bg:'#e6eefa', texto:'#1a4e8a' },
+  'vermelho':{ header:'#c0524a', bg:'#f8e6e5', texto:'#8a221c' },
+  'roxo':    { header:'#8a5fc7', bg:'#efe6fa', texto:'#54309a' },
+  'cinza':   { header:'#8a8f99', bg:'#eceef1', texto:'#4a4f58' }
+};
+function paletaDoMaterial(corTexto){
+  var chave=semAcentoConsulta(corTexto||'').trim();
+  return PALETA_QUADRO_ESTOQUE[chave] || { header:'#5a6175', bg:'#eef0f3', texto:'#3a3f4a' };
+}
+
+function renderQuadroEstoque(){
+  var tabela=document.getElementById('quadro-estoque-tabela');
+  tabela.innerHTML='<thead><tr><th>Peça</th></tr></thead><tbody><tr><td>Carregando...</td></tr></tbody>';
+  google.script.run
+    .withSuccessHandler(function(estoque){
+      estoque=estoque||[];
+      // Chave "Peça||Material" -> saldo, pra cruzar com o cadastro completo
+      var saldos={};
+      estoque.forEach(function(e){ saldos[e.Peca+'||'+e.Material]=e.Saldo; });
+
+      var pecasOrdenadas=S.pecas.slice().sort(function(a,b){ return a.Codigo.localeCompare(b.Codigo); });
+      var matsOrdenados=S.mats.slice().sort(function(a,b){ return a.Nome.localeCompare(b.Nome); });
+
+      if(!pecasOrdenadas.length||!matsOrdenados.length){
+        tabela.innerHTML='<thead><tr><th>Peça</th></tr></thead><tbody><tr><td style="text-align:center;color:var(--texto2);padding:20px">Cadastre peças e materiais primeiro.</td></tr></tbody>';
+        return;
+      }
+
+      var thead='<thead><tr><th>PEÇA</th>'+matsOrdenados.map(function(m){
+        var pal=paletaDoMaterial(m.Cor);
+        return '<th style="background:'+pal.header+';color:#fff">'+m.Nome.toUpperCase()+'</th>';
+      }).join('')+'</tr></thead>';
+
+      var tbody='<tbody>'+pecasOrdenadas.map(function(p){
+        var cels=matsOrdenados.map(function(m){
+          var pal=paletaDoMaterial(m.Cor);
+          var v=saldos[p.Nome+'||'+m.Nome]||0;
+          var corTexto=v===0?'#8a8f99':pal.texto;
+          return '<td style="background:'+pal.bg+';color:'+corTexto+';font-weight:800">'+v+'</td>';
+        }).join('');
+        return '<tr><td>'+p.Codigo+'</td>'+cels+'</tr>';
+      }).join('')+'</tbody>';
+
+      tabela.innerHTML=thead+tbody;
+    })
+    .withFailureHandler(function(){ tabela.innerHTML='<thead><tr><th>Peça</th></tr></thead><tbody><tr><td>Erro ao carregar estoque.</td></tr></tbody>'; })
+    .getEstoqueAtual();
 }
 
 function entrarComoAdmin(){
@@ -2062,7 +2223,7 @@ function editFromCache(tipo, idx){
   } else if(tipo==='peca'){
     S.cadTipo='pecas';
     document.getElementById('cad-t').textContent='Editar Peça';
-    document.getElementById('cad-body').innerHTML=formCad('pecas',{Codigo:d.Codigo||'',Nome:d.Nome||'',QtdPadrao:d.QtdPadrao||''});
+    document.getElementById('cad-body').innerHTML=formCad('pecas',{Codigo:d.Codigo||'',Nome:d.Nome||'',QtdPadrao:d.QtdPadrao||'',PecasPorTubo:d.PecasPorTubo||'',TamanhoCaixa:d.TamanhoCaixa||'',Cantoneira:!!d.Cantoneira});
   } else if(tipo==='mat'){
     S.cadTipo='materiais';
     document.getElementById('cad-t').textContent='Editar Material';
@@ -2110,7 +2271,7 @@ function resetBtnSalvarCad(){
 function fecharCad(){ document.getElementById('mo-cad').classList.remove('aberto'); }
 function formCad(tipo,d){
   if(tipo==='operadores') return '<div class="fg-row"><div class="fg"><label>Matrícula / Código</label><input type="text" id="fc-mat" placeholder="Ex: OP20" value="'+(d&&d.Matricula?d.Matricula:'')+'"/></div><div class="fg"><label>Nome</label><input type="text" id="fc-n" placeholder="Ex: João Silva" value="'+(d&&d.Nome?d.Nome:'')+'"/></div></div>';
-  if(tipo==='pecas') return '<div class="fg"><label>Código</label><input type="text" id="fc-c" placeholder="Ex: DEF-200" value="'+(d&&d.Codigo?d.Codigo:'')+'"/></div><div class="fg"><label>Nome da Peça</label><input type="text" id="fc-n" placeholder="Ex: Anel Defofo 200mm" value="'+(d&&d.Nome?d.Nome:'')+'"/></div><div class="fg"><label>Qtd Padrão por Caixa</label><input type="number" id="fc-q" placeholder="Ex: 130" value="'+(d&&d.QtdPadrao?d.QtdPadrao:'')+'"/></div>';
+  if(tipo==='pecas') return '<div class="fg"><label>Código</label><input type="text" id="fc-c" placeholder="Ex: DEF-200" value="'+(d&&d.Codigo?d.Codigo:'')+'"/></div><div class="fg"><label>Nome da Peça</label><input type="text" id="fc-n" placeholder="Ex: Anel Defofo 200mm" value="'+(d&&d.Nome?d.Nome:'')+'"/></div><div class="fg"><label>Qtd Padrão por Caixa</label><input type="number" id="fc-q" placeholder="Ex: 130" value="'+(d&&d.QtdPadrao?d.QtdPadrao:'')+'"/></div><div class="fg-row"><div class="fg"><label>Peças por Tubo</label><input type="number" id="fc-tubo" placeholder="Ex: 20" value="'+(d&&d.PecasPorTubo?d.PecasPorTubo:'')+'"/></div><div class="fg"><label>Tamanho da Caixa</label><input type="text" id="fc-caixa" placeholder="Ex: Caixa 40x30" value="'+(d&&d.TamanhoCaixa?d.TamanhoCaixa:'')+'"/></div></div><div class="fg" style="display:flex;align-items:center;gap:8px;flex-direction:row"><input type="checkbox" id="fc-cantoneira" style="width:20px;height:20px" '+(d&&d.Cantoneira?'checked':'')+'/><label style="margin:0">Usa cantoneira na caixa</label></div>';
   if(tipo==='materiais') return '<div class="fg"><label>Nome</label><input type="text" id="fc-n" placeholder="Ex: EPDM" value="'+(d&&d.Nome?d.Nome:'')+'" onblur="sugerirCorMaterial()"/></div><div class="fg"><label>Cor (referência impressa na etiqueta)</label><input type="text" id="fc-cor" placeholder="Ex: Verde" value="'+(d&&d.Cor?d.Cor:'')+'"/></div><div class="fg"><label>Descrição / Norma (opcional)</label><input type="text" id="fc-d" placeholder="Ex: NBR 7676" value="'+(d&&d.Descricao?d.Descricao:'')+'"/></div>';
   if(tipo==='maquinas') return '<div class="fg"><label>Nome</label><input type="text" id="fc-n" placeholder="Ex: Injetora 01" value="'+(d&&d.Nome?d.Nome:'')+'"/></div><div class="fg"><label>Descrição (opcional)</label><input type="text" id="fc-d" placeholder="Ex: Engel 150t" value="'+(d&&d.Descricao?d.Descricao:'')+'"/></div>';
   return '';
@@ -2133,6 +2294,9 @@ function salvarCad(){
     dados.Codigo=document.getElementById('fc-c').value.trim();
     dados.Nome=document.getElementById('fc-n').value.trim();
     dados.QtdPadrao=document.getElementById('fc-q').value;
+    dados.PecasPorTubo=document.getElementById('fc-tubo')?document.getElementById('fc-tubo').value.trim():'';
+    dados.TamanhoCaixa=document.getElementById('fc-caixa')?document.getElementById('fc-caixa').value.trim():'';
+    dados.Cantoneira=document.getElementById('fc-cantoneira')?document.getElementById('fc-cantoneira').checked:false;
     if(!dados.Codigo||!dados.Nome||!dados.QtdPadrao){ toast('Preencha todos os campos','aviso'); return; }
     _salvandoCad=true; if(btn){ btn.disabled=true; btn.textContent='Salvando...'; }
     google.script.run.withSuccessHandler(cb).withFailureHandler(er).salvarPeca(dados);
