@@ -2606,7 +2606,7 @@ function movInit(){
   document.getElementById('mov-conteudo').style.display='none';
   document.getElementById('mov-tabs-tipo').style.display='none';
   document.getElementById('mov-op-atual-bar').style.display='none';
-  document.getElementById('mov-sel-operador').style.display='';
+  document.getElementById('mov-sel-operador').style.display='flex';
   renderGridMovOperador();
 }
 function renderGridMovOperador(){
@@ -2654,7 +2654,7 @@ function movTrocarOperador(){
   document.getElementById('mov-sel-tiposaida').style.display='none';
   document.getElementById('mov-tabs-tipo').style.display='none';
   document.getElementById('mov-op-atual-bar').style.display='none';
-  document.getElementById('mov-sel-operador').style.display='';
+  document.getElementById('mov-sel-operador').style.display='flex';
   renderGridMovOperador();
 }
 function movUsuarioAtual(){ return S.movOperador ? S.movOperador.nome : 'Movimentação'; }
@@ -2670,8 +2670,8 @@ function movSetTipo(tipo){
   }
   document.getElementById('mov-sel-tiposaida').style.display='none';
   document.getElementById('mov-conteudo').style.display='';
-  document.getElementById('mov-saida-lista-box').style.display=(tipo==='SAIDA')?'':'none';
-  document.getElementById('mov-entrada-lista-box').style.display=(tipo==='ENTRADA')?'':'none';
+  document.getElementById('mov-saida-lista-box').style.display=(tipo==='SAIDA')?'block':'none';
+  document.getElementById('mov-entrada-lista-box').style.display=(tipo==='ENTRADA')?'block':'none';
   if(tipo==='ENTRADA') renderMovEntradaLista();
   _movCamPausado=false;
 }
@@ -2973,7 +2973,7 @@ function renderMovSaidaLista(){
   if(!box||!el) return;
   var lista=S.movCaixasSessao||[];
   if(!lista.length){ box.style.display='none'; el.innerHTML=''; return; }
-  box.style.display='';
+  box.style.display='block';
   el.innerHTML=lista.map(function(c){
     _histMovSaidaCache[c.movId]=c;
     return '<div class="caixa-row"><span>'+(c.codPeca||'')+' — '+c.peca+' ('+c.material+') Lote '+(c.lote||'—')+'</span>'+
