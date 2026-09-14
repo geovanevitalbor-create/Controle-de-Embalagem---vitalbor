@@ -1145,8 +1145,6 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
     </div>
     <div id="mov-op-atual-bar" style="display:none;justify-content:space-between;align-items:center;padding-top:6px;flex-wrap:wrap;gap:6px">
       <span id="mov-op-atual-txt" style="color:#fff;font-size:12px;font-weight:700">—</span>
-      <span id="mov-conf2-atual-txt" style="display:none;color:rgba(255,255,255,.75);font-size:11px;font-weight:700"></span>
-      <button id="mov-conf2-trocar-btn" onclick="movTrocarConferente2()" style="display:none;background:rgba(255,255,255,.1);border:none;color:rgba(255,255,255,.85);padding:4px 9px;border-radius:6px;font-size:10px;font-weight:800;cursor:pointer">Trocar conferente 2</button>
       <span id="mov-saida-atual-txt" style="display:none;color:rgba(255,255,255,.75);font-size:11px;font-weight:700"></span>
       <button id="mov-saida-trocar-btn" onclick="movTrocarTipoSaida()" style="display:none;background:rgba(255,255,255,.1);border:none;color:rgba(255,255,255,.85);padding:4px 9px;border-radius:6px;font-size:10px;font-weight:800;cursor:pointer">Trocar tipo de saída</button>
       <button onclick="movTrocarOperador()" style="background:rgba(255,255,255,.15);border:none;color:#fff;padding:5px 11px;border-radius:6px;font-size:11px;font-weight:800;cursor:pointer">Trocar operador</button>
@@ -1160,17 +1158,6 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
         Quem está bipando?
       </div>
       <div class="op-sel-grid" id="mov-g-op"></div>
-    </div>
-
-    <div id="mov-sel-conferente2" style="display:none;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 160px);gap:20px">
-      <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
-        <div style="display:flex;align-items:center;gap:9px;font-size:19px;font-weight:900;color:var(--azul)">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.6 3-5.8 7-5.8s7 2.2 7 5.8"/><circle cx="18" cy="9" r="2.7"/><path d="M15.5 14.3c2.7.4 4.5 2.3 4.5 5.2"/></svg>
-          Quem é o Conferente Nº 2?
-        </div>
-        <div style="font-size:12px;color:var(--texto2)">Obrigatório antes de bipar entradas</div>
-      </div>
-      <div class="op-sel-grid" id="mov-g-conf2"></div>
     </div>
 
     <div id="mov-sel-tiposaida" style="display:none;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 160px);gap:20px">
@@ -1200,6 +1187,13 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
           <div class="mov-ultima-det" id="mov-ultima-det">—</div>
         </div>
       </div>
+    </div>
+
+    <div class="mov-ultima" id="mov-entrada-lista-box" style="display:none">
+      <div class="mov-ultima-hd">Caixas escaneadas — revisar antes de confirmar</div>
+      <div id="mov-entrada-lista" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px"></div>
+      <div id="mov-entrada-conf2-area" style="margin-top:6px"></div>
+      <button id="mov-entrada-confirmar-btn" class="mb-save" style="width:100%;margin-top:10px;padding:12px;border-radius:8px;border:none;font-size:14px;font-weight:800;cursor:pointer" onclick="movConfirmarEntradas()" disabled>✅ Confirme o Conferente 2 pra liberar o envio</button>
     </div>
 
     <div class="mov-ultima" id="mov-saida-lista-box" style="display:none">
@@ -2632,8 +2626,7 @@ function movSelecionarOperador(nome,matricula){
   S.movTipoSaida=null;
   S.movNotaFiscal='';
   S.movCaixasSessao=[];
-  document.getElementById('mov-conf2-atual-txt').style.display='none';
-  document.getElementById('mov-conf2-trocar-btn').style.display='none';
+  S.movEntradaPendentes=[];
   document.getElementById('mov-saida-atual-txt').style.display='none';
   document.getElementById('mov-saida-trocar-btn').style.display='none';
   document.getElementById('mov-sel-operador').style.display='none';
@@ -2654,12 +2647,10 @@ function movTrocarOperador(){
   S.movTipoSaida=null;
   S.movNotaFiscal='';
   S.movCaixasSessao=[];
-  document.getElementById('mov-conf2-atual-txt').style.display='none';
-  document.getElementById('mov-conf2-trocar-btn').style.display='none';
+  S.movEntradaPendentes=[];
   document.getElementById('mov-saida-atual-txt').style.display='none';
   document.getElementById('mov-saida-trocar-btn').style.display='none';
   document.getElementById('mov-conteudo').style.display='none';
-  document.getElementById('mov-sel-conferente2').style.display='none';
   document.getElementById('mov-sel-tiposaida').style.display='none';
   document.getElementById('mov-tabs-tipo').style.display='none';
   document.getElementById('mov-op-atual-bar').style.display='none';
@@ -2671,25 +2662,17 @@ function movSetTipo(tipo){
   S.movTipo=tipo;
   document.getElementById('mtab-entrada').classList.toggle('ativo',tipo==='ENTRADA');
   document.getElementById('mtab-saida').classList.toggle('ativo',tipo==='SAIDA');
-  if(tipo==='ENTRADA' && !S.movConferente2){
-    _movCamPausado=true;
-    document.getElementById('mov-conteudo').style.display='none';
-    document.getElementById('mov-sel-tiposaida').style.display='none';
-    document.getElementById('mov-sel-conferente2').style.display='flex';
-    renderGridMovConferente2();
-    return;
-  }
   if(tipo==='SAIDA' && !S.movTipoSaida){
     _movCamPausado=true;
     document.getElementById('mov-conteudo').style.display='none';
-    document.getElementById('mov-sel-conferente2').style.display='none';
     document.getElementById('mov-sel-tiposaida').style.display='flex';
     return;
   }
-  document.getElementById('mov-sel-conferente2').style.display='none';
   document.getElementById('mov-sel-tiposaida').style.display='none';
   document.getElementById('mov-conteudo').style.display='';
   document.getElementById('mov-saida-lista-box').style.display=(tipo==='SAIDA')?'':'none';
+  document.getElementById('mov-entrada-lista-box').style.display=(tipo==='ENTRADA')?'':'none';
+  if(tipo==='ENTRADA') renderMovEntradaLista();
   _movCamPausado=false;
 }
 function movEscolherTipoSaida(tipo){
@@ -2718,30 +2701,34 @@ function movTrocarTipoSaida(){
   document.getElementById('mov-saida-trocar-btn').style.display='none';
   movSetTipo('SAIDA');
 }
-function renderGridMovConferente2(){
-  var g=document.getElementById('mov-g-conf2');
-  if(!S.op.length){ g.innerHTML='<p style="color:rgba(255,255,255,.4);padding:16px;grid-column:1/-1;text-align:center;font-size:13px">Nenhum operador cadastrado. Acesse Admin.</p>'; return; }
-  g.innerHTML=S.op.map(function(o){
+function renderConf2Picker(){
+  var area=document.getElementById('mov-entrada-conf2-area');
+  if(!area) return;
+  if(S.movConferente2){
+    area.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;background:var(--cinza);border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;color:var(--azul)">'+
+      '<span>Conferente 2: '+(S.movConferente2.matricula?S.movConferente2.matricula+' — ':'')+S.movConferente2.nome+'</span>'+
+      '<button onclick="movTrocarConferente2()" style="background:var(--cinza3);border:none;padding:4px 9px;border-radius:6px;font-size:10px;font-weight:800;cursor:pointer">Trocar</button></div>';
+    return;
+  }
+  var label='<div style="font-size:11px;font-weight:800;color:var(--texto2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Quem é o Conferente Nº 2?</div>';
+  if(!S.op.length){ area.innerHTML=label+'<p style="font-size:12px;color:var(--texto2)">Nenhum operador cadastrado. Acesse Admin.</p>'; return; }
+  var grid='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px">'+S.op.map(function(o){
     var m=o.Matricula||'';
-    return '<div class="op-sel-btn" onclick="movSelecionarConferente2(\''+esc(o.Nome)+'\',\''+esc(m)+'\')">'+
-      '<span class="ico"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg></span>'+
-      (m?'<span class="mat">'+m+'</span>':'')+
-      '<span class="nome">'+o.Nome+'</span></div>';
-  }).join('');
+    return '<div class="op-sel-btn" style="padding:10px 6px;gap:4px" onclick="movSelecionarConferente2(\''+esc(o.Nome)+'\',\''+esc(m)+'\')">'+
+      (m?'<span class="mat" style="font-size:9px;padding:1px 6px">'+m+'</span>':'')+
+      '<span class="nome" style="font-size:12px">'+o.Nome+'</span></div>';
+  }).join('')+'</div>';
+  area.innerHTML=label+grid;
 }
 function movSelecionarConferente2(nome,matricula){
   S.movConferente2={ nome:nome, matricula:matricula };
-  var txt=document.getElementById('mov-conf2-atual-txt');
-  txt.style.display='';
-  txt.textContent='Conferente 2: '+(matricula?matricula+' — ':'')+nome;
-  document.getElementById('mov-conf2-trocar-btn').style.display='';
-  movSetTipo('ENTRADA');
+  renderConf2Picker();
+  atualizarBtnConfirmarEntrada();
 }
 function movTrocarConferente2(){
   S.movConferente2=null;
-  document.getElementById('mov-conf2-atual-txt').style.display='none';
-  document.getElementById('mov-conf2-trocar-btn').style.display='none';
-  movSetTipo('ENTRADA');
+  renderConf2Picker();
+  atualizarBtnConfirmarEntrada();
 }
 function movMontarSelectManual(){
   var sp=document.getElementById('mm-peca'); if(!sp) return;
@@ -2833,11 +2820,10 @@ function movProcessarCodigo(raw){
   var caixaId=raw;
   try{ var j=JSON.parse(raw); if(j&&j.id) caixaId=j.id; }catch(e){}
 
+  if(S.movTipo==='ENTRADA'){ movProcessarCodigoEntrada(caixaId); return; }
+
   _movCamPausado=true; // trava a leitura durante a chamada, evita disparo duplicado
   var dados={ CaixaID:caixaId, Tipo:S.movTipo, Origem:'BIPADO', Usuario:movUsuarioAtual() };
-  if(S.movTipo==='ENTRADA' && S.movConferente2){
-    dados.Conferente2=(S.movConferente2.matricula?S.movConferente2.matricula+' — ':'')+S.movConferente2.nome;
-  }
   if(S.movTipo==='SAIDA' && S.movTipoSaida){
     dados.TipoSaida=S.movTipoSaida;
     dados.NotaFiscal=S.movNotaFiscal||'';
@@ -2846,6 +2832,100 @@ function movProcessarCodigo(raw){
     .withSuccessHandler(function(r){ _movCamPausado=false; movTratarResultado(r,caixaId); })
     .withFailureHandler(function(e){ _movCamPausado=false; toast('Erro: '+(e?e.message:''),'erro'); })
     .registrarMovimentacao(dados,null);
+}
+
+// ── Beep de confirmação sonora ao escanear (Web Audio API, sem arquivo externo) ──
+function tocarBeep(){
+  try{
+    var ctx=new (window.AudioContext||window.webkitAudioContext)();
+    var osc=ctx.createOscillator(); var gain=ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value=880; osc.type='sine';
+    gain.gain.setValueAtTime(.25,ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.15);
+    osc.start(); osc.stop(ctx.currentTime+.15);
+  }catch(e){}
+}
+
+// ── ENTRADA: escaneia sem registrar — só consulta a caixa e guarda pra revisão ──
+function movProcessarCodigoEntrada(caixaId){
+  S.movEntradaPendentes=S.movEntradaPendentes||[];
+  if(S.movEntradaPendentes.some(function(x){ return x.caixaId===caixaId; })){
+    toast('Essa caixa já foi escaneada nesta leva','aviso');
+    return;
+  }
+  _movCamPausado=true;
+  google.script.run
+    .withSuccessHandler(function(d){
+      _movCamPausado=false;
+      if(!d){ toast('Caixa não encontrada na produção. Confira o código lido.','erro'); return; }
+      tocarBeep();
+      S.movEntradaPendentes.push({ caixaId:caixaId, peca:d.Peca, codPeca:d.CodigoPeca, material:d.Material, lote:d.Lote,
+        qtdPecas:d.QtdPecas, numeroCaixa:d.NumeroCaixa, trimestre:d.Trimestre, ano:d.Ano, matricula:d.Matricula, operadorProducao:d.Operador });
+      renderMovEntradaLista();
+      toast(d.CodigoPeca+' — '+d.Peca+' adicionada à leva','sucesso');
+    })
+    .withFailureHandler(function(e){ _movCamPausado=false; toast('Erro: '+(e?e.message:''),'erro'); })
+    .getCaixaPorId(caixaId);
+}
+
+function renderMovEntradaLista(){
+  var lista=document.getElementById('mov-entrada-lista');
+  if(!lista) return;
+  var pend=S.movEntradaPendentes||[];
+  if(!pend.length){
+    lista.innerHTML='<p style="font-size:12px;color:var(--texto2);padding:4px 0">Nenhuma caixa escaneada ainda nesta leva.</p>';
+  } else {
+    lista.innerHTML=pend.map(function(c){
+      return '<div class="caixa-row"><span>'+c.codPeca+' — '+c.peca+' ('+c.material+') Lote '+(c.lote||'—')+' — '+c.qtdPecas+' pç</span>'+
+        '<span class="caixa-acts"><button class="bic bic-d" onclick="movRemoverPendenteEntrada(\''+c.caixaId+'\')">🗑️</button></span></div>';
+    }).join('');
+  }
+  renderConf2Picker();
+  atualizarBtnConfirmarEntrada();
+}
+function movRemoverPendenteEntrada(caixaId){
+  S.movEntradaPendentes=(S.movEntradaPendentes||[]).filter(function(x){ return x.caixaId!==caixaId; });
+  renderMovEntradaLista();
+}
+function atualizarBtnConfirmarEntrada(){
+  var btn=document.getElementById('mov-entrada-confirmar-btn');
+  if(!btn) return;
+  var pend=S.movEntradaPendentes||[];
+  if(!pend.length){ btn.disabled=true; btn.textContent='Escaneie ao menos uma caixa'; return; }
+  if(!S.movConferente2){ btn.disabled=true; btn.textContent='Confirme o Conferente 2 pra liberar o envio'; return; }
+  btn.disabled=false; btn.textContent='✅ Confirmar e Enviar '+pend.length+' caixa(s) pro Estoque';
+}
+function movConfirmarEntradas(){
+  var pend=(S.movEntradaPendentes||[]).slice();
+  if(!pend.length||!S.movConferente2) return;
+  var conf2Txt=(S.movConferente2.matricula?S.movConferente2.matricula+' — ':'')+S.movConferente2.nome;
+  var btn=document.getElementById('mov-entrada-confirmar-btn');
+  btn.disabled=true; btn.textContent='Enviando...';
+  var ok=0, falhas=[];
+  function proxima(i){
+    if(i>=pend.length){
+      S.movEntradaPendentes=[];
+      renderMovEntradaLista();
+      movCarregarEstoque();
+      if(falhas.length) toast(ok+' caixa(s) enviada(s), '+falhas.length+' falharam: '+falhas.join('; '),'erro');
+      else toast(ok+' caixa(s) confirmada(s) e enviada(s) pro estoque!','sucesso');
+      document.getElementById('mov-ultima').classList.add('vis');
+      document.getElementById('mov-ultima-ico').textContent='📥';
+      document.getElementById('mov-ultima-peca').textContent=ok+' caixa(s) — entrada confirmada';
+      document.getElementById('mov-ultima-det').textContent='Conferente 2: '+conf2Txt;
+      return;
+    }
+    var c=pend[i];
+    google.script.run
+      .withSuccessHandler(function(r){
+        if(r&&r.ok) ok++; else falhas.push(c.codPeca+' ('+(r&&r.erro?r.erro:'erro')+')');
+        proxima(i+1);
+      })
+      .withFailureHandler(function(e){ falhas.push(c.codPeca+' ('+(e?e.message:'erro')+')'); proxima(i+1); })
+      .registrarMovimentacao({ CaixaID:c.caixaId, Tipo:'ENTRADA', Origem:'BIPADO', Usuario:movUsuarioAtual(), Conferente2:conf2Txt }, null);
+  }
+  proxima(0);
 }
 
 function movTratarResultado(r,caixaId){
