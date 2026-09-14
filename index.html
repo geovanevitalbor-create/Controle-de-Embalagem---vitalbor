@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <title>Vitalbor — Produção</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script>
 // ============================================================
 // ADAPTADOR SUPABASE — substitui o backend Google Apps Script
@@ -79,25 +79,27 @@ async function inserirLog(tipo, usuario, descricao, detalhes) {
 }
 
 // ── TEMPLATES PADRÃO DE ETIQUETA (idênticos ao Code.gs original) ──
-var TEMPLATE_PADRAO_PECA =
-'<div style="display:flex;flex-direction:column;width:100%;height:100%;font-family:\'Arial Black\',\'Arial\',sans-serif;color:#000;background:#fff;box-sizing:border-box">' +
+function fsz(baseMm, escala){ return (baseMm*(escala||1)).toFixed(2)+'mm'; }
+function montarTemplatePadraoPeca(escala){
+  escala = escala || 1;
+  return '<div style="display:flex;flex-direction:column;width:100%;height:100%;font-family:\'Arial Black\',\'Arial\',sans-serif;color:#000;background:#fff;box-sizing:border-box">' +
   '<div style="padding:.6mm 3mm;display:flex;justify-content:space-between;align-items:center;border-bottom:.6mm solid #000">' +
-    '<div style="font-size:2.6mm;font-weight:900;letter-spacing:.6mm">{{EMPRESA}}</div>' +
-    '<div style="font-size:2.3mm;font-weight:700">{{TRIMESTRE}}</div>' +
+    '<div style="font-size:'+fsz(2.6,escala)+';font-weight:900;letter-spacing:.6mm">{{EMPRESA}}</div>' +
+    '<div style="font-size:'+fsz(2.3,escala)+';font-weight:700">{{TRIMESTRE}}</div>' +
   '</div>' +
   '<div style="padding:.3mm 3mm .6mm;border-bottom:1mm solid #000;text-align:center">' +
-    '<div style="font-size:8mm;font-weight:900;letter-spacing:-.2mm;line-height:1">{{CODIGO}}</div>' +
-    '<div style="font-size:3.1mm;font-weight:700;letter-spacing:.1mm;text-transform:uppercase;margin-top:.5mm">{{DESCRICAO}}</div>' +
+    '<div style="font-size:'+fsz(8,escala)+';font-weight:900;letter-spacing:-.2mm;line-height:1">{{CODIGO}}</div>' +
+    '<div style="font-size:'+fsz(3.1,escala)+';font-weight:700;letter-spacing:.1mm;text-transform:uppercase;margin-top:.5mm">{{DESCRICAO}}</div>' +
   '</div>' +
   '<div style="padding:.6mm 3mm;border-bottom:1mm solid #000;position:relative;text-align:center;box-sizing:border-box">' +
-    '<div style="font-size:2mm;font-weight:900;letter-spacing:.4mm;text-transform:uppercase;opacity:.6">MATERIAL</div>' +
-    '<div style="font-size:5mm;font-weight:900;letter-spacing:.4mm;line-height:1">{{MATERIAL}}</div>' +
-    '<div style="position:absolute;bottom:1mm;right:3mm;max-width:42mm;font-size:2.1mm;font-weight:700;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{NORMA}}</div>' +
+    '<div style="font-size:'+fsz(2,escala)+';font-weight:900;letter-spacing:.4mm;text-transform:uppercase;opacity:.6">MATERIAL</div>' +
+    '<div style="font-size:'+fsz(5,escala)+';font-weight:900;letter-spacing:.4mm;line-height:1">{{MATERIAL}}</div>' +
+    '<div style="position:absolute;bottom:1mm;right:3mm;max-width:42mm;font-size:'+fsz(2.1,escala)+';font-weight:700;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{NORMA}}</div>' +
   '</div>' +
   '<div style="display:flex;flex-direction:row;flex:1;min-height:0">' +
     '<div style="flex:1;min-width:0;border-right:1mm solid #000;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:1mm 3mm;box-sizing:border-box">' +
-      '<div style="font-size:2.1mm;font-weight:900;letter-spacing:.4mm;text-transform:uppercase;opacity:.6">QUANTIDADE</div>' +
-      '<div style="font-size:10mm;font-weight:900;line-height:1;letter-spacing:-.4mm">{{QUANTIDADE}}</div>' +
+      '<div style="font-size:'+fsz(2.1,escala)+';font-weight:900;letter-spacing:.4mm;text-transform:uppercase;opacity:.6">QUANTIDADE</div>' +
+      '<div style="font-size:'+fsz(10,escala)+';font-weight:900;line-height:1;letter-spacing:-.4mm">{{QUANTIDADE}}</div>' +
     '</div>' +
     '<div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:center;padding:1mm;box-sizing:border-box">' +
       '{{QR_CODE}}' +
@@ -106,26 +108,28 @@ var TEMPLATE_PADRAO_PECA =
   '<div style="border-top:1mm solid #000;display:flex;flex-direction:column">' +
     '<div style="display:flex;flex-direction:row;border-bottom:1mm solid #000">' +
       '<div style="flex:1;min-width:0;padding:.6mm 3mm;border-right:1mm solid #000;box-sizing:border-box">' +
-        '<div style="font-size:1.9mm;font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6">DATA</div>' +
-        '<div style="font-size:2.8mm;font-weight:900">{{DATA}}</div>' +
+        '<div style="font-size:'+fsz(1.9,escala)+';font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6">DATA</div>' +
+        '<div style="font-size:'+fsz(2.8,escala)+';font-weight:900">{{DATA}}</div>' +
       '</div>' +
       '<div style="flex:1;min-width:0;padding:.6mm 3mm;box-sizing:border-box">' +
-        '<div style="font-size:1.9mm;font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6">LOTE</div>' +
-        '<div style="font-size:2.8mm;font-weight:900">{{LOTE}}</div>' +
+        '<div style="font-size:'+fsz(1.9,escala)+';font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6">LOTE</div>' +
+        '<div style="font-size:'+fsz(2.8,escala)+';font-weight:900">{{LOTE}}</div>' +
       '</div>' +
     '</div>' +
     '<div style="display:flex;flex-direction:row">' +
       '<div style="flex:1;min-width:0;padding:.6mm 3mm;border-right:1mm solid #000;box-sizing:border-box">' +
-        '<div style="font-size:1.9mm;font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6">OP</div>' +
-        '<div style="font-size:2.8mm;font-weight:900">{{OP}}</div>' +
+        '<div style="font-size:'+fsz(1.9,escala)+';font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6">OP</div>' +
+        '<div style="font-size:'+fsz(2.8,escala)+';font-weight:900">{{OP}}</div>' +
       '</div>' +
       '<div style="flex:1;min-width:0;padding:.6mm 3mm;box-sizing:border-box">' +
-        '<div style="font-size:1.9mm;font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6">REFERÊNCIA</div>' +
-        '<div style="font-size:2.6mm;font-weight:900;font-family:\'Courier New\',monospace">{{REFERENCIA}}</div>' +
+        '<div style="font-size:'+fsz(1.9,escala)+';font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6">REFERÊNCIA</div>' +
+        '<div style="font-size:'+fsz(2.6,escala)+';font-weight:900;font-family:\'Courier New\',monospace">{{REFERENCIA}}</div>' +
       '</div>' +
     '</div>' +
   '</div>' +
 '</div>';
+}
+var TEMPLATE_PADRAO_PECA = montarTemplatePadraoPeca(1);
 
 var TEMPLATE_PADRAO_CONFERENCIA =
 '<div style="display:flex;flex-direction:column;justify-content:center;gap:1mm;width:100%;height:100%;font-family:Arial,sans-serif;color:#000;padding:2mm 3mm;box-sizing:border-box">' +
@@ -320,6 +324,22 @@ var backend = {
     } catch (e) { return []; }
   },
 
+  async atualizarProducao(id, dados) {
+    try {
+      var payload = { material: dados.Material, lote: dados.Lote, qtd_pecas: Number(dados.QtdPecas), ajuste_manual: 'SIM', ajustado_por: String(dados.AjustadoPor || 'Admin') };
+      await sbPatch('producao', 'id=eq.' + id, payload);
+      await inserirLog('EDICAO_CAIXA', String(dados.AjustadoPor || 'Admin'), 'Caixa editada: ' + id, 'Novo lote:' + dados.Lote + ' Nova qtd:' + dados.QtdPecas);
+      return { ok: true };
+    } catch (e) { return { ok: false, erro: e.message }; }
+  },
+  async excluirProducao(id) {
+    try {
+      await sbDelete('producao', 'id=eq.' + id);
+      await inserirLog('EXCLUSAO_CAIXA', 'Admin', 'Caixa excluída: ' + id, '');
+      return { ok: true };
+    } catch (e) { return { ok: false, erro: e.message }; }
+  },
+
   async getLogs() {
     try {
       var rows = await sbGet('logs?select=data_hora,tipo,usuario,descricao,detalhes&order=data_hora.desc&limit=100');
@@ -363,14 +383,27 @@ var backend = {
       var id = gerarID();
       await sbPost('movimentacoes', {
         id: id, tipo: tipo, caixa_id: caixaId, peca: peca, codigo_peca: codPeca, material: material, lote: lote, qtd_caixas: qtd,
-        origem: origem, usuario: String(dados.Usuario || ''), motivo: String(dados.Motivo || ''), autorizado_por: autorizadoPor
+        origem: origem, usuario: String(dados.Usuario || ''), motivo: String(dados.Motivo || ''), autorizado_por: autorizadoPor,
+        conferente2: String(dados.Conferente2 || ''), tipo_saida: String(dados.TipoSaida || ''), nota_fiscal: String(dados.NotaFiscal || '')
       }, 'return=minimal');
 
       await inserirLog(tipo === 'ENTRADA' ? 'ESTOQUE_ENTRADA' : 'ESTOQUE_SAIDA', String(dados.Usuario || ''),
         (tipo === 'ENTRADA' ? 'Entrada' : 'Saída') + ' de estoque: ' + peca + ' (' + material + ')',
-        'Lote:' + lote + ' Qtd:' + qtd + ' Origem:' + origem + (caixaId ? ' CaixaID:' + caixaId : ''));
+        'Lote:' + lote + ' Qtd:' + qtd + ' Origem:' + origem + (caixaId ? ' CaixaID:' + caixaId : '') + (dados.NotaFiscal ? ' NF:' + dados.NotaFiscal : ''));
 
-      return { ok: true, id: id, tipo: tipo, peca: peca, material: material, qtd: qtd };
+      return { ok: true, id: id, tipo: tipo, peca: peca, material: material, qtd: qtd, caixaId: caixaId, codPeca: codPeca, lote: lote };
+    } catch (e) { return { ok: false, erro: e.message }; }
+  },
+
+  async excluirMovimentacao(movId, motivo, senhaAdmin, exigeSenha) {
+    try {
+      if (!motivo || !String(motivo).trim()) return { ok: false, erro: 'Informe o motivo da exclusão.' };
+      if (exigeSenha && (!senhaAdmin || String(senhaAdmin) !== ADMIN_PASSWORD)) return { ok: false, erro: 'Senha de administrador incorreta.' };
+      var existentes = await sbGet('movimentacoes?id=eq.' + movId + '&select=peca,material,tipo');
+      if (!existentes.length) return { ok: false, erro: 'Movimentação não encontrada (já pode ter sido excluída).' };
+      await sbDelete('movimentacoes', 'id=eq.' + movId);
+      await inserirLog('EXCLUSAO_MOVIMENTACAO', 'Admin', 'Movimentação excluída: ' + existentes[0].peca + ' (' + existentes[0].material + ')', 'Motivo:' + motivo + ' MovID:' + movId);
+      return { ok: true };
     } catch (e) { return { ok: false, erro: e.message }; }
   },
 
@@ -402,13 +435,21 @@ var backend = {
       var rows = await sbGet(q);
       return rows.map(function (r) {
         return { ID: r.id, DataHora: fmtDataHoraBR(r.data_hora), Tipo: r.tipo, CaixaID: r.caixa_id, Peca: r.peca, CodigoPeca: r.codigo_peca,
-          Material: r.material, Lote: r.lote, QtdCaixas: r.qtd_caixas, Origem: r.origem, Usuario: r.usuario, Motivo: r.motivo, AutorizadoPor: r.autorizado_por };
+          Material: r.material, Lote: r.lote, QtdCaixas: r.qtd_caixas, Origem: r.origem, Usuario: r.usuario, Motivo: r.motivo, AutorizadoPor: r.autorizado_por,
+          Conferente2: r.conferente2 || '', TipoSaida: r.tipo_saida || '', NotaFiscal: r.nota_fiscal || '' };
       });
     } catch (e) { return []; }
   },
 
   async getModelosPadrao() { return { PECA: TEMPLATE_PADRAO_PECA, CONFERENCIA: TEMPLATE_PADRAO_CONFERENCIA }; },
-  async getModelosEtiqueta() { return { PECA: await getModeloEtiquetaInterno('PECA'), CONFERENCIA: await getModeloEtiquetaInterno('CONFERENCIA') }; },
+  async getModelosEtiqueta() {
+    var config = { qrSizeMm: 22, escalaTexto: 100, normaFixa: 'NBR 7676' };
+    try {
+      var rows = await sbGet('modelos_etiqueta?tipo=eq.CONFIG&select=html');
+      if (rows.length && rows[0].html) config = Object.assign(config, JSON.parse(rows[0].html));
+    } catch (e) {}
+    return { PECA: await getModeloEtiquetaInterno('PECA'), CONFERENCIA: await getModeloEtiquetaInterno('CONFERENCIA'), CONFIG: config };
+  },
   async salvarModeloEtiqueta(tipo, html) {
     try {
       var r = await fetch(SUPABASE_URL + '/rest/v1/modelos_etiqueta', {
@@ -717,6 +758,12 @@ select.inp-pos option{color:#000;background:#fff}
 .peca-cx{font-size:12px;font-weight:900;color:var(--verde)}
 .lotes-wrap{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
 .lote-chip{background:var(--cinza2);color:var(--texto2);font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;display:flex;align-items:center;gap:2px}
+.lote-caixas{background:#fff;border:1px solid var(--cinza2);border-radius:6px;padding:6px 8px;margin-top:2px}
+.caixa-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 2px;font-size:11px;color:var(--texto);border-bottom:1px solid var(--cinza2)}
+.caixa-row:last-child{border-bottom:none}
+.caixa-row em{color:#e67e22;font-style:normal;font-weight:800}
+.caixa-acts{display:flex;gap:4px;flex-shrink:0}
+.caixa-acts .bic{width:26px;height:26px;font-size:11px}
 .lote-chip .lcn{color:var(--texto);font-weight:800}
 .dash-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;color:var(--texto2);text-align:center;gap:8px;background:#fff;border-radius:var(--radius)}
 .dash-empty .dei{font-size:36px;opacity:.3}
@@ -1075,8 +1122,12 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
       <div class="mov-tab entrada ativo" id="mtab-entrada" onclick="movSetTipo('ENTRADA')"><span style="display:inline-flex;vertical-align:middle;margin-right:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="6 13 12 19 18 13"/></svg></span>ENTRADA</div>
       <div class="mov-tab saida" id="mtab-saida" onclick="movSetTipo('SAIDA')"><span style="display:inline-flex;vertical-align:middle;margin-right:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="6 11 12 5 18 11"/></svg></span>SAÍDA</div>
     </div>
-    <div id="mov-op-atual-bar" style="display:none;justify-content:space-between;align-items:center;padding-top:6px">
+    <div id="mov-op-atual-bar" style="display:none;justify-content:space-between;align-items:center;padding-top:6px;flex-wrap:wrap;gap:6px">
       <span id="mov-op-atual-txt" style="color:#fff;font-size:12px;font-weight:700">—</span>
+      <span id="mov-conf2-atual-txt" style="display:none;color:rgba(255,255,255,.75);font-size:11px;font-weight:700"></span>
+      <button id="mov-conf2-trocar-btn" onclick="movTrocarConferente2()" style="display:none;background:rgba(255,255,255,.1);border:none;color:rgba(255,255,255,.85);padding:4px 9px;border-radius:6px;font-size:10px;font-weight:800;cursor:pointer">Trocar conferente 2</button>
+      <span id="mov-saida-atual-txt" style="display:none;color:rgba(255,255,255,.75);font-size:11px;font-weight:700"></span>
+      <button id="mov-saida-trocar-btn" onclick="movTrocarTipoSaida()" style="display:none;background:rgba(255,255,255,.1);border:none;color:rgba(255,255,255,.85);padding:4px 9px;border-radius:6px;font-size:10px;font-weight:800;cursor:pointer">Trocar tipo de saída</button>
       <button onclick="movTrocarOperador()" style="background:rgba(255,255,255,.15);border:none;color:#fff;padding:5px 11px;border-radius:6px;font-size:11px;font-weight:800;cursor:pointer">Trocar operador</button>
     </div>
   </div>
@@ -1090,6 +1141,33 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
       <div class="op-sel-grid" id="mov-g-op"></div>
     </div>
 
+    <div id="mov-sel-conferente2" style="display:none;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 160px);gap:20px">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+        <div style="display:flex;align-items:center;gap:9px;font-size:19px;font-weight:900;color:var(--azul)">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.6 3-5.8 7-5.8s7 2.2 7 5.8"/><circle cx="18" cy="9" r="2.7"/><path d="M15.5 14.3c2.7.4 4.5 2.3 4.5 5.2"/></svg>
+          Quem é o Conferente Nº 2?
+        </div>
+        <div style="font-size:12px;color:var(--texto2)">Obrigatório antes de bipar entradas</div>
+      </div>
+      <div class="op-sel-grid" id="mov-g-conf2"></div>
+    </div>
+
+    <div id="mov-sel-tiposaida" style="display:none;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 160px);gap:20px">
+      <div style="font-size:19px;font-weight:900;color:var(--azul)">Que tipo de saída é essa?</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center;padding:0 16px">
+        <button class="mi-btn mi-btn-adm" style="background:#e67e22;color:#fff;min-width:200px" onclick="movEscolherTipoSaida('CORRECAO')">
+          <div class="ico"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></div>
+          <div class="txt">CORREÇÃO DE ESTOQUE</div>
+          <div class="desc">Ajuste sem nota fiscal — exige motivo e senha pra desfazer</div>
+        </button>
+        <button class="mi-btn mi-btn-mov" style="min-width:200px" onclick="movEscolherTipoSaida('PEDIDO')">
+          <div class="ico"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg></div>
+          <div class="txt">SAÍDA DE PEDIDO</div>
+          <div class="desc">Vinculada a uma nota fiscal — pede o número da NF</div>
+        </button>
+      </div>
+    </div>
+
     <div id="mov-conteudo" style="display:none">
 
     <div class="mov-ultima" id="mov-ultima">
@@ -1101,6 +1179,11 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
           <div class="mov-ultima-det" id="mov-ultima-det">—</div>
         </div>
       </div>
+    </div>
+
+    <div class="mov-ultima" id="mov-saida-lista-box" style="display:none">
+      <div class="mov-ultima-hd">Caixas desta saída — conferir</div>
+      <div id="mov-saida-lista" style="display:flex;flex-direction:column;gap:4px"></div>
     </div>
 
     <div class="mov-scan-box">
@@ -1478,9 +1561,9 @@ function estMovFiltrar(){
     .withSuccessHandler(function(regs){
       regs=regs||[];
       if(!regs.length){ tabela.innerHTML='<thead><tr><th>Data/Hora</th></tr></thead><tbody><tr><td style="text-align:center;color:var(--texto2);padding:20px">Nenhuma movimentação encontrada com esse filtro.</td></tr></tbody>'; return; }
-      var html='<thead><tr><th>Data/Hora</th><th>Tipo</th><th>Peça</th><th>Material</th><th>Lote</th><th>Qtd</th><th>Origem</th><th>Operador</th><th>Motivo</th></tr></thead><tbody>';
+      var html='<thead><tr><th>Data/Hora</th><th>Tipo</th><th>Peça</th><th>Material</th><th>Lote</th><th>Qtd</th><th>Origem</th><th>Operador</th><th>Conferente 2</th><th>Tipo Saída</th><th>NF</th><th>Motivo</th></tr></thead><tbody>';
       regs.forEach(function(r){
-        html+='<tr><td>'+r.DataHora+'</td><td>'+(r.Tipo==='ENTRADA'?'📥 Entrada':'📤 Saída')+'</td><td>'+r.Peca+'</td><td>'+r.Material+'</td><td>'+(r.Lote||'—')+'</td><td>'+r.QtdCaixas+'</td><td>'+(r.Origem==='MANUAL'?'✋ Manual':'🔫 Bipado')+'</td><td>'+(r.Usuario||'—')+'</td><td>'+(r.Motivo||'—')+'</td></tr>';
+        html+='<tr><td>'+r.DataHora+'</td><td>'+(r.Tipo==='ENTRADA'?'📥 Entrada':'📤 Saída')+'</td><td>'+r.Peca+'</td><td>'+r.Material+'</td><td>'+(r.Lote||'—')+'</td><td>'+r.QtdCaixas+'</td><td>'+(r.Origem==='MANUAL'?'✋ Manual':'🔫 Bipado')+'</td><td>'+(r.Usuario||'—')+'</td><td>'+(r.Conferente2||'—')+'</td><td>'+(r.TipoSaida==='CORRECAO'?'Correção':r.TipoSaida==='PEDIDO'?'Pedido':'—')+'</td><td>'+(r.NotaFiscal||'—')+'</td><td>'+(r.Motivo||'—')+'</td></tr>';
       });
       html+='</tbody>';
       tabela.innerHTML=html;
@@ -1730,10 +1813,10 @@ function renderAdmMovimentacoes(){
       var regs=d||[];
       if(!regs.length){ inner.innerHTML='<div class="dash-empty"><div class="dei">📭</div><div>Nenhuma movimentação registrada ainda.</div></div>'; return; }
       var html='<div class="mov-tabela-wrap"><table class="mov-tabela"><thead><tr>'+
-        '<th>Data/Hora</th><th>Tipo</th><th>Peça</th><th>Material</th><th>Lote</th><th>Qtd (cx)</th><th>Origem</th><th>Usuário</th><th>Motivo</th>'+
+        '<th>Data/Hora</th><th>Tipo</th><th>Peça</th><th>Material</th><th>Lote</th><th>Qtd (cx)</th><th>Origem</th><th>Usuário</th><th>Conferente 2</th><th>Tipo Saída</th><th>NF</th><th>Motivo</th>'+
         '</tr></thead><tbody>';
       regs.forEach(function(r){
-        html+='<tr><td>'+r.DataHora+'</td><td>'+(r.Tipo==='ENTRADA'?'📥 Entrada':'📤 Saída')+'</td><td>'+r.Peca+'</td><td>'+r.Material+'</td><td>'+(r.Lote||'—')+'</td><td>'+r.QtdCaixas+'</td><td>'+(r.Origem==='MANUAL'?'✋ Manual':'🔫 Bipado')+'</td><td>'+(r.Usuario||'—')+'</td><td>'+(r.Motivo||'—')+'</td></tr>';
+        html+='<tr><td>'+r.DataHora+'</td><td>'+(r.Tipo==='ENTRADA'?'📥 Entrada':'📤 Saída')+'</td><td>'+r.Peca+'</td><td>'+r.Material+'</td><td>'+(r.Lote||'—')+'</td><td>'+r.QtdCaixas+'</td><td>'+(r.Origem==='MANUAL'?'✋ Manual':'🔫 Bipado')+'</td><td>'+(r.Usuario||'—')+'</td><td>'+(r.Conferente2||'—')+'</td><td>'+(r.TipoSaida==='CORRECAO'?'Correção':r.TipoSaida==='PEDIDO'?'Pedido':'—')+'</td><td>'+(r.NotaFiscal||'—')+'</td><td>'+(r.Motivo||'—')+'</td></tr>';
       });
       html+='</tbody></table></div>';
       inner.innerHTML=html;
@@ -1773,6 +1856,15 @@ function renderModelos(){
     '</div>'+
     '<div class="mdl-cols">'+
       '<div class="mdl-editor">'+
+        '<div id="mdl-facil-peca" style="background:#fff;border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)">'+
+          '<div style="font-size:12px;font-weight:800;color:var(--azul);margin-bottom:8px">🔧 Ajustes fáceis (sem mexer em HTML)</div>'+
+          '<div class="fg-row">'+
+            '<div class="fg" style="margin-bottom:6px"><label>Tamanho do QR (mm)</label><input type="number" id="facil-qr" min="10" max="40" value="22" oninput="mdlPreview()"/></div>'+
+            '<div class="fg" style="margin-bottom:6px"><label>Escala do texto (%)</label><input type="number" id="facil-escala" min="50" max="200" value="100"/></div>'+
+          '</div>'+
+          '<div class="fg" style="margin-bottom:8px"><label>Norma fixa (aparece igual em toda etiqueta)</label><input type="text" id="facil-norma" placeholder="Ex: NBR 7676" value="NBR 7676" oninput="mdlPreview()"/></div>'+
+          '<button type="button" class="mdl-btn-save" style="width:100%" onclick="mdlAplicarFacil()">Aplicar e Salvar</button>'+
+        '</div>'+
         '<textarea id="mdl-textarea" spellcheck="false"></textarea>'+
         '<div class="mdl-acts">'+
           '<button class="mdl-btn-prev" onclick="mdlPreview()">👁️ Pré-visualizar</button>'+
@@ -1803,9 +1895,43 @@ function mdlSetTab(tipo){
   _mdlTab = tipo;
   document.getElementById('mdltab-PECA').classList.toggle('ativo', tipo==='PECA');
   document.getElementById('mdltab-CONFERENCIA').classList.toggle('ativo', tipo==='CONFERENCIA');
+  var painelFacil=document.getElementById('mdl-facil-peca');
+  if(painelFacil) painelFacil.style.display = (tipo==='PECA') ? '' : 'none';
+  if(tipo==='PECA'){
+    var cfg=(S.modelosEtiqueta&&S.modelosEtiqueta.CONFIG)||{qrSizeMm:22,escalaTexto:100,normaFixa:'NBR 7676'};
+    var iQr=document.getElementById('facil-qr'); if(iQr) iQr.value=cfg.qrSizeMm;
+    var iEsc=document.getElementById('facil-escala'); if(iEsc) iEsc.value=cfg.escalaTexto;
+    var iNorma=document.getElementById('facil-norma'); if(iNorma) iNorma.value=cfg.normaFixa;
+  }
   var ta = document.getElementById('mdl-textarea');
   ta.value = (S.modelosEtiqueta && S.modelosEtiqueta[tipo]) || (_mdlPadrao && _mdlPadrao[tipo]) || '';
   mdlPreview();
+}
+
+function mdlAplicarFacil(){
+  var qrSizeMm=Number(document.getElementById('facil-qr').value)||22;
+  var escalaTexto=Number(document.getElementById('facil-escala').value)||100;
+  var normaFixa=document.getElementById('facil-norma').value.trim()||'NBR 7676';
+  if(!confirm('Isso gera um modelo novo de Etiqueta de Peça com esses tamanhos, substituindo o texto atual no editor (perde edições manuais de HTML feitas nele). Continuar?')) return;
+  var novoTemplate=montarTemplatePadraoPeca(escalaTexto/100);
+  document.getElementById('mdl-textarea').value=novoTemplate;
+  mdlPreview();
+  google.script.run
+    .withSuccessHandler(function(r1){
+      if(!r1||!r1.ok){ toast(r1&&r1.erro?r1.erro:'Erro ao salvar modelo','erro'); return; }
+      google.script.run
+        .withSuccessHandler(function(r2){
+          if(!r2||!r2.ok){ toast(r2&&r2.erro?r2.erro:'Modelo salvo, mas config falhou','erro'); return; }
+          S.modelosEtiqueta=S.modelosEtiqueta||{};
+          S.modelosEtiqueta.PECA=novoTemplate;
+          S.modelosEtiqueta.CONFIG={qrSizeMm:qrSizeMm,escalaTexto:escalaTexto,normaFixa:normaFixa};
+          toast('Tamanhos aplicados e salvos!','sucesso');
+        })
+        .withFailureHandler(function(e){ toast('Modelo salvo, mas config falhou: '+(e?e.message:''),'erro'); })
+        .salvarModeloEtiqueta('CONFIG', JSON.stringify({qrSizeMm:qrSizeMm,escalaTexto:escalaTexto,normaFixa:normaFixa}));
+    })
+    .withFailureHandler(function(e){ toast('Erro ao salvar modelo: '+(e?e.message:''),'erro'); })
+    .salvarModeloEtiqueta('PECA', novoTemplate);
 }
 
 function mdlPreencher(template, dados){
@@ -1819,14 +1945,20 @@ function mdlPreencher(template, dados){
 
 function mdlPreview(){
   var html = document.getElementById('mdl-textarea').value;
-  var dados = _mdlTab==='PECA' ? DADOS_EXEMPLO_PECA : DADOS_EXEMPLO_CONF;
   var box = document.getElementById('mdl-preview-box');
   if(_mdlTab==='CONFERENCIA'){
+    var dados=DADOS_EXEMPLO_CONF;
     box.innerHTML = '<div style="display:flex;width:100%;height:100%">'+
       '<div style="flex:1;border-right:1mm dashed #000">'+mdlPreencher(html,dados)+'</div>'+
       '<div style="flex:1">'+mdlPreencher(html,dados)+'</div>'+
     '</div>';
   } else {
+    var dados=Object.assign({},DADOS_EXEMPLO_PECA);
+    var iQr=document.getElementById('facil-qr');
+    var iNorma=document.getElementById('facil-norma');
+    var qrMm=(iQr&&Number(iQr.value))||22;
+    dados.QR_CODE='<div style="width:'+qrMm+'mm;height:'+qrMm+'mm;background:repeating-linear-gradient(45deg,#000,#000 2px,#fff 2px,#fff 4px)"></div>';
+    if(iNorma&&iNorma.value.trim()) dados.NORMA=iNorma.value.trim();
     box.innerHTML = mdlPreencher(html, dados);
   }
 }
@@ -2016,6 +2148,7 @@ function renderHistOps(regs){
     el.innerHTML='<div class="dash-empty"><div class="dei">📭</div><div style="font-size:13px">Nenhum registro no período selecionado</div></div>';
     return;
   }
+  _histCaixasCache={};
   var por={};
   regs.forEach(function(r){
     var ok=(r.Matricula?r.Matricula+' — ':'')+r.Operador;
@@ -2025,19 +2158,33 @@ function renderHistOps(regs){
     if(!por[ok].pecas[pk]) por[ok].pecas[pk]={cod:r.CodigoPeca,nome:r.Peca,total:0,lotes:{}};
     por[ok].pecas[pk].total++;
     var lote=r.Lote||'—';
-    if(!por[ok].pecas[pk].lotes[lote]) por[ok].pecas[pk].lotes[lote]=0;
-    por[ok].pecas[pk].lotes[lote]++;
+    if(!por[ok].pecas[pk].lotes[lote]) por[ok].pecas[pk].lotes[lote]={count:0,caixas:[]};
+    por[ok].pecas[pk].lotes[lote].count++;
+    por[ok].pecas[pk].lotes[lote].caixas.push(r);
+    _histCaixasCache[r.ID]=r;
   });
   var keys=Object.keys(por).sort(function(a,b){return por[b].total-por[a].total;});
   el.innerHTML=keys.map(function(ok,idx){
     var op=por[ok];
     var pks=Object.keys(op.pecas).sort(function(a,b){return op.pecas[b].total-op.pecas[a].total;});
-    var pecasHtml=pks.map(function(pk){
+    var pecasHtml=pks.map(function(pk,pidx){
       var p=op.pecas[pk];
       var lks=Object.keys(p.lotes).sort();
       return '<div class="peca-row">'+
         '<div class="peca-hd"><div><span class="peca-cod">'+p.cod+'</span> <span class="peca-nm">'+p.nome+'</span></div><div class="peca-cx">'+p.total+' cx</div></div>'+
-        '<div class="lotes-wrap">'+lks.map(function(lk){ return '<div class="lote-chip"><span class="lcn">'+lk+'</span><span>('+p.lotes[lk]+'cx)</span></div>'; }).join('')+'</div>'+
+        '<div class="lotes-wrap">'+lks.map(function(lk,lidx){
+          var lid='lc-'+idx+'-'+pidx+'-'+lidx;
+          return '<div class="lote-chip" style="cursor:pointer" onclick="togLote(\''+lid+'\')"><span class="lcn">'+lk+'</span><span>('+p.lotes[lk].count+'cx) ▾</span></div>'+
+            '<div class="lote-caixas" id="'+lid+'" style="display:none;width:100%">'+
+              p.lotes[lk].caixas.map(function(cx){
+                return '<div class="caixa-row"><span>Cx '+(cx.NumeroCaixa||'—')+' — '+cx.QtdPecas+' pç — '+cx.DataHora+(cx.AjusteManual?' <em>(editada)</em>':'')+'</span>'+
+                  '<span class="caixa-acts">'+
+                  '<button class="bic bic-e" onclick="editarCaixa(\''+cx.ID+'\')">✏️</button>'+
+                  '<button class="bic bic-d" onclick="excluirCaixaConfirm(\''+cx.ID+'\')">🗑️</button>'+
+                  '</span></div>';
+              }).join('')+
+            '</div>';
+        }).join('')+'</div>'+
         '</div>';
     }).join('');
     return '<div class="op-card">'+
@@ -2048,6 +2195,14 @@ function renderHistOps(regs){
       '<div class="op-body" id="ob-'+idx+'">'+pecasHtml+'</div>'+
     '</div>';
   }).join('');
+}
+var _histCaixasCache={};
+function togLote(id){
+  var el=document.getElementById(id);
+  if(!el) return;
+  el.style.display = el.style.display==='none' ? 'flex' : 'none';
+  el.style.flexDirection='column';
+  el.style.gap='4px';
 }
 
 function togOp(bid,cid){
@@ -2277,7 +2432,8 @@ function gerarEtiquetas(dados,caixas){
   var ti=parseInt((dados.Trimestre||'T1').replace('T',''),10)||1;
   var trimFmt=tns[ti]+(dados.Ano||'');
   var cor=corDoMaterial(dados.Material);
-  var norma=normaDoMaterial(dados.Material);
+  var norma=(S.modelosEtiqueta&&S.modelosEtiqueta.CONFIG&&S.modelosEtiqueta.CONFIG.normaFixa)||'NBR 7676';
+  var qrSizeMm=(S.modelosEtiqueta&&S.modelosEtiqueta.CONFIG&&S.modelosEtiqueta.CONFIG.qrSizeMm)||22;
   var template=(S.modelosEtiqueta&&S.modelosEtiqueta.PECA)||'';
   caixas.forEach(function(cx){
     var qrData=JSON.stringify({id:cx.id,peca:dados.Peca,cod:dados.CodigoPeca,lote:dados.Lote,cx:cx.numCaixa,qtd:dados.QtdPecas,op:dados.Matricula||dados.Operador,trim:dados.Trimestre+'/'+dados.Ano,mat:dados.Material});
@@ -2287,7 +2443,7 @@ function gerarEtiquetas(dados,caixas){
       MATERIAL:dados.Material, COR:cor?cor.toUpperCase():'', NORMA:norma||'',
       QUANTIDADE:String(dados.QtdPecas), DATA:new Date().toLocaleDateString('pt-BR'),
       LOTE:dados.Lote, OP:(dados.Matricula||dados.Operador), REFERENCIA:formatarReferencia(cx.id),
-      QR_CODE:'<div id="'+qrId+'" style="width:22mm;height:22mm;overflow:hidden;display:flex;align-items:center;justify-content:center"></div>'
+      QR_CODE:'<div id="'+qrId+'" style="width:'+qrSizeMm+'mm;height:'+qrSizeMm+'mm;overflow:hidden;display:flex;align-items:center;justify-content:center"></div>'
     };
     var el=document.createElement('div'); el.className='etiq-fisica';
     el.innerHTML=mdlPreencher(template,valores);
@@ -2347,8 +2503,16 @@ function renderGridMovOperador(){
 }
 function movSelecionarOperador(nome,matricula){
   S.movOperador={ nome:nome, matricula:matricula };
+  S.movConferente2=null;
+  S.movTipoSaida=null;
+  S.movNotaFiscal='';
+  S.movCaixasSessao=[];
+  document.getElementById('mov-conf2-atual-txt').style.display='none';
+  document.getElementById('mov-conf2-trocar-btn').style.display='none';
+  document.getElementById('mov-saida-atual-txt').style.display='none';
+  document.getElementById('mov-saida-trocar-btn').style.display='none';
   document.getElementById('mov-sel-operador').style.display='none';
-  document.getElementById('mov-conteudo').style.display='';
+  document.getElementById('mov-conteudo').style.display='none';
   document.getElementById('mov-tabs-tipo').style.display='flex';
   document.getElementById('mov-op-atual-bar').style.display='flex';
   document.getElementById('mov-op-atual-txt').textContent='Operador: '+(matricula?matricula+' — ':'')+nome;
@@ -2361,7 +2525,17 @@ function movSelecionarOperador(nome,matricula){
 function movTrocarOperador(){
   movPararCamera();
   S.movOperador=null;
+  S.movConferente2=null;
+  S.movTipoSaida=null;
+  S.movNotaFiscal='';
+  S.movCaixasSessao=[];
+  document.getElementById('mov-conf2-atual-txt').style.display='none';
+  document.getElementById('mov-conf2-trocar-btn').style.display='none';
+  document.getElementById('mov-saida-atual-txt').style.display='none';
+  document.getElementById('mov-saida-trocar-btn').style.display='none';
   document.getElementById('mov-conteudo').style.display='none';
+  document.getElementById('mov-sel-conferente2').style.display='none';
+  document.getElementById('mov-sel-tiposaida').style.display='none';
   document.getElementById('mov-tabs-tipo').style.display='none';
   document.getElementById('mov-op-atual-bar').style.display='none';
   document.getElementById('mov-sel-operador').style.display='';
@@ -2372,6 +2546,77 @@ function movSetTipo(tipo){
   S.movTipo=tipo;
   document.getElementById('mtab-entrada').classList.toggle('ativo',tipo==='ENTRADA');
   document.getElementById('mtab-saida').classList.toggle('ativo',tipo==='SAIDA');
+  if(tipo==='ENTRADA' && !S.movConferente2){
+    _movCamPausado=true;
+    document.getElementById('mov-conteudo').style.display='none';
+    document.getElementById('mov-sel-tiposaida').style.display='none';
+    document.getElementById('mov-sel-conferente2').style.display='flex';
+    renderGridMovConferente2();
+    return;
+  }
+  if(tipo==='SAIDA' && !S.movTipoSaida){
+    _movCamPausado=true;
+    document.getElementById('mov-conteudo').style.display='none';
+    document.getElementById('mov-sel-conferente2').style.display='none';
+    document.getElementById('mov-sel-tiposaida').style.display='flex';
+    return;
+  }
+  document.getElementById('mov-sel-conferente2').style.display='none';
+  document.getElementById('mov-sel-tiposaida').style.display='none';
+  document.getElementById('mov-conteudo').style.display='';
+  document.getElementById('mov-saida-lista-box').style.display=(tipo==='SAIDA')?'':'none';
+  _movCamPausado=false;
+}
+function movEscolherTipoSaida(tipo){
+  if(tipo==='PEDIDO'){
+    var nf=prompt('Número da Nota Fiscal:');
+    if(!nf||!nf.trim()){ toast('Informe o número da nota fiscal','aviso'); return; }
+    S.movNotaFiscal=nf.trim();
+  } else {
+    S.movNotaFiscal='';
+  }
+  S.movTipoSaida=tipo;
+  S.movCaixasSessao=[];
+  renderMovSaidaLista();
+  var txt=document.getElementById('mov-saida-atual-txt');
+  txt.style.display='';
+  txt.textContent = tipo==='PEDIDO' ? 'Saída: Pedido NF '+S.movNotaFiscal : 'Saída: Correção de Estoque';
+  document.getElementById('mov-saida-trocar-btn').style.display='';
+  movSetTipo('SAIDA');
+}
+function movTrocarTipoSaida(){
+  S.movTipoSaida=null;
+  S.movNotaFiscal='';
+  S.movCaixasSessao=[];
+  renderMovSaidaLista();
+  document.getElementById('mov-saida-atual-txt').style.display='none';
+  document.getElementById('mov-saida-trocar-btn').style.display='none';
+  movSetTipo('SAIDA');
+}
+function renderGridMovConferente2(){
+  var g=document.getElementById('mov-g-conf2');
+  if(!S.op.length){ g.innerHTML='<p style="color:rgba(255,255,255,.4);padding:16px;grid-column:1/-1;text-align:center;font-size:13px">Nenhum operador cadastrado. Acesse Admin.</p>'; return; }
+  g.innerHTML=S.op.map(function(o){
+    var m=o.Matricula||'';
+    return '<div class="op-sel-btn" onclick="movSelecionarConferente2(\''+esc(o.Nome)+'\',\''+esc(m)+'\')">'+
+      '<span class="ico"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg></span>'+
+      (m?'<span class="mat">'+m+'</span>':'')+
+      '<span class="nome">'+o.Nome+'</span></div>';
+  }).join('');
+}
+function movSelecionarConferente2(nome,matricula){
+  S.movConferente2={ nome:nome, matricula:matricula };
+  var txt=document.getElementById('mov-conf2-atual-txt');
+  txt.style.display='';
+  txt.textContent='Conferente 2: '+(matricula?matricula+' — ':'')+nome;
+  document.getElementById('mov-conf2-trocar-btn').style.display='';
+  movSetTipo('ENTRADA');
+}
+function movTrocarConferente2(){
+  S.movConferente2=null;
+  document.getElementById('mov-conf2-atual-txt').style.display='none';
+  document.getElementById('mov-conf2-trocar-btn').style.display='none';
+  movSetTipo('ENTRADA');
 }
 function movMontarSelectManual(){
   var sp=document.getElementById('mm-peca'); if(!sp) return;
@@ -2398,6 +2643,12 @@ var _movCamStream=null, _movCamRAF=null, _movCamPausado=false, _movCamCooldownAt
 function movIniciarCamera(){
   var status=document.getElementById('mov-cam-status');
   if(!status) return; // página não está montada (ex: chamado fora de contexto)
+  if(typeof jsQR==='undefined'){
+    status.textContent='Erro: biblioteca de leitura de QR não carregou. Verifique a conexão de internet do tablet e recarregue a página.';
+    status.classList.remove('oculto');
+    toast('Biblioteca de QR não carregou — sem internet ou bloqueio de rede','erro');
+    return;
+  }
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
     status.textContent='Este navegador não suporta acesso à câmera. Use a movimentação manual abaixo.';
     status.classList.remove('oculto');
@@ -2443,7 +2694,7 @@ function movLoopCamera(){
           _movCamCooldownAte=Date.now()+2500; // evita reler a mesma etiqueta em sequência
           movProcessarCodigo(codigo.data);
         }
-      }catch(e){}
+      }catch(e){ console.error('Erro na leitura de QR:',e); }
     }
     _movCamRAF=requestAnimationFrame(tick);
   }
@@ -2459,6 +2710,13 @@ function movProcessarCodigo(raw){
 
   _movCamPausado=true; // trava a leitura durante a chamada, evita disparo duplicado
   var dados={ CaixaID:caixaId, Tipo:S.movTipo, Origem:'BIPADO', Usuario:movUsuarioAtual() };
+  if(S.movTipo==='ENTRADA' && S.movConferente2){
+    dados.Conferente2=(S.movConferente2.matricula?S.movConferente2.matricula+' — ':'')+S.movConferente2.nome;
+  }
+  if(S.movTipo==='SAIDA' && S.movTipoSaida){
+    dados.TipoSaida=S.movTipoSaida;
+    dados.NotaFiscal=S.movNotaFiscal||'';
+  }
   google.script.run
     .withSuccessHandler(function(r){ _movCamPausado=false; movTratarResultado(r,caixaId); })
     .withFailureHandler(function(e){ _movCamPausado=false; toast('Erro: '+(e?e.message:''),'erro'); })
@@ -2472,10 +2730,18 @@ function movTratarResultado(r,caixaId){
         var senha=prompt('Senha de administrador:');
         if(senha){
           _movCamPausado=true;
+          var dadosForcar={CaixaID:caixaId,Tipo:S.movTipo,Origem:'BIPADO',Usuario:movUsuarioAtual(),Forcar:true};
+          if(S.movTipo==='ENTRADA' && S.movConferente2){
+            dadosForcar.Conferente2=(S.movConferente2.matricula?S.movConferente2.matricula+' — ':'')+S.movConferente2.nome;
+          }
+          if(S.movTipo==='SAIDA' && S.movTipoSaida){
+            dadosForcar.TipoSaida=S.movTipoSaida;
+            dadosForcar.NotaFiscal=S.movNotaFiscal||'';
+          }
           google.script.run
             .withSuccessHandler(function(r2){ _movCamPausado=false; movTratarResultado(r2,caixaId); })
             .withFailureHandler(function(e){ _movCamPausado=false; toast('Erro: '+(e?e.message:''),'erro'); })
-            .registrarMovimentacao({CaixaID:caixaId,Tipo:S.movTipo,Origem:'BIPADO',Usuario:movUsuarioAtual(),Forcar:true},senha);
+            .registrarMovimentacao(dadosForcar,senha);
         }
       }
     } else {
@@ -2488,7 +2754,49 @@ function movTratarResultado(r,caixaId){
   document.getElementById('mov-ultima-ico').textContent=r.tipo==='ENTRADA'?'📥':'📤';
   document.getElementById('mov-ultima-peca').textContent=r.peca+' ('+r.material+')';
   document.getElementById('mov-ultima-det').textContent=(r.tipo==='ENTRADA'?'Entrada':'Saída')+' de 1 caixa — agora';
+  if(r.tipo==='SAIDA'){
+    S.movCaixasSessao=S.movCaixasSessao||[];
+    S.movCaixasSessao.unshift({ movId:r.id, peca:r.peca, material:r.material, lote:r.lote, caixaId:r.caixaId, codPeca:r.codPeca });
+    renderMovSaidaLista();
+  }
   movCarregarEstoque();
+}
+var _histMovSaidaCache={};
+function renderMovSaidaLista(){
+  var box=document.getElementById('mov-saida-lista-box');
+  var el=document.getElementById('mov-saida-lista');
+  if(!box||!el) return;
+  var lista=S.movCaixasSessao||[];
+  if(!lista.length){ box.style.display='none'; el.innerHTML=''; return; }
+  box.style.display='';
+  el.innerHTML=lista.map(function(c){
+    _histMovSaidaCache[c.movId]=c;
+    return '<div class="caixa-row"><span>'+(c.codPeca||'')+' — '+c.peca+' ('+c.material+') Lote '+(c.lote||'—')+'</span>'+
+      '<span class="caixa-acts"><button class="bic bic-d" onclick="movExcluirDaSaida(\''+c.movId+'\')">🗑️</button></span></div>';
+  }).join('');
+}
+function movExcluirDaSaida(movId){
+  var c=_histMovSaidaCache[movId];
+  var desc=c?(c.codPeca+' — '+c.peca+' ('+c.material+')'):movId;
+  var motivo=prompt('Motivo da exclusão desta saída ('+desc+'):');
+  if(motivo===null) return; // cancelou
+  if(!motivo.trim()){ toast('É obrigatório informar o motivo','aviso'); return; }
+  var exigeSenha = S.movTipoSaida==='CORRECAO';
+  var senha=null;
+  if(exigeSenha){
+    senha=prompt('Correção de estoque — senha de administrador:');
+    if(!senha){ toast('Senha obrigatória pra excluir saída de correção','aviso'); return; }
+  }
+  google.script.run
+    .withSuccessHandler(function(r){
+      if(!r||!r.ok){ toast(r&&r.erro?r.erro:'Erro ao excluir','erro'); return; }
+      S.movCaixasSessao=(S.movCaixasSessao||[]).filter(function(x){ return x.movId!==movId; });
+      renderMovSaidaLista();
+      movCarregarEstoque();
+      toast('Saída excluída — caixa volta a constar como em estoque','aviso');
+    })
+    .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); })
+    .excluirMovimentacao(movId,motivo.trim(),senha,exigeSenha);
 }
 
 function movConfirmarManual(){
@@ -2504,6 +2812,9 @@ function movConfirmarManual(){
     Motivo:document.getElementById('mm-motivo').value.trim(),
     Usuario:movUsuarioAtual()
   };
+  if(S.movTipo==='ENTRADA' && S.movConferente2){
+    dados.Conferente2=(S.movConferente2.matricula?S.movConferente2.matricula+' — ':'')+S.movConferente2.nome;
+  }
   var senha=document.getElementById('mm-senha').value;
   if(!senha){ toast('Informe a senha de administrador','aviso'); return; }
   google.script.run
@@ -2696,6 +3007,29 @@ function resetBtnSalvarCad(){
 }
 function fecharCad(){ document.getElementById('mo-cad').classList.remove('aberto'); }
 
+function editarCaixa(id){
+  var d=_histCaixasCache[id];
+  if(!d){ toast('Caixa não encontrada no cache — atualize a página','erro'); return; }
+  S.cadTipo='caixa'; S.cadId=id;
+  document.getElementById('cad-t').textContent='Editar Caixa';
+  document.getElementById('cad-body').innerHTML=formCad('caixa',d);
+  resetBtnSalvarCad();
+  document.getElementById('mo-cad').classList.add('aberto');
+}
+function excluirCaixaConfirm(id){
+  var d=_histCaixasCache[id];
+  var desc=d?('Cx '+(d.NumeroCaixa||'—')+' de '+d.Peca+' ('+d.QtdPecas+' pç)'):id;
+  if(!confirm('Excluir esta caixa da produção?\n\n'+desc+'\n\nIsso NÃO desfaz movimentações de estoque já registradas para ela — só remove o registro de produção. Não pode ser desfeito.')) return;
+  google.script.run
+    .withSuccessHandler(function(r){
+      if(!r||!r.ok){ toast(r&&r.erro?r.erro:'Erro ao excluir','erro'); return; }
+      buscarProducaoEFiltrar();
+      toast('Caixa excluída','aviso');
+    })
+    .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); })
+    .excluirProducao(id);
+}
+
 // ── DIVISÃO EM TUBOS (grupos que juntos fecham a caixa da peça) ──
 // Não existe mais "arranjo" — só uma lista de grupos (qtd tubos × peças/tubo)
 // que juntos devem somar o total da caixa, porque todos vão na mesma caixa.
@@ -2746,6 +3080,14 @@ function formCad(tipo,d){
   if(tipo==='pecas') return '<div class="fg"><label>Código</label><input type="text" id="fc-c" placeholder="Ex: DEF-200" value="'+(d&&d.Codigo?d.Codigo:'')+'"/></div><div class="fg"><label>Nome da Peça</label><input type="text" id="fc-n" placeholder="Ex: Anel Defofo 200mm" value="'+(d&&d.Nome?d.Nome:'')+'"/></div><div class="fg"><label>Qtd Padrão por Caixa</label><input type="number" id="fc-q" oninput="atualizarTotalGrupos()" placeholder="Ex: 540" value="'+(d&&d.QtdPadrao?d.QtdPadrao:'')+'"/></div><div class="fg"><label>Tamanho da Caixa</label><input type="text" id="fc-caixa" placeholder="Ex: Caixa 40x30" value="'+(d&&d.TamanhoCaixa?d.TamanhoCaixa:'')+'"/></div><div class="fg" style="display:flex;align-items:center;gap:8px;flex-direction:row"><input type="checkbox" id="fc-cantoneira" style="width:20px;height:20px" '+(d&&d.Cantoneira?'checked':'')+'/><label style="margin:0">Usa cantoneira na caixa</label></div><div class="fg"><label>Divisão em Tubos (grupos que juntos fecham a caixa)</label><div id="fc-grupos-lista"></div><button type="button" class="arr-add-grupo" onclick="adicionarGrupo()">+ grupo de tubo</button><div class="arr-total" id="grupos-total"></div></div>';
   if(tipo==='materiais') return '<div class="fg"><label>Nome</label><input type="text" id="fc-n" placeholder="Ex: EPDM" value="'+(d&&d.Nome?d.Nome:'')+'" onblur="sugerirCorMaterial()"/></div><div class="fg"><label>Cor (referência impressa na etiqueta)</label><input type="text" id="fc-cor" placeholder="Ex: Verde" value="'+(d&&d.Cor?d.Cor:'')+'"/></div><div class="fg"><label>Descrição / Norma (opcional)</label><input type="text" id="fc-d" placeholder="Ex: NBR 7676" value="'+(d&&d.Descricao?d.Descricao:'')+'"/></div>';
   if(tipo==='maquinas') return '<div class="fg"><label>Nome</label><input type="text" id="fc-n" placeholder="Ex: Injetora 01" value="'+(d&&d.Nome?d.Nome:'')+'"/></div><div class="fg"><label>Descrição (opcional)</label><input type="text" id="fc-d" placeholder="Ex: Engel 150t" value="'+(d&&d.Descricao?d.Descricao:'')+'"/></div>';
+  if(tipo==='caixa') return '<div class="fg" style="background:var(--cinza);padding:9px 12px;border-radius:8px;font-size:12px;color:var(--texto2)">'+
+      '<div><b style="color:var(--azul)">'+(d&&d.CodigoPeca?d.CodigoPeca:'')+'</b> — '+(d&&d.Peca?d.Peca:'')+'</div>'+
+      '<div>Operador: '+(d&&d.Operador?d.Operador:'')+' • Caixa Nº '+(d&&d.NumeroCaixa?d.NumeroCaixa:'')+' • '+(d&&d.DataHora?d.DataHora:'')+'</div>'+
+    '</div>'+
+    '<div class="fg"><label>Material</label><select id="fc-cx-mat">'+S.mats.map(function(m){ return '<option value="'+esc(m.Nome)+'"'+(d&&d.Material===m.Nome?' selected':'')+'>'+m.Nome+'</option>'; }).join('')+'</select></div>'+
+    '<div class="fg"><label>Lote</label><input type="text" id="fc-cx-lote" value="'+(d&&d.Lote?d.Lote:'')+'"/></div>'+
+    '<div class="fg"><label>Quantidade de Peças</label><input type="number" id="fc-cx-qtd" min="1" value="'+(d&&d.QtdPecas?d.QtdPecas:'')+'"/></div>'+
+    '<div style="font-size:11px;color:#e67e22;font-weight:700">⚠️ Editar aqui não reimprime a etiqueta física — a caixa já rotulada continua com os dados antigos impressos nela.</div>';
   return '';
 }
 var _salvandoCad = false;
@@ -2802,6 +3144,15 @@ function salvarCad(){
     if(!dados.Nome){ toast('Informe o nome','aviso'); return; }
     _salvandoCad=true; if(btn){ btn.disabled=true; btn.textContent='Salvando...'; }
     google.script.run.withSuccessHandler(cb).withFailureHandler(er).salvarMaquina(dados);
+  } else if(tipo==='caixa'){
+    dados.Material=document.getElementById('fc-cx-mat').value;
+    dados.Lote=document.getElementById('fc-cx-lote').value.trim();
+    dados.QtdPecas=document.getElementById('fc-cx-qtd').value;
+    dados.AjustadoPor='Admin';
+    if(!dados.Lote||!dados.QtdPecas||Number(dados.QtdPecas)<1){ toast('Preencha lote e quantidade corretamente','aviso'); return; }
+    var cbCaixa=function(){ liberar(); fecharCad(); buscarProducaoEFiltrar(); toast('Caixa atualizada!','sucesso'); };
+    _salvandoCad=true; if(btn){ btn.disabled=true; btn.textContent='Salvando...'; }
+    google.script.run.withSuccessHandler(cbCaixa).withFailureHandler(er).atualizarProducao(dados.ID,dados);
   }
 }
 function relTipo(tipo){
