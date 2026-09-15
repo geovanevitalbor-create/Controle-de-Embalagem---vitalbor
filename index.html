@@ -1671,6 +1671,20 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
   </div>
 </div>
 
+<!-- AVISO VERMELHO — COL com material diferente de NBR -->
+<div class="mo" id="mo-col-nbr">
+  <div class="mb" style="border-top:5px solid #c0392b">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#c0392b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+      <div class="mb-t" style="margin:0;padding:0;border:none;color:#c0392b">Autorização necessária</div>
+    </div>
+    <p style="font-size:13px;color:var(--texto);margin-bottom:12px;font-weight:700" id="col-nbr-msg">Peça da linha COL com material diferente de NBR — precisa de senha de admin.</p>
+    <div class="fg"><label>Senha Admin</label><input type="password" id="inp-col-nbr-s" placeholder="••••••••" onkeydown="if(event.key==='Enter')autorizarColNBR()"/></div>
+    <div style="color:#c0392b;font-size:12px;margin-bottom:6px;display:none;font-weight:700" id="col-nbr-err">Senha incorreta</div>
+    <div class="mb-acts"><button class="mb-cancel" onclick="fecharModalColNBR()">Cancelar</button><button class="mb-auth" style="background:#c0392b" onclick="autorizarColNBR()">Autorizar</button></div>
+  </div>
+</div>
+
 <!-- MODAL CADASTRO -->
 <div class="mo" id="mo-cad">
   <div class="mb">
@@ -1927,15 +1941,7 @@ function gerarEImprimirNF(){
   var ehLinhaCol=semAcentoConsulta(codigo).indexOf('col')===0;
   var ehNBR=semAcentoConsulta(material).indexOf('nbr')===0;
   if(ehLinhaCol && !ehNBR){
-    var senha=prompt('Peça da linha COL com material diferente de NBR ('+material+') — senha de administrador:');
-    if(!senha){ toast('Senha obrigatória pra imprimir COL com material diferente de NBR','aviso'); return; }
-    google.script.run
-      .withSuccessHandler(function(ok){
-        if(!ok){ toast('Senha incorreta','erro'); return; }
-        executarImpressaoNF(cliente,destino,codigo,nomePeca,material,numero);
-      })
-      .withFailureHandler(function(){ toast('Erro ao verificar senha','erro'); })
-      .verificarSenhaAdmin(senha);
+    abrirModalColNBR(material, function(){ executarImpressaoNF(cliente,destino,codigo,nomePeca,material,numero); });
     return;
   }
   executarImpressaoNF(cliente,destino,codigo,nomePeca,material,numero);
@@ -3391,15 +3397,7 @@ function confirmarProd(){
   var ehLinhaCol=semAcentoConsulta(S.sel.codPeca||'').indexOf('col')===0;
   var ehNBR=semAcentoConsulta(S.sel.mat||'').indexOf('nbr')===0;
   if(ehLinhaCol && !ehNBR && !S.adm){
-    var senha=prompt('Peça da linha COL com material diferente de NBR ('+S.sel.mat+') — senha de administrador:');
-    if(!senha){ toast('Senha obrigatória pra registrar COL com material diferente de NBR','aviso'); return; }
-    google.script.run
-      .withSuccessHandler(function(ok){
-        if(!ok){ toast('Senha incorreta','erro'); return; }
-        confirmarProdContinuar();
-      })
-      .withFailureHandler(function(){ toast('Erro ao verificar senha','erro'); })
-      .verificarSenhaAdmin(senha);
+    abrirModalColNBR(S.sel.mat, confirmarProdContinuar);
     return;
   }
   confirmarProdContinuar();
@@ -3418,6 +3416,31 @@ function confirmarProdContinuar(){
   enviarProd(q,c,null);
 }
 function fecharAdj(){ document.getElementById('mo-adj').classList.remove('aberto'); }
+var _colNbrCallback=null;
+function abrirModalColNBR(material,callback){
+  document.getElementById('col-nbr-msg').textContent='Peça da linha COL com material diferente de NBR ('+material+') — precisa de senha de admin.';
+  document.getElementById('inp-col-nbr-s').value='';
+  document.getElementById('col-nbr-err').style.display='none';
+  _colNbrCallback=callback;
+  document.getElementById('mo-col-nbr').classList.add('aberto');
+}
+function fecharModalColNBR(){
+  document.getElementById('mo-col-nbr').classList.remove('aberto');
+  _colNbrCallback=null;
+}
+function autorizarColNBR(){
+  var senha=document.getElementById('inp-col-nbr-s').value;
+  if(!senha){ document.getElementById('col-nbr-err').textContent='Informe a senha'; document.getElementById('col-nbr-err').style.display='block'; return; }
+  google.script.run
+    .withSuccessHandler(function(ok){
+      if(!ok){ document.getElementById('col-nbr-err').textContent='Senha incorreta'; document.getElementById('col-nbr-err').style.display='block'; return; }
+      document.getElementById('mo-col-nbr').classList.remove('aberto');
+      var cb=_colNbrCallback; _colNbrCallback=null;
+      if(cb) cb();
+    })
+    .withFailureHandler(function(){ toast('Erro ao verificar senha','erro'); })
+    .verificarSenhaAdmin(senha);
+}
 function autorizarAdj(){
   var s=document.getElementById('inp-adj-s').value;
   var q=Number(document.getElementById('inp-qtd').value)||0;
