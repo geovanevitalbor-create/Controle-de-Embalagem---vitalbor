@@ -780,11 +780,11 @@ select.inp-pos option{color:#000;background:#fff}
 .lotes-wrap{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
 .lote-chip{background:var(--cinza2);color:var(--texto2);font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;display:flex;align-items:center;gap:2px}
 .lote-caixas{background:#fff;border:1px solid var(--cinza2);border-radius:6px;padding:6px 8px;margin-top:2px}
-.caixa-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 2px;font-size:11px;color:var(--texto);border-bottom:1px solid var(--cinza2)}
+.caixa-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 4px;font-size:13px;color:var(--texto);border-bottom:1px solid var(--cinza2);line-height:1.4}
 .caixa-row:last-child{border-bottom:none}
 .caixa-row em{color:#e67e22;font-style:normal;font-weight:800}
 .caixa-acts{display:flex;gap:4px;flex-shrink:0}
-.caixa-acts .bic{width:26px;height:26px;font-size:11px}
+.caixa-acts .bic{width:32px;height:32px;font-size:13px}
 .lote-chip .lcn{color:var(--texto);font-weight:800}
 .dash-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;color:var(--texto2);text-align:center;gap:8px;background:#fff;border-radius:var(--radius)}
 .dash-empty .dei{font-size:36px;opacity:.3}
@@ -868,30 +868,30 @@ select.inp-pos option{color:#000;background:#fff}
    MOVIMENTAÇÃO DE ESTOQUE
 ══════════════════════════════ */
 #pag-movimentacao{background:var(--cinza)}
-.mov-top{background:var(--azul);padding:12px 16px;flex-shrink:0;display:flex;flex-direction:column;gap:8px}
-.mov-tabs{display:flex;gap:8px}
-.mov-tab{flex:1;padding:12px;border-radius:var(--radius-sm);border:2px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:rgba(255,255,255,.6);font-size:13px;font-weight:800;cursor:pointer;text-align:center;transition:all .15s}
-.mov-tab.ativo{background:var(--verde);border-color:var(--verde);color:#fff}
-.mov-tab.saida.ativo{background:var(--laranja);border-color:var(--laranja)}
-.mov-body{flex:1;overflow-y:auto;padding:14px}
-.mov-scan-box{background:#fff;border-radius:var(--radius);padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:14px}
-.mov-scan-lbl{font-size:11px;font-weight:800;color:var(--texto2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.mov-top{background:var(--azul);padding:14px 16px;flex-shrink:0;display:flex;flex-direction:column;gap:10px}
+.mov-tabs{display:flex;gap:10px}
+.mov-tab{flex:1;padding:16px 12px;border-radius:var(--radius);border:2px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:rgba(255,255,255,.65);font-size:15px;font-weight:900;letter-spacing:.5px;cursor:pointer;text-align:center;transition:all .15s;min-height:44px;display:flex;align-items:center;justify-content:center}
+.mov-tab.ativo{background:var(--verde);border-color:var(--verde);color:#fff;box-shadow:0 4px 14px rgba(29,122,78,.4)}
+.mov-tab.saida.ativo{background:var(--laranja);border-color:var(--laranja);box-shadow:0 4px 14px rgba(233,69,96,.4)}
+.mov-body{flex:1;overflow-y:auto;padding:16px}
+.mov-scan-box{background:#fff;border-radius:var(--radius);padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.09);margin-bottom:16px;border:1px solid var(--cinza2)}
+.mov-scan-lbl{font-size:13px;font-weight:800;color:var(--azul);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;display:flex;align-items:center;gap:7px}
 .mov-scan-inp{width:100%;padding:16px;border:3px solid var(--azul3);border-radius:var(--radius-sm);font-size:18px;font-weight:800;text-align:center;letter-spacing:1px;outline:none;background:#f8f9fb}
 .mov-scan-inp:focus{border-color:var(--verde)}
-.mov-cam-wrap{position:relative;width:100%;height:340px;border-radius:var(--radius);overflow:hidden;background:#000;box-shadow:0 4px 16px rgba(0,0,0,.25)}
+.mov-cam-wrap{position:relative;width:100%;height:380px;border-radius:var(--radius);overflow:hidden;background:#000;box-shadow:0 6px 22px rgba(0,0,0,.3);border:1px solid #000}
 .mov-cam-wrap video{width:100%;height:100%;object-fit:cover;display:block}
-.mov-cam-mira{position:absolute;top:14%;left:18%;right:18%;bottom:14%;pointer-events:none;box-shadow:0 0 0 999px rgba(0,0,0,.4)}
-.cam-corner{position:absolute;width:32px;height:32px;border:4px solid #4ade80}
-.cam-corner.tl{top:-3px;left:-3px;border-right:none;border-bottom:none;border-radius:10px 0 0 0}
-.cam-corner.tr{top:-3px;right:-3px;border-left:none;border-bottom:none;border-radius:0 10px 0 0}
-.cam-corner.bl{bottom:-3px;left:-3px;border-right:none;border-top:none;border-radius:0 0 0 10px}
-.cam-corner.br{bottom:-3px;right:-3px;border-left:none;border-top:none;border-radius:0 0 10px 0}
+.mov-cam-mira{position:absolute;top:14%;left:18%;right:18%;bottom:14%;pointer-events:none;box-shadow:0 0 0 999px rgba(0,0,0,.45)}
+.cam-corner{position:absolute;width:36px;height:36px;border:5px solid #4ade80}
+.cam-corner.tl{top:-3px;left:-3px;border-right:none;border-bottom:none;border-radius:12px 0 0 0}
+.cam-corner.tr{top:-3px;right:-3px;border-left:none;border-bottom:none;border-radius:0 12px 0 0}
+.cam-corner.bl{bottom:-3px;left:-3px;border-right:none;border-top:none;border-radius:0 0 0 12px}
+.cam-corner.br{bottom:-3px;right:-3px;border-left:none;border-top:none;border-radius:0 0 12px 0}
 .cam-scanline{position:absolute;left:3%;right:3%;height:3px;background:linear-gradient(90deg,transparent,#4ade80,transparent);border-radius:2px;animation:camScan 2.2s ease-in-out infinite}
 @keyframes camScan{0%,100%{top:2%}50%{top:96%}}
-.mov-cam-status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700;background:rgba(0,0,0,.55);text-align:center;padding:12px;box-sizing:border-box}
+.mov-cam-status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:800;background:rgba(0,0,0,.6);text-align:center;padding:16px;box-sizing:border-box;line-height:1.4}
 .mov-cam-status.oculto{display:none}
 .op-sel-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:14px;justify-content:center;max-width:640px;margin:0 auto;width:100%}
-.op-sel-btn{background:#fff;border:2px solid var(--cinza3);border-radius:var(--radius);padding:28px 14px;text-align:center;cursor:pointer;font-weight:800;color:var(--azul);transition:all .12s;display:flex;flex-direction:column;align-items:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.op-sel-btn{background:#fff;border:2px solid var(--cinza3);border-radius:var(--radius);padding:28px 14px;text-align:center;cursor:pointer;font-weight:800;color:var(--azul);transition:all .12s;display:flex;flex-direction:column;align-items:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,.08);min-height:44px}
 .op-sel-btn:active{transform:scale(.95);background:var(--cinza2)}
 .op-sel-btn .ico{color:var(--azul3);display:flex}
 .op-sel-btn .nome{font-size:17px;line-height:1.25}
@@ -951,7 +951,7 @@ select.inp-pos option{color:#000;background:#fff}
 .mov-cam-wrap.erro-flash{animation:flashErro .5s ease}
 @keyframes flashErro{0%,100%{box-shadow:0 4px 16px rgba(0,0,0,.25)}30%{box-shadow:0 0 0 8px rgba(192,57,43,.7)}}
 .mov-ultima.vis{display:block}
-.mov-ultima-hd{font-size:11px;font-weight:800;color:var(--texto2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.mov-ultima-hd{font-size:13px;font-weight:900;color:var(--azul);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
 .mov-ultima-corpo{display:flex;align-items:center;gap:10px}
 .mov-ultima-ico{font-size:28px}
 .mov-ultima-txt{flex:1}
@@ -1148,11 +1148,11 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
       <div class="mov-tab entrada ativo" id="mtab-entrada" onclick="movSetTipo('ENTRADA')"><span style="display:inline-flex;vertical-align:middle;margin-right:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="6 13 12 19 18 13"/></svg></span>ENTRADA</div>
       <div class="mov-tab saida" id="mtab-saida" onclick="movSetTipo('SAIDA')"><span style="display:inline-flex;vertical-align:middle;margin-right:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="6 11 12 5 18 11"/></svg></span>SAÍDA</div>
     </div>
-    <div id="mov-op-atual-bar" style="display:none;justify-content:space-between;align-items:center;padding-top:6px;flex-wrap:wrap;gap:6px">
-      <span id="mov-op-atual-txt" style="color:#fff;font-size:12px;font-weight:700">—</span>
-      <span id="mov-saida-atual-txt" style="display:none;color:rgba(255,255,255,.75);font-size:11px;font-weight:700"></span>
-      <button id="mov-saida-trocar-btn" onclick="movTrocarTipoSaida()" style="display:none;background:rgba(255,255,255,.1);border:none;color:rgba(255,255,255,.85);padding:4px 9px;border-radius:6px;font-size:10px;font-weight:800;cursor:pointer">Trocar tipo de saída</button>
-      <button onclick="movTrocarOperador()" style="background:rgba(255,255,255,.15);border:none;color:#fff;padding:5px 11px;border-radius:6px;font-size:11px;font-weight:800;cursor:pointer">Trocar operador</button>
+    <div id="mov-op-atual-bar" style="display:none;justify-content:space-between;align-items:center;padding-top:8px;flex-wrap:wrap;gap:8px">
+      <span id="mov-op-atual-txt" style="color:#fff;font-size:14px;font-weight:800">—</span>
+      <span id="mov-saida-atual-txt" style="display:none;color:rgba(255,255,255,.85);font-size:12px;font-weight:700"></span>
+      <button id="mov-saida-trocar-btn" onclick="movTrocarTipoSaida()" style="display:none;background:rgba(255,255,255,.15);border:none;color:#fff;padding:8px 12px;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;min-height:36px">Trocar tipo de saída</button>
+      <button onclick="movTrocarOperador()" style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;min-height:36px">Trocar operador</button>
     </div>
   </div>
   <div class="mov-body">
@@ -1216,29 +1216,13 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
       <div id="mov-entrada-conferir-grid"></div>
     </div>
 
-    <div class="mov-popup" id="mov-entrada-lista-box" style="display:none">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div class="mov-ultima-hd" style="margin:0">📦 Caixas escaneadas — revisar antes de confirmar</div>
-        <button onclick="document.getElementById('mov-entrada-lista-box').style.display='none'" style="background:var(--cinza2);border:none;width:26px;height:26px;border-radius:50%;font-size:14px;cursor:pointer;color:var(--texto2);flex-shrink:0">✕</button>
-      </div>
-      <div id="mov-entrada-lista" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px;max-height:35vh;overflow-y:auto"></div>
-      <button id="mov-entrada-confirmar-btn" class="mb-save" style="width:100%;margin-top:10px;padding:12px;border-radius:8px;border:none;font-size:14px;font-weight:800;cursor:pointer" onclick="movConfirmarEntradas()" disabled>Escaneie ao menos uma caixa</button>
-    </div>
 
     <div class="mov-popup" id="mov-saida-conferir-popup" style="display:none;text-align:center">
       <div style="font-size:11px;font-weight:800;color:var(--texto2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📤 Confira a etiqueta lida</div>
       <div id="mov-saida-conferir-info" style="background:var(--cinza);border-radius:8px;padding:12px;margin-bottom:12px;text-align:left"></div>
-      <button class="mb-save" style="width:100%;padding:12px;border-radius:8px;border:none;font-size:14px;font-weight:800;cursor:pointer" onclick="movConferirSaidaAtual()">✅ Conferido — Adicionar à Leva</button>
+      <button class="mb-save" style="width:100%;padding:14px;border-radius:8px;border:none;font-size:15px;font-weight:800;cursor:pointer;min-height:48px" onclick="movConferirSaidaAtual()">✅ Conferido — Adicionar à Leva</button>
     </div>
 
-    <div class="mov-popup" id="mov-saida-pendentes-box" style="display:none">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div class="mov-ultima-hd" style="margin:0">📤 Leva desta saída — revisar antes de registrar</div>
-        <button onclick="document.getElementById('mov-saida-pendentes-box').style.display='none'" style="background:var(--cinza2);border:none;width:26px;height:26px;border-radius:50%;font-size:14px;cursor:pointer;color:var(--texto2);flex-shrink:0">✕</button>
-      </div>
-      <div id="mov-saida-pendentes-lista" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px;max-height:35vh;overflow-y:auto"></div>
-      <button id="mov-saida-confirmar-btn" class="mb-save" style="width:100%;padding:12px;border-radius:8px;border:none;font-size:14px;font-weight:800;cursor:pointer" onclick="movConfirmarSaidas()" disabled>Escaneie ao menos uma caixa</button>
-    </div>
 
     <div class="mov-popup" id="mov-saida-lista-box" style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -1282,11 +1266,17 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
     </div>
 
     <div class="mov-estoque-hd">
-      <div class="mov-estoque-titulo">📊 Estoque atual (em caixas) — Peça × Material</div>
-      <button class="mov-refresh" onclick="movCarregarEstoque()">↻ Atualizar</button>
+      <div class="mov-estoque-titulo">📦 Caixas bipadas nesta sessão</div>
     </div>
-    <div class="mov-tabela-wrap">
-      <table class="mov-tabela" id="mov-tabela"><thead><tr><th>Peça</th></tr></thead><tbody><tr><td>Carregando...</td></tr></tbody></table>
+    <div class="mov-scan-box" style="margin-bottom:0">
+      <div id="mov-hist-entrada-wrap" style="display:none">
+        <div id="mov-entrada-lista" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px;max-height:40vh;overflow-y:auto"></div>
+        <button id="mov-entrada-confirmar-btn" class="mb-save" style="width:100%;padding:14px;border-radius:8px;border:none;font-size:15px;font-weight:800;cursor:pointer;min-height:48px" onclick="movConfirmarEntradas()" disabled>Escaneie ao menos uma caixa</button>
+      </div>
+      <div id="mov-hist-saida-wrap" style="display:none">
+        <div id="mov-saida-pendentes-lista" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px;max-height:40vh;overflow-y:auto"></div>
+        <button id="mov-saida-confirmar-btn" class="mb-save" style="width:100%;padding:14px;border-radius:8px;border:none;font-size:15px;font-weight:800;cursor:pointer;min-height:48px" onclick="movConfirmarSaidas()" disabled>Escaneie ao menos uma caixa</button>
+      </div>
     </div>
 
     </div>
@@ -2733,7 +2723,8 @@ function movSetTipo(tipo){
   document.getElementById('mov-saida-lista-box').style.display='none';
   document.getElementById('mov-saida-conferir-popup').style.display='none';
   document.getElementById('mov-entrada-conferir-popup').style.display='none';
-  document.getElementById('mov-entrada-lista-box').style.display=(tipo==='ENTRADA')?'block':'none';
+  document.getElementById('mov-hist-entrada-wrap').style.display=(tipo==='ENTRADA')?'block':'none';
+  document.getElementById('mov-hist-saida-wrap').style.display=(tipo==='SAIDA')?'block':'none';
   if(tipo==='ENTRADA') renderMovEntradaLista();
   if(tipo==='SAIDA') renderMovSaidaPendentesLista();
   _movCamPausado=false;
@@ -2764,7 +2755,7 @@ function movTrocarTipoSaida(){
   S.movSaidaPendentes=[];
   S.movSaidaAguardando=null;
   document.getElementById('mov-saida-conferir-popup').style.display='none';
-  document.getElementById('mov-saida-pendentes-box').style.display='none';
+  document.getElementById('mov-hist-saida-wrap').style.display='none';
   renderMovSaidaLista();
   document.getElementById('mov-saida-atual-txt').style.display='none';
   document.getElementById('mov-saida-trocar-btn').style.display='none';
@@ -2897,11 +2888,9 @@ function movConferirSaidaAtual(){
   renderMovSaidaPendentesLista();
 }
 function renderMovSaidaPendentesLista(){
-  var box=document.getElementById('mov-saida-pendentes-box');
   var lista=document.getElementById('mov-saida-pendentes-lista');
-  if(!box||!lista) return;
+  if(!lista) return;
   var pend=S.movSaidaPendentes||[];
-  box.style.display=pend.length?'block':'none';
   lista.innerHTML=pend.map(function(c){
     return '<div class="caixa-row"><span>'+c.codPeca+' — '+c.peca+' ('+c.material+') Lote '+(c.lote||'—')+' — '+c.qtdPecas+' pç</span>'+
       '<span class="caixa-acts"><button class="bic bic-d" onclick="movRemoverPendenteSaida(\''+c.caixaId+'\')">🗑️</button></span></div>';
@@ -3027,8 +3016,6 @@ function movConfirmarConferente2Item(nome,matricula){
 }
 
 function renderMovEntradaLista(){
-  var box=document.getElementById('mov-entrada-lista-box');
-  if(box && S.movTipo==='ENTRADA') box.style.display='block';
   var lista=document.getElementById('mov-entrada-lista');
   if(!lista) return;
   var pend=S.movEntradaPendentes||[];
@@ -3210,14 +3197,16 @@ function movConfirmarManual(){
 }
 
 function movCarregarEstoque(){
+  if(!document.getElementById('mov-tabela')) return; // tabela foi substituída pelo histórico de bipagem nesta página
   google.script.run
     .withSuccessHandler(movRenderTabela)
-    .withFailureHandler(function(){ document.getElementById('mov-tabela').innerHTML='<tbody><tr><td>Erro ao carregar estoque.</td></tr></tbody>'; })
+    .withFailureHandler(function(){ var t=document.getElementById('mov-tabela'); if(t) t.innerHTML='<tbody><tr><td>Erro ao carregar estoque.</td></tr></tbody>'; })
     .getEstoqueAtual();
 }
 function movRenderTabela(dados){
   dados=dados||[];
   var tb=document.getElementById('mov-tabela');
+  if(!tb) return;
   if(!dados.length){
     tb.innerHTML='<thead><tr><th>Peça</th></tr></thead><tbody><tr><td style="text-align:center;color:var(--texto2);padding:20px">Nenhuma movimentação registrada ainda.</td></tr></tbody>';
     return;
