@@ -1609,10 +1609,11 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
   </div>
   <div class="mov-body">
     <div class="mov-scan-box">
-      <div class="fg"><label>Cliente</label><select id="nf-cliente"></select></div>
-      <div class="fg"><label>Destino (cidade/UF)</label><input type="text" id="nf-destino" placeholder="Ex: São Paulo"/></div>
-      <div class="fg"><label>Peça</label><select id="nf-peca"></select></div>
-      <div class="fg"><label>Número da Nota Fiscal</label><input type="text" id="nf-numero" placeholder="Ex: 9999"/></div>
+      <div class="fg"><label>Cliente</label><select id="nf-cliente" required></select></div>
+      <div class="fg"><label>Destino (cidade/UF)</label><input type="text" id="nf-destino" placeholder="Ex: São Paulo" required/></div>
+      <div class="fg"><label>Peça</label><select id="nf-peca" required></select></div>
+      <div class="fg"><label>Matéria-Prima</label><select id="nf-material" required></select></div>
+      <div class="fg"><label>Número da Nota Fiscal</label><input type="text" id="nf-numero" placeholder="Ex: 9999" required/></div>
       <button class="mb-save" style="width:100%;padding:14px;border-radius:8px;border:none;font-size:15px;font-weight:800;cursor:pointer;min-height:48px" onclick="gerarEImprimirNF()">🖨️ Gerar e Imprimir Etiqueta</button>
     </div>
   </div>
@@ -1899,10 +1900,12 @@ function entrarComoNotaFiscal(){
   mostrarPag('nota-fiscal');
   var selCliente=document.getElementById('nf-cliente');
   selCliente.innerHTML=(S.clientes&&S.clientes.length)
-    ? S.clientes.map(function(c){ return '<option value="'+esc(c.Nome)+'">'+c.Nome+'</option>'; }).join('')
+    ? '<option value="">Selecione...</option>'+S.clientes.map(function(c){ return '<option value="'+esc(c.Nome)+'">'+c.Nome+'</option>'; }).join('')
     : '<option value="">Nenhum cliente cadastrado — cadastre em Admin</option>';
   var selPeca=document.getElementById('nf-peca');
-  selPeca.innerHTML=S.pecas.map(function(p){ return '<option value="'+esc(p.Codigo)+'|'+esc(p.Nome)+'">'+p.Codigo+' — '+p.Nome+'</option>'; }).join('');
+  selPeca.innerHTML='<option value="">Selecione...</option>'+S.pecas.map(function(p){ return '<option value="'+esc(p.Codigo)+'|'+esc(p.Nome)+'">'+p.Codigo+' — '+p.Nome+'</option>'; }).join('');
+  var selMaterial=document.getElementById('nf-material');
+  selMaterial.innerHTML='<option value="">Selecione...</option>'+S.mats.map(function(m){ return '<option value="'+esc(m.Nome)+'">'+m.Nome+'</option>'; }).join('');
   document.getElementById('nf-destino').value='';
   document.getElementById('nf-numero').value='';
 }
@@ -1910,16 +1913,18 @@ function gerarEImprimirNF(){
   var cliente=document.getElementById('nf-cliente').value;
   var destino=document.getElementById('nf-destino').value.trim();
   var pecaVal=document.getElementById('nf-peca').value;
+  var material=document.getElementById('nf-material').value;
   var numero=document.getElementById('nf-numero').value.trim();
   if(!cliente){ toast('Selecione o cliente','aviso'); return; }
   if(!destino){ toast('Informe o destino','aviso'); return; }
   if(!pecaVal){ toast('Selecione a peça','aviso'); return; }
+  if(!material){ toast('Selecione a matéria-prima','aviso'); return; }
   if(!numero){ toast('Informe o número da nota fiscal','aviso'); return; }
   var partesPeca=pecaVal.split('|');
   var codigo=partesPeca[0], nomePeca=partesPeca[1];
   var template=(S.modelosEtiqueta&&S.modelosEtiqueta.NF)||'';
   if(!template){ toast('Modelo de etiqueta de NF não carregado — recarregue a página','erro'); return; }
-  var valores={ NF:esc(numero), CODIGO:codigo, DESCRICAO:esc(nomePeca), CLIENTE:esc(cliente), DESTINO:esc(destino) };
+  var valores={ NF:esc(numero), CODIGO:codigo, DESCRICAO:esc(nomePeca+' - '+material), CLIENTE:esc(cliente), DESTINO:esc(destino) };
   var html=mdlPreencher(template,valores);
   var pa=document.getElementById('print-area');
   pa.innerHTML='<div class="etiq-fisica">'+html+'</div>';
