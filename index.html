@@ -458,6 +458,78 @@ var backend = {
     } catch (e) { return {}; }
   },
 
+  // ── BALANÇO DE ESTOQUE (reconciliação — bipa fisicamente e compara com o sistema) ──
+  async criarBalanco(escopoCodigo, escopoNome, dataAgendada, criadoPor) {
+    try {
+      var status = dataAgendada ? 'AGENDADO' : 'EM_ANDAMENTO';
+      var payload = { escopo_codigo: escopoCodigo || null, escopo_nome: escopoNome || null, data_agendada: dataAgendada || null, status: status, criado_por: criadoPor || 'Admin' };
+      if (status === 'EM_ANDAMENTO') payload.data_inicio = new Date().toISOString();
+      var rows = await sbPost('balancos', payload);
+      await inserirLog('BALANCO_CRIADO', criadoPor || 'Admin', 'Balanço criado: ' + (escopoNome || 'Todas as peças'), dataAgendada ? 'Agendado para ' + dataAgendada : 'Início imediato');
+      return { ok: true, id: rows[0].id };
+    } catch (e) { return { ok: false, erro: e.message }; }
+  },
+  async getBalancoAtivo() {
+    try {
+      var rows = await sbGet('balancos?status=in.(AGENDADO,EM_ANDAMENTO)&order=data_criacao.desc&limit=1');
+      return rows.length ? {
+        ID: rows[0].id, EscopoCodigo: rows[0].escopo_codigo, EscopoNome: rows[0].escopo_nome,
+        DataAgendada: rows[0].data_agendada, Status: rows[0].status, CriadoPor: rows[0].criado_por
+      } : null;
+    } catch (e) { return null; }
+  },
+  async listarBalancos() {
+    try {
+      var rows = await sbGet('balancos?order=data_criacao.desc&limit=50');
+      return rows.map(function (r) {
+        return { ID: r.id, EscopoCodigo: r.escopo_codigo, EscopoNome: r.escopo_nome, DataAgendada: r.data_agendada,
+          Status: r.status, CriadoPor: r.criado_por, DataCriacao: fmtDataHoraBR(r.data_criacao),
+          DataConclusao: r.data_conclusao ? fmtDataHoraBR(r.data_conclusao) : '', Resultado: r.resultado || null };
+      });
+    } catch (e) { return []; }
+  },
+  async iniciarBalanco(id) {
+    try {
+      await sbPatch('balancos', 'id=eq.' + id, { status: 'EM_ANDAMENTO', data_inicio: new Date().toISOString() });
+      return { ok: true };
+    } catch (e) { return { ok: false, erro: e.message }; }
+  },
+  async cancelarBalanco(id) {
+    try {
+      await sbPatch('balancos', 'id=eq.' + id, { status: 'CANCELADO' });
+      return { ok: true };
+    } catch (e) { return { ok: false, erro: e.message }; }
+  },
+  async getCaixasEmEstoque(codigoPeca) {
+    try {
+      var movs = await sbGet('movimentacoes?select=caixa_id,tipo,data_hora&caixa_id=not.is.null&order=data_hora.asc&limit=100000');
+      var ultimoTipo = {};
+      movs.forEach(function (m) { if (m.caixa_id) ultimoTipo[m.caixa_id] = m.tipo; });
+      var idsEmEstoque = Object.keys(ultimoTipo).filter(function (id) { return ultimoTipo[id] === 'ENTRADA'; });
+      if (!idsEmEstoque.length) return [];
+      var filtro = 'id=in.(' + idsEmEstoque.join(',') + ')';
+      if (codigoPeca) filtro += '&codigo_peca=eq.' + encodeURIComponent(codigoPeca);
+      var prod = await sbGet('producao?' + filtro + '&select=id,codigo_peca,peca,material,lote,numero_caixa');
+      return prod.map(function (p) { return { ID: p.id, CodigoPeca: p.codigo_peca, Peca: p.peca, Material: p.material, Lote: p.lote, NumeroCaixa: p.numero_caixa }; });
+    } catch (e) { return []; }
+  },
+  async concluirBalanco(id, resultado, correcoes, usuario) {
+    try {
+      for (var i = 0; i < (correcoes || []).length; i++) {
+        var c = correcoes[i];
+        var idMov = gerarID();
+        await sbPost('movimentacoes', {
+          id: idMov, tipo: c.tipo, caixa_id: c.caixaId, peca: c.peca, codigo_peca: c.codigoPeca, material: c.material,
+          lote: c.lote || '', qtd_caixas: 1, origem: 'MANUAL', usuario: usuario || 'Admin',
+          motivo: 'Balanço de estoque #' + id, tipo_saida: c.tipo === 'SAIDA' ? 'CORRECAO' : ''
+        }, 'return=minimal');
+      }
+      await sbPatch('balancos', 'id=eq.' + id, { status: 'CONCLUIDO', data_conclusao: new Date().toISOString(), resultado: resultado });
+      await inserirLog('BALANCO_CONCLUIDO', usuario || 'Admin', 'Balanço #' + id + ' concluído', JSON.stringify(resultado));
+      return { ok: true };
+    } catch (e) { return { ok: false, erro: e.message }; }
+  },
+
   async getHistoricoCaixa(id) {
     try {
       var prodRows = await sbGet('producao?id=eq.' + id);
@@ -604,6 +676,8 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-fa
 
 /* ── TOPBAR ── */
 #topbar{height:52px;background:var(--azul);display:flex;align-items:center;justify-content:space-between;padding:0 12px;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,.5);z-index:50}
+#balanco-aviso-global{background:#d68910;color:#fff;padding:8px 16px;font-size:12px;font-weight:800;text-align:center;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;z-index:9500}
+#balanco-aviso-global.em-andamento{background:#c0392b}
 .tb-brand{color:#fff;font-size:18px;font-weight:900;letter-spacing:3px;display:flex;align-items:center;gap:8px}
 .tb-tag{background:var(--laranja);font-size:8px;padding:3px 6px;border-radius:4px;letter-spacing:1px;font-weight:800}
 .tb-right{display:flex;align-items:center;gap:8px}
@@ -1080,6 +1154,9 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
 </div>
 
 <!-- TOPBAR -->
+<!-- AVISO GLOBAL DE BALANÇO — visível em qualquer tela, independente do modo -->
+<div id="balanco-aviso-global" style="display:none"></div>
+
 <div id="topbar" style="display:none">
   <div class="tb-brand">VITALBOR <span class="tb-tag">Embalagem</span></div>
   <div class="tb-right">
@@ -1481,6 +1558,7 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
     <button class="adm-nav-btn" id="adm-nav-maquinas" onclick="admNavIr('maquinas')"><span style="display:inline-flex;vertical-align:middle;margin-right:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></span>Máquinas</button>
     <button class="adm-nav-btn" id="adm-nav-movimentacoes" onclick="admNavIr('movimentacoes')"><span style="display:inline-flex;vertical-align:middle;margin-right:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg></span>Movimentações</button>
     <button class="adm-nav-btn" id="adm-nav-modelos" onclick="admNavIr('modelos')"><span style="display:inline-flex;vertical-align:middle;margin-right:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 12.4L12.4 20.6a2 2 0 01-2.8 0l-7.2-7.2a2 2 0 010-2.8L10.6 2.4A2 2 0 0112 2h6a2 2 0 012 2v6a2 2 0 01-.6 1.4z"/><circle cx="16.5" cy="7.5" r="1"/></svg></span>Modelos de Etiqueta</button>
+    <button class="adm-nav-btn" id="adm-nav-balanco" onclick="admNavIr('balanco')"><span style="display:inline-flex;vertical-align:middle;margin-right:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></span>Balanço de Estoque</button>
     <button class="adm-nav-btn" id="adm-nav-logs" onclick="admNavIr('logs')"><span style="display:inline-flex;vertical-align:middle;margin-right:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></span>Logs</button>
   </div>
 
@@ -1565,7 +1643,29 @@ function carregarDados(){
   google.script.run.withSuccessHandler(function(d){ S.mats=d||[];  ck(); }).withFailureHandler(function(){ S.mats=[];  ck(); }).getMateriais();
   google.script.run.withSuccessHandler(function(d){ S.maqs=d||[];  S.hasMaq=d&&d.length>0; ck(); }).withFailureHandler(function(){ S.maqs=[]; ck(); }).getMaquinas();
   google.script.run.withSuccessHandler(function(d){ S.modelosEtiqueta=d||{}; ck(); }).withFailureHandler(function(){ S.modelosEtiqueta={}; ck(); }).getModelosEtiqueta();
+  verificarBalancoAtivo();
   setTimeout(function(){ var l=document.getElementById('loader'); if(l.style.display!=='none'){l.style.display='none';} },20000);
+}
+function verificarBalancoAtivo(){
+  google.script.run
+    .withSuccessHandler(function(b){
+      var aviso=document.getElementById('balanco-aviso-global');
+      if(!aviso) return;
+      if(!b){ aviso.style.display='none'; return; }
+      var escopo=b.EscopoNome||'todas as peças';
+      var txt;
+      if(b.Status==='AGENDADO'){
+        aviso.classList.remove('em-andamento');
+        txt='🗓️ Balanço de estoque agendado pra '+(b.DataAgendada?b.DataAgendada.split('-').reverse().join('/'):'—')+' — escopo: '+escopo;
+      } else {
+        aviso.classList.add('em-andamento');
+        txt='⚠️ Balanço de estoque EM ANDAMENTO ('+escopo+') — dados de estoque podem estar sendo conferidos';
+      }
+      aviso.style.display='flex';
+      aviso.textContent=txt;
+    })
+    .withFailureHandler(function(){})
+    .getBalancoAtivo();
 }
 
 // ═══════════════════════════════════════
@@ -2101,6 +2201,12 @@ function admNavIr(secao){
     return;
   }
 
+  if(secao==='balanco'){
+    content.innerHTML='<div class="adm-dash" id="adm-balanco-inner"></div>';
+    renderBalancoAdmin();
+    return;
+  }
+
   // Cadastros
   content.innerHTML=
     '<div class="adm-cadastros">'+
@@ -2256,6 +2362,225 @@ var DADOS_EXEMPLO_PECA = {
 var DADOS_EXEMPLO_CONF = {
   EMPRESA:'VITALBOR', CONFERENTE_1:'1 — João Silva', DATA_CONF:'06/07/2026'
 };
+
+// ═══════════════════════════════════════
+// BALANÇO DE ESTOQUE (reconciliação)
+// ═══════════════════════════════════════
+function renderBalancoAdmin(){
+  var inner=document.getElementById('adm-balanco-inner');
+  inner.innerHTML=
+    '<div class="dash-filtro">'+
+      '<div class="df-titulo">📋 Novo Balanço</div>'+
+      '<div class="df-row">'+
+        '<div class="df-campo"><label>Escopo</label><select id="bal-escopo"><option value="">Todas as peças</option>'+
+          S.pecas.map(function(p){ return '<option value="'+esc(p.Codigo)+'|'+esc(p.Nome)+'">'+p.Codigo+' — '+p.Nome+'</option>'; }).join('')+
+        '</select></div>'+
+        '<div class="df-campo"><label>Agendar pra data (opcional)</label><input type="date" id="bal-data"/></div>'+
+      '</div>'+
+      '<div style="font-size:11px;color:var(--texto2);margin-bottom:8px">Se deixar a data em branco, o balanço já entra "Em andamento" e o aviso aparece em todas as telas na hora.</div>'+
+      '<button class="btn-filtrar" onclick="criarNovoBalanco()">📋 Criar Balanço</button>'+
+    '</div>'+
+    '<div class="hist-row"><div class="hist-titulo">Histórico de Balanços</div></div>'+
+    '<div id="balanco-lista"><div class="dash-empty"><div class="spinner" style="border-top-color:var(--azul3);margin:0 auto"></div></div></div>';
+  carregarListaBalancos();
+}
+function criarNovoBalanco(){
+  var v=document.getElementById('bal-escopo').value;
+  var partes=v?v.split('|'):['',''];
+  var data=document.getElementById('bal-data').value;
+  google.script.run
+    .withSuccessHandler(function(r){
+      if(!r||!r.ok){ toast(r&&r.erro?r.erro:'Erro ao criar balanço','erro'); return; }
+      toast('Balanço criado!','sucesso');
+      renderBalancoAdmin();
+      verificarBalancoAtivo();
+    })
+    .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); })
+    .criarBalanco(partes[0]||null, partes[1]||null, data||null, S.movOperador?S.movOperador.nome:'Admin');
+}
+function carregarListaBalancos(){
+  google.script.run
+    .withSuccessHandler(function(lista){
+      var el=document.getElementById('balanco-lista');
+      if(!lista||!lista.length){ el.innerHTML='<div class="dash-empty"><div class="dei">📋</div><div>Nenhum balanço registrado ainda.</div></div>'; return; }
+      el.innerHTML=lista.map(function(b){
+        var statusTxt={AGENDADO:'🗓️ Agendado',EM_ANDAMENTO:'⏳ Em andamento',CONCLUIDO:'✅ Concluído',CANCELADO:'✕ Cancelado'}[b.Status]||b.Status;
+        var acoes='';
+        if(b.Status==='AGENDADO'||b.Status==='EM_ANDAMENTO'){
+          acoes='<button class="btn-novo" onclick="iniciarContagemBalanco(\''+b.ID+'\',\''+esc(b.EscopoCodigo||'')+'\',\''+esc(b.EscopoNome||'Todas as peças')+'\')">'+(b.Status==='AGENDADO'?'▶️ Iniciar Contagem':'▶️ Continuar Contagem')+'</button>'+
+            ' <button class="bic bic-d" onclick="cancelarBalancoConfirm(\''+b.ID+'\')">🗑️</button>';
+        } else if(b.Status==='CONCLUIDO' && b.Resultado){
+          acoes='<span style="font-size:11px;color:var(--texto2)">Confirmadas: '+b.Resultado.confirmadas+' • Corrigidas (faltando): '+b.Resultado.faltando+' • Corrigidas (sobrando): '+b.Resultado.sobrando+'</span>';
+        }
+        return '<div class="ic"><div class="ic-info"><div class="ic-nome">'+(b.EscopoNome||'Todas as peças')+'</div>'+
+          '<div class="ic-det"><span class="badge" style="background:var(--cinza2)">'+statusTxt+'</span>'+
+          (b.DataAgendada?'<span>Agendado: '+b.DataAgendada.split('-').reverse().join('/')+'</span>':'')+
+          '<span>Criado: '+b.DataCriacao+'</span>'+
+          (b.DataConclusao?'<span>Concluído: '+b.DataConclusao+'</span>':'')+
+          '</div></div><div class="ic-acts">'+acoes+'</div></div>';
+      }).join('');
+    })
+    .withFailureHandler(function(){ document.getElementById('balanco-lista').innerHTML='<p style="padding:12px;color:#c0392b">Erro ao carregar.</p>'; })
+    .listarBalancos();
+}
+function cancelarBalancoConfirm(id){
+  if(!confirm('Cancelar este balanço? Nada será aplicado no estoque.')) return;
+  google.script.run
+    .withSuccessHandler(function(r){ if(r&&r.ok){ toast('Balanço cancelado','aviso'); renderBalancoAdmin(); verificarBalancoAtivo(); } else toast('Erro','erro'); })
+    .withFailureHandler(function(){ toast('Erro','erro'); })
+    .cancelarBalanco(id);
+}
+
+// ── Execução da contagem (bipagem física + reconciliação) ──
+var _balCamStream=null, _balCamRAF=null, _balCamPausado=false, _balCamCooldownAte=0;
+function iniciarContagemBalanco(id,escopoCodigo,escopoNome){
+  S.balancoAtivoExec={ id:id, escopoCodigo:escopoCodigo||null, escopoNome:escopoNome };
+  S.balancoBipadas=[];
+  google.script.run.withSuccessHandler(function(){}).withFailureHandler(function(){}).iniciarBalanco(id);
+  var inner=document.getElementById('adm-balanco-inner');
+  inner.innerHTML=
+    '<div class="mov-estoque-hd"><div class="mov-estoque-titulo">📋 Contagem: '+escopoNome+'</div></div>'+
+    '<div class="mov-scan-box">'+
+      '<div class="mov-scan-lbl">Bipe cada caixa que estiver fisicamente no chão de fábrica</div>'+
+      '<div id="bal-cam-fechada" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:var(--cinza);border-radius:var(--radius);padding:32px 20px;border:2px dashed var(--cinza3)">'+
+        '<button onclick="balAbrirCamera()" style="background:var(--azul3);color:#fff;border:none;padding:14px 24px;border-radius:var(--radius);font-size:15px;font-weight:900;cursor:pointer;min-height:48px">📷 Abrir Câmera</button>'+
+      '</div>'+
+      '<div id="bal-cam-aberta" style="display:none">'+
+        '<div class="mov-cam-wrap"><video id="bal-cam-video" autoplay playsinline muted></video>'+
+          '<div class="mov-cam-mira"><span class="cam-corner tl"></span><span class="cam-corner tr"></span><span class="cam-corner bl"></span><span class="cam-corner br"></span><span class="cam-scanline"></span></div>'+
+          '<div class="mov-cam-status" id="bal-cam-status">Iniciando câmera...</div></div>'+
+        '<button onclick="balFecharCamera()" style="width:100%;margin-top:10px;background:var(--cinza2);color:var(--texto2);border:none;padding:12px;border-radius:var(--radius-sm);font-size:13px;font-weight:800;cursor:pointer;min-height:44px">✕ Fechar câmera</button>'+
+      '</div>'+
+      '<canvas id="bal-cam-canvas" style="display:none"></canvas>'+
+    '</div>'+
+    '<div class="mov-ultima vis"><div class="mov-ultima-hd">Caixas bipadas nesta contagem</div>'+
+      '<div style="font-size:32px;font-weight:900;color:var(--azul)" id="bal-contador">0</div>'+
+      '<div id="bal-lista-bipadas" style="max-height:200px;overflow-y:auto;font-size:12px;color:var(--texto2)"></div>'+
+    '</div>'+
+    '<button class="btn-filtrar" style="margin-top:10px" onclick="balFinalizarContagem()">✅ Finalizar Contagem e Ver Diferenças</button>';
+}
+function balAbrirCamera(){
+  document.getElementById('bal-cam-fechada').style.display='none';
+  document.getElementById('bal-cam-aberta').style.display='block';
+  var status=document.getElementById('bal-cam-status');
+  if(typeof jsQR==='undefined'){ status.textContent='Erro: biblioteca de QR não carregou.'; return; }
+  navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal:'environment' } }, audio:false })
+    .then(function(stream){
+      _balCamStream=stream;
+      var video=document.getElementById('bal-cam-video');
+      video.srcObject=stream;
+      video.onloadedmetadata=function(){ video.play(); status.classList.add('oculto'); balLoopCamera(); };
+    })
+    .catch(function(e){ status.textContent='Não foi possível acessar a câmera ('+(e&&e.name?e.name:'erro')+').'; });
+}
+function balFecharCamera(){
+  if(_balCamRAF){ cancelAnimationFrame(_balCamRAF); _balCamRAF=null; }
+  if(_balCamStream){ _balCamStream.getTracks().forEach(function(t){ t.stop(); }); _balCamStream=null; }
+  var fechada=document.getElementById('bal-cam-fechada'); var aberta=document.getElementById('bal-cam-aberta');
+  if(aberta) aberta.style.display='none';
+  if(fechada) fechada.style.display='flex';
+}
+function balLoopCamera(){
+  var video=document.getElementById('bal-cam-video');
+  var canvas=document.getElementById('bal-cam-canvas');
+  var ctx=canvas.getContext('2d', { willReadFrequently:true });
+  function tick(){
+    if(!_balCamStream) return;
+    if(video.readyState===video.HAVE_ENOUGH_DATA && !_balCamPausado && Date.now()>=_balCamCooldownAte){
+      canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+      ctx.drawImage(video,0,0,canvas.width,canvas.height);
+      try{
+        var img=ctx.getImageData(0,0,canvas.width,canvas.height);
+        var codigo=jsQR(img.data,img.width,img.height,{ inversionAttempts:'dontInvert' });
+        if(codigo && codigo.data){
+          _balCamCooldownAte=Date.now()+1800;
+          var raw=String(codigo.data).trim(); var caixaId=raw;
+          try{ var j=JSON.parse(raw); if(j&&j.id) caixaId=j.id; }catch(e){}
+          balRegistrarBipagem(caixaId);
+        }
+      }catch(e){ console.error('Erro na leitura de QR:',e); }
+    }
+    _balCamRAF=requestAnimationFrame(tick);
+  }
+  _balCamRAF=requestAnimationFrame(tick);
+}
+function balRegistrarBipagem(caixaId){
+  S.balancoBipadas=S.balancoBipadas||[];
+  if(S.balancoBipadas.indexOf(caixaId)>=0){ return; } // já contada, ignora silenciosamente (comum bipar 2x sem querer)
+  tocarBeep();
+  S.balancoBipadas.push(caixaId);
+  document.getElementById('bal-contador').textContent=S.balancoBipadas.length;
+  var lista=document.getElementById('bal-lista-bipadas');
+  lista.innerHTML=formatarReferencia(caixaId)+'<br>'+lista.innerHTML;
+}
+function balFinalizarContagem(){
+  balFecharCamera();
+  var exec=S.balancoAtivoExec;
+  if(!exec) return;
+  var inner=document.getElementById('adm-balanco-inner');
+  inner.innerHTML='<div class="dash-empty"><div class="spinner" style="border-top-color:var(--azul3);margin:0 auto"></div><div>Comparando com o sistema...</div></div>';
+  google.script.run
+    .withSuccessHandler(function(esperadas){
+      var esperadasIds=esperadas.map(function(e){ return e.ID; });
+      var bipadas=S.balancoBipadas||[];
+      var confirmadas=bipadas.filter(function(id){ return esperadasIds.indexOf(id)>=0; });
+      var faltandoIds=esperadasIds.filter(function(id){ return bipadas.indexOf(id)<0; });
+      var sobrandoIds=bipadas.filter(function(id){ return esperadasIds.indexOf(id)<0; });
+      var faltando=esperadas.filter(function(e){ return faltandoIds.indexOf(e.ID)>=0; });
+      if(!sobrandoIds.length){ renderBalancoReconciliacao(exec,confirmadas.length,faltando,[]); return; }
+      // busca dados das caixas "sobrando" uma a uma (não estavam na lista de esperadas)
+      var sobrandoInfo=[]; var pend=sobrandoIds.length;
+      sobrandoIds.forEach(function(id){
+        google.script.run
+          .withSuccessHandler(function(d){ if(d) sobrandoInfo.push(d); pend--; if(pend===0) renderBalancoReconciliacao(exec,confirmadas.length,faltando,sobrandoInfo); })
+          .withFailureHandler(function(){ pend--; if(pend===0) renderBalancoReconciliacao(exec,confirmadas.length,faltando,sobrandoInfo); })
+          .getCaixaPorId(id);
+      });
+    })
+    .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); })
+    .getCaixasEmEstoque(exec.escopoCodigo);
+}
+function renderBalancoReconciliacao(exec,totalConfirmadas,faltando,sobrando){
+  S._balFaltando=faltando; S._balSobrando=sobrando;
+  var inner=document.getElementById('adm-balanco-inner');
+  var html='<div class="mov-estoque-hd"><div class="mov-estoque-titulo">📋 Resultado da Contagem: '+exec.escopoNome+'</div></div>';
+  html+='<div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:14px">'+
+    '<div class="kpi v"><div class="kl">Confirmadas</div><div class="kv">'+totalConfirmadas+'</div><div class="ks">bateram certinho</div></div>'+
+    '<div class="kpi r"><div class="kl">Faltando</div><div class="kv">'+faltando.length+'</div><div class="ks">sistema dizia em estoque, não foi achada</div></div>'+
+    '<div class="kpi o"><div class="kl">Sobrando</div><div class="kv">'+sobrando.length+'</div><div class="ks">achada, sistema não sabia</div></div>'+
+  '</div>';
+  if(faltando.length){
+    html+='<div class="hist-titulo" style="margin-bottom:6px">🔴 Faltando (vai gerar SAÍDA de correção)</div>';
+    html+=faltando.map(function(f){ return '<div class="caixa-row"><span>'+f.CodigoPeca+' — '+f.Peca+' ('+f.Material+') Lote '+(f.Lote||'—')+' — '+formatarReferencia(f.ID)+'</span></div>'; }).join('');
+  }
+  if(sobrando.length){
+    html+='<div class="hist-titulo" style="margin:12px 0 6px">🟢 Sobrando (vai gerar ENTRADA de correção)</div>';
+    html+=sobrando.map(function(s){ return '<div class="caixa-row"><span>'+s.CodigoPeca+' — '+s.Peca+' ('+s.Material+') Lote '+(s.Lote||'—')+' — '+formatarReferencia(s.ID)+'</span></div>'; }).join('');
+  }
+  if(!faltando.length && !sobrando.length){
+    html+='<div class="dash-empty"><div class="dei">✅</div><div>Tudo bateu certinho — nenhuma correção necessária.</div></div>';
+  }
+  html+='<button class="btn-filtrar" style="margin-top:14px" onclick="balAplicarCorrecoes()">✅ Aplicar Correções e Concluir Balanço</button>';
+  inner.innerHTML=html;
+}
+function balAplicarCorrecoes(){
+  var exec=S.balancoAtivoExec;
+  if(!exec) return;
+  var faltando=S._balFaltando||[], sobrando=S._balSobrando||[];
+  var correcoes=faltando.map(function(f){ return { tipo:'SAIDA', caixaId:f.ID, peca:f.Peca, codigoPeca:f.CodigoPeca, material:f.Material, lote:f.Lote }; })
+    .concat(sobrando.map(function(s){ return { tipo:'ENTRADA', caixaId:s.ID, peca:s.Peca, codigoPeca:s.CodigoPeca, material:s.Material, lote:s.Lote }; }));
+  var resultado={ confirmadas: (S.balancoBipadas||[]).length - sobrando.length, faltando: faltando.length, sobrando: sobrando.length };
+  google.script.run
+    .withSuccessHandler(function(r){
+      if(!r||!r.ok){ toast(r&&r.erro?r.erro:'Erro ao concluir','erro'); return; }
+      toast('Balanço concluído! '+correcoes.length+' correção(ões) aplicada(s).','sucesso');
+      S.balancoAtivoExec=null; S.balancoBipadas=[];
+      renderBalancoAdmin();
+      verificarBalancoAtivo();
+    })
+    .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); })
+    .concluirBalanco(exec.id, resultado, correcoes, S.movOperador?S.movOperador.nome:'Admin');
+}
 
 function renderModelos(){
   var inner=document.getElementById('adm-modelos-inner');
