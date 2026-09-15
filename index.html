@@ -947,6 +947,8 @@ select.inp-pos option{color:#000;background:#fff}
 .mov-ultima{background:#fff;border-radius:var(--radius);padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:14px;display:none}
 .mov-popup{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:600;width:92%;max-width:440px;background:#fff;border-radius:var(--radius);padding:14px;box-shadow:0 12px 40px rgba(0,0,0,.4);animation:popIn .22s ease}
 @keyframes popIn{from{opacity:0;transform:translateX(-50%) translateY(-18px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+.mov-cam-wrap.erro-flash{animation:flashErro .5s ease}
+@keyframes flashErro{0%,100%{box-shadow:0 4px 16px rgba(0,0,0,.25)}30%{box-shadow:0 0 0 8px rgba(192,57,43,.7)}}
 .mov-ultima.vis{display:block}
 .mov-ultima-hd{font-size:11px;font-weight:800;color:var(--texto2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
 .mov-ultima-corpo{display:flex;align-items:center;gap:10px}
@@ -1201,9 +1203,24 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
       <button id="mov-entrada-confirmar-btn" class="mb-save" style="width:100%;margin-top:10px;padding:12px;border-radius:8px;border:none;font-size:14px;font-weight:800;cursor:pointer" onclick="movConfirmarEntradas()" disabled>✅ Confirme o Conferente 2 pra liberar o envio</button>
     </div>
 
+    <div class="mov-popup" id="mov-saida-conferir-popup" style="display:none;text-align:center">
+      <div style="font-size:11px;font-weight:800;color:var(--texto2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📤 Confira a etiqueta lida</div>
+      <div id="mov-saida-conferir-info" style="background:var(--cinza);border-radius:8px;padding:12px;margin-bottom:12px;text-align:left"></div>
+      <button class="mb-save" style="width:100%;padding:12px;border-radius:8px;border:none;font-size:14px;font-weight:800;cursor:pointer" onclick="movConferirSaidaAtual()">✅ Conferido — Adicionar à Leva</button>
+    </div>
+
+    <div class="mov-popup" id="mov-saida-pendentes-box" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div class="mov-ultima-hd" style="margin:0">📤 Leva desta saída — revisar antes de registrar</div>
+        <button onclick="document.getElementById('mov-saida-pendentes-box').style.display='none'" style="background:var(--cinza2);border:none;width:26px;height:26px;border-radius:50%;font-size:14px;cursor:pointer;color:var(--texto2);flex-shrink:0">✕</button>
+      </div>
+      <div id="mov-saida-pendentes-lista" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px;max-height:35vh;overflow-y:auto"></div>
+      <button id="mov-saida-confirmar-btn" class="mb-save" style="width:100%;padding:12px;border-radius:8px;border:none;font-size:14px;font-weight:800;cursor:pointer" onclick="movConfirmarSaidas()" disabled>Escaneie ao menos uma caixa</button>
+    </div>
+
     <div class="mov-popup" id="mov-saida-lista-box" style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div class="mov-ultima-hd" style="margin:0">📤 Caixas desta saída — conferir</div>
+        <div class="mov-ultima-hd" style="margin:0">📋 Histórico desta saída (já registrada)</div>
         <button onclick="document.getElementById('mov-saida-lista-box').style.display='none'" style="background:var(--cinza2);border:none;width:26px;height:26px;border-radius:50%;font-size:14px;cursor:pointer;color:var(--texto2);flex-shrink:0">✕</button>
       </div>
       <div id="mov-saida-lista" style="display:flex;flex-direction:column;gap:4px;max-height:35vh;overflow-y:auto"></div>
@@ -2635,6 +2652,8 @@ function movSelecionarOperador(nome,matricula){
   S.movNotaFiscal='';
   S.movCaixasSessao=[];
   S.movEntradaPendentes=[];
+  S.movSaidaPendentes=[];
+  S.movSaidaAguardando=null;
   document.getElementById('mov-saida-atual-txt').style.display='none';
   document.getElementById('mov-saida-trocar-btn').style.display='none';
   document.getElementById('mov-sel-operador').style.display='none';
@@ -2656,6 +2675,8 @@ function movTrocarOperador(){
   S.movNotaFiscal='';
   S.movCaixasSessao=[];
   S.movEntradaPendentes=[];
+  S.movSaidaPendentes=[];
+  S.movSaidaAguardando=null;
   document.getElementById('mov-saida-atual-txt').style.display='none';
   document.getElementById('mov-saida-trocar-btn').style.display='none';
   document.getElementById('mov-conteudo').style.display='none';
@@ -2678,9 +2699,11 @@ function movSetTipo(tipo){
   }
   document.getElementById('mov-sel-tiposaida').style.display='none';
   document.getElementById('mov-conteudo').style.display='';
-  document.getElementById('mov-saida-lista-box').style.display=(tipo==='SAIDA')?'block':'none';
+  document.getElementById('mov-saida-lista-box').style.display='none';
+  document.getElementById('mov-saida-conferir-popup').style.display='none';
   document.getElementById('mov-entrada-lista-box').style.display=(tipo==='ENTRADA')?'block':'none';
   if(tipo==='ENTRADA') renderMovEntradaLista();
+  if(tipo==='SAIDA') renderMovSaidaPendentesLista();
   _movCamPausado=false;
 }
 function movEscolherTipoSaida(tipo){
@@ -2693,6 +2716,8 @@ function movEscolherTipoSaida(tipo){
   }
   S.movTipoSaida=tipo;
   S.movCaixasSessao=[];
+  S.movSaidaPendentes=[];
+  S.movSaidaAguardando=null;
   renderMovSaidaLista();
   var txt=document.getElementById('mov-saida-atual-txt');
   txt.style.display='';
@@ -2704,6 +2729,10 @@ function movTrocarTipoSaida(){
   S.movTipoSaida=null;
   S.movNotaFiscal='';
   S.movCaixasSessao=[];
+  S.movSaidaPendentes=[];
+  S.movSaidaAguardando=null;
+  document.getElementById('mov-saida-conferir-popup').style.display='none';
+  document.getElementById('mov-saida-pendentes-box').style.display='none';
   renderMovSaidaLista();
   document.getElementById('mov-saida-atual-txt').style.display='none';
   document.getElementById('mov-saida-trocar-btn').style.display='none';
@@ -2732,11 +2761,17 @@ function movSelecionarConferente2(nome,matricula){
   S.movConferente2={ nome:nome, matricula:matricula };
   renderConf2Picker();
   atualizarBtnConfirmarEntrada();
+  if(S.movTipo==='ENTRADA'){
+    _movCamPausado=false;
+    var status=document.getElementById('mov-cam-status');
+    if(status) status.classList.add('oculto');
+  }
 }
 function movTrocarConferente2(){
   S.movConferente2=null;
   renderConf2Picker();
   atualizarBtnConfirmarEntrada();
+  if(S.movTipo==='ENTRADA' && (S.movEntradaPendentes||[]).length) _movCamPausado=true;
 }
 function movMontarSelectManual(){
   var sp=document.getElementById('mm-peca'); if(!sp) return;
@@ -2829,17 +2864,86 @@ function movProcessarCodigo(raw){
   try{ var j=JSON.parse(raw); if(j&&j.id) caixaId=j.id; }catch(e){}
 
   if(S.movTipo==='ENTRADA'){ movProcessarCodigoEntrada(caixaId); return; }
+  if(S.movTipo==='SAIDA'){ movProcessarCodigoSaida(caixaId); return; }
+}
 
-  _movCamPausado=true; // trava a leitura durante a chamada, evita disparo duplicado
-  var dados={ CaixaID:caixaId, Tipo:S.movTipo, Origem:'BIPADO', Usuario:movUsuarioAtual() };
-  if(S.movTipo==='SAIDA' && S.movTipoSaida){
-    dados.TipoSaida=S.movTipoSaida;
-    dados.NotaFiscal=S.movNotaFiscal||'';
+// ── SAÍDA: bipa → consulta a caixa (sem registrar) → mostra card de conferência → precisa clicar "Conferido" ──
+function movProcessarCodigoSaida(caixaId){
+  S.movSaidaPendentes=S.movSaidaPendentes||[];
+  if(S.movSaidaPendentes.some(function(x){ return x.caixaId===caixaId; })){
+    mostrarErroScan('Essa caixa já está na leva desta saída');
+    return;
   }
+  _movCamPausado=true;
   google.script.run
-    .withSuccessHandler(function(r){ _movCamPausado=false; movTratarResultado(r,caixaId); })
-    .withFailureHandler(function(e){ _movCamPausado=false; toast('Erro: '+(e?e.message:''),'erro'); })
-    .registrarMovimentacao(dados,null);
+    .withSuccessHandler(function(d){
+      if(!d){ _movCamPausado=false; mostrarErroScan('Caixa não encontrada na produção. Confira o código lido.'); return; }
+      tocarBeep();
+      S.movSaidaAguardando={ caixaId:caixaId, peca:d.Peca, codPeca:d.CodigoPeca, material:d.Material, lote:d.Lote, qtdPecas:d.QtdPecas, numeroCaixa:d.NumeroCaixa };
+      var info=document.getElementById('mov-saida-conferir-info');
+      info.innerHTML='<div style="font-weight:900;color:var(--azul);font-size:14px">'+d.CodigoPeca+' — '+d.Peca+'</div>'+
+        '<div style="font-size:12px;color:var(--texto2);margin-top:4px">Material: <b>'+d.Material+'</b></div>'+
+        '<div style="font-size:12px;color:var(--texto2)">Lote: <b>'+(d.Lote||'—')+'</b> • Caixa Nº '+(d.NumeroCaixa||'—')+' • '+d.QtdPecas+' pç</div>';
+      document.getElementById('mov-saida-conferir-popup').style.display='block';
+      // câmera fica travada até clicar em "Conferido" — evita bipar a próxima sem revisar a atual.
+    })
+    .withFailureHandler(function(e){ _movCamPausado=false; mostrarErroScan('Erro: '+(e?e.message:'')); })
+    .getCaixaPorId(caixaId);
+}
+function movConferirSaidaAtual(){
+  if(!S.movSaidaAguardando) return;
+  S.movSaidaPendentes=S.movSaidaPendentes||[];
+  S.movSaidaPendentes.push(S.movSaidaAguardando);
+  S.movSaidaAguardando=null;
+  document.getElementById('mov-saida-conferir-popup').style.display='none';
+  _movCamPausado=false;
+  renderMovSaidaPendentesLista();
+}
+function renderMovSaidaPendentesLista(){
+  var box=document.getElementById('mov-saida-pendentes-box');
+  var lista=document.getElementById('mov-saida-pendentes-lista');
+  if(!box||!lista) return;
+  var pend=S.movSaidaPendentes||[];
+  box.style.display=pend.length?'block':'none';
+  lista.innerHTML=pend.map(function(c){
+    return '<div class="caixa-row"><span>'+c.codPeca+' — '+c.peca+' ('+c.material+') Lote '+(c.lote||'—')+' — '+c.qtdPecas+' pç</span>'+
+      '<span class="caixa-acts"><button class="bic bic-d" onclick="movRemoverPendenteSaida(\''+c.caixaId+'\')">🗑️</button></span></div>';
+  }).join('');
+  var btn=document.getElementById('mov-saida-confirmar-btn');
+  if(!pend.length){ btn.disabled=true; btn.textContent='Escaneie ao menos uma caixa'; }
+  else { btn.disabled=false; btn.textContent='✅ Confirmar Registro de '+pend.length+' caixa(s)'; }
+}
+function movRemoverPendenteSaida(caixaId){
+  S.movSaidaPendentes=(S.movSaidaPendentes||[]).filter(function(x){ return x.caixaId!==caixaId; });
+  renderMovSaidaPendentesLista();
+}
+function movConfirmarSaidas(){
+  var pend=(S.movSaidaPendentes||[]).slice();
+  if(!pend.length) return;
+  var btn=document.getElementById('mov-saida-confirmar-btn');
+  btn.disabled=true; btn.textContent='Registrando...';
+  var ok=0, falhas=[];
+  function proxima(i){
+    if(i>=pend.length){
+      S.movSaidaPendentes=[];
+      renderMovSaidaPendentesLista();
+      movCarregarEstoque();
+      if(falhas.length) toast(ok+' caixa(s) registrada(s), '+falhas.length+' falharam: '+falhas.join('; '),'erro');
+      else toast(ok+' caixa(s) confirmada(s) e registrada(s) como saída!','sucesso');
+      return;
+    }
+    var c=pend[i];
+    var dados={ CaixaID:c.caixaId, Tipo:'SAIDA', Origem:'BIPADO', Usuario:movUsuarioAtual() };
+    if(S.movTipoSaida){ dados.TipoSaida=S.movTipoSaida; dados.NotaFiscal=S.movNotaFiscal||''; }
+    google.script.run
+      .withSuccessHandler(function(r){
+        if(r&&r.ok){ ok++; movTratarResultado(r,c.caixaId); } else { falhas.push(c.codPeca+' ('+(r&&r.erro?r.erro:'erro')+')'); }
+        proxima(i+1);
+      })
+      .withFailureHandler(function(e){ falhas.push(c.codPeca+' ('+(e?e.message:'erro')+')'); proxima(i+1); })
+      .registrarMovimentacao(dados,null);
+  }
+  proxima(0);
 }
 
 // ── Beep de confirmação sonora ao escanear (Web Audio API, sem arquivo externo) ──
@@ -2858,24 +2962,44 @@ function tocarBeep(){
     bip(ctx.currentTime+.13,1600);
   }catch(e){}
 }
+function tocarErro(){
+  try{
+    var ctx=new (window.AudioContext||window.webkitAudioContext)();
+    var osc=ctx.createOscillator(); var gain=ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value=180; osc.type='sawtooth';
+    gain.gain.setValueAtTime(.9,ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(.01,ctx.currentTime+.4);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime+.4);
+  }catch(e){}
+}
+function mostrarErroScan(msg){
+  toast(msg,'erro');
+  tocarErro();
+  var wrap=document.querySelector('.mov-cam-wrap');
+  if(wrap){ wrap.classList.remove('erro-flash'); void wrap.offsetWidth; wrap.classList.add('erro-flash'); }
+}
 
 // ── ENTRADA: escaneia sem registrar — só consulta a caixa e guarda pra revisão ──
 function movProcessarCodigoEntrada(caixaId){
   S.movEntradaPendentes=S.movEntradaPendentes||[];
   if(S.movEntradaPendentes.some(function(x){ return x.caixaId===caixaId; })){
-    toast('Essa caixa já foi escaneada nesta leva','aviso');
+    mostrarErroScan('Essa caixa já foi escaneada nesta leva');
     return;
   }
   _movCamPausado=true;
   google.script.run
     .withSuccessHandler(function(d){
-      _movCamPausado=false;
-      if(!d){ toast('Caixa não encontrada na produção. Confira o código lido.','erro'); return; }
+      if(!d){ _movCamPausado=false; mostrarErroScan('Caixa não encontrada na produção. Confira o código lido.'); return; }
       tocarBeep();
       S.movEntradaPendentes.push({ caixaId:caixaId, peca:d.Peca, codPeca:d.CodigoPeca, material:d.Material, lote:d.Lote,
         qtdPecas:d.QtdPecas, numeroCaixa:d.NumeroCaixa, trimestre:d.Trimestre, ano:d.Ano, matricula:d.Matricula, operadorProducao:d.Operador });
       renderMovEntradaLista();
       toast(d.CodigoPeca+' — '+d.Peca+' adicionada à leva','sucesso');
+      // Trava a câmera até escolher o Conferente 2 — é obrigatório antes de continuar escaneando.
+      _movCamPausado = !S.movConferente2;
+      var status=document.getElementById('mov-cam-status');
+      if(_movCamPausado && status){ status.textContent='Escolha o Conferente 2 no popup pra continuar escaneando'; status.classList.remove('oculto'); }
     })
     .withFailureHandler(function(e){ _movCamPausado=false; toast('Erro: '+(e?e.message:''),'erro'); })
     .getCaixaPorId(caixaId);
@@ -2899,8 +3023,22 @@ function renderMovEntradaLista(){
   atualizarBtnConfirmarEntrada();
 }
 function movRemoverPendenteEntrada(caixaId){
-  S.movEntradaPendentes=(S.movEntradaPendentes||[]).filter(function(x){ return x.caixaId!==caixaId; });
-  renderMovEntradaLista();
+  var item=(S.movEntradaPendentes||[]).find(function(x){ return x.caixaId===caixaId; });
+  var desc=item?(item.codPeca+' — '+item.peca):caixaId;
+  var motivo=prompt('Motivo para remover esta caixa da leva ('+desc+'):');
+  if(motivo===null) return; // cancelou
+  if(!motivo.trim()){ toast('É obrigatório informar o motivo','aviso'); return; }
+  var senha=prompt('Senha de administrador:');
+  if(!senha){ toast('Senha obrigatória para remover','aviso'); return; }
+  google.script.run
+    .withSuccessHandler(function(ok){
+      if(!ok){ toast('Senha incorreta','erro'); return; }
+      S.movEntradaPendentes=(S.movEntradaPendentes||[]).filter(function(x){ return x.caixaId!==caixaId; });
+      renderMovEntradaLista();
+      toast('Caixa removida da leva','aviso');
+    })
+    .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); })
+    .verificarSenhaAdmin(senha);
 }
 function atualizarBtnConfirmarEntrada(){
   var btn=document.getElementById('mov-entrada-confirmar-btn');
