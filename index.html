@@ -89,16 +89,16 @@ function montarTemplatePadraoPeca(escala){
   '</div>' +
   '<div style="padding:.3mm 3mm .6mm;border-bottom:1mm solid #000;text-align:center">' +
     '<div style="font-size:'+fsz(8,escala)+';font-weight:900;letter-spacing:-.2mm;line-height:1">{{CODIGO}}</div>' +
-    '<div style="font-size:'+fsz(3.1,escala)+';font-weight:700;letter-spacing:.1mm;text-transform:uppercase;margin-top:.5mm">{{DESCRICAO}}</div>' +
+    '<div style="font-size:'+fsz(3.1,escala)+';font-weight:700;letter-spacing:.1mm;text-transform:uppercase;margin-top:.5mm;white-space:normal;overflow-wrap:break-word;word-break:break-word;line-height:1.15">{{DESCRICAO}}</div>' +
   '</div>' +
   '<div style="padding:.6mm 3mm;border-bottom:1mm solid #000;position:relative;text-align:center;box-sizing:border-box">' +
-    '<div style="font-size:'+fsz(2,escala)+';font-weight:900;letter-spacing:.4mm;text-transform:uppercase;opacity:.6">MATERIAL</div>' +
+    '<div style="font-size:'+fsz(2,escala)+';font-weight:900;letter-spacing:.4mm;text-transform:uppercase;opacity:.6;white-space:normal;overflow-wrap:break-word">MATERIAL</div>' +
     '<div style="font-size:'+fsz(5,escala)+';font-weight:900;letter-spacing:.4mm;line-height:1">{{MATERIAL}}</div>' +
     '<div style="position:absolute;bottom:1mm;right:3mm;max-width:42mm;font-size:'+fsz(2.1,escala)+';font-weight:700;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{NORMA}}</div>' +
   '</div>' +
   '<div style="display:flex;flex-direction:row;flex:1;min-height:0">' +
     '<div style="flex:1;min-width:0;border-right:1mm solid #000;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:1mm 3mm;box-sizing:border-box">' +
-      '<div style="font-size:'+fsz(2.1,escala)+';font-weight:900;letter-spacing:.4mm;text-transform:uppercase;opacity:.6">QUANTIDADE</div>' +
+      '<div style="font-size:'+fsz(2.1,escala)+';font-weight:900;letter-spacing:.4mm;text-transform:uppercase;opacity:.6;white-space:normal;overflow-wrap:break-word">QUANTIDADE</div>' +
       '<div style="font-size:'+fsz(10,escala)+';font-weight:900;line-height:1;letter-spacing:-.4mm">{{QUANTIDADE}}</div>' +
     '</div>' +
     '<div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:center;padding:1mm;box-sizing:border-box">' +
@@ -108,22 +108,22 @@ function montarTemplatePadraoPeca(escala){
   '<div style="border-top:1mm solid #000;display:flex;flex-direction:column">' +
     '<div style="display:flex;flex-direction:row;border-bottom:1mm solid #000">' +
       '<div style="flex:1;min-width:0;padding:.6mm 3mm;border-right:1mm solid #000;box-sizing:border-box">' +
-        '<div style="font-size:'+fsz(1.9,escala)+';font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6">DATA</div>' +
-        '<div style="font-size:'+fsz(2.8,escala)+';font-weight:900">{{DATA}}</div>' +
+        '<div style="font-size:'+fsz(1.9,escala)+';font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6;white-space:normal;overflow-wrap:break-word">DATA</div>' +
+        '<div style="font-size:'+fsz(2.8,escala)+';font-weight:900;white-space:normal;overflow-wrap:break-word">{{DATA}}</div>' +
       '</div>' +
       '<div style="flex:1;min-width:0;padding:.6mm 3mm;box-sizing:border-box">' +
-        '<div style="font-size:'+fsz(1.9,escala)+';font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6">LOTE</div>' +
-        '<div style="font-size:'+fsz(2.8,escala)+';font-weight:900">{{LOTE}}</div>' +
+        '<div style="font-size:'+fsz(1.9,escala)+';font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6;white-space:normal;overflow-wrap:break-word">LOTE</div>' +
+        '<div style="font-size:'+fsz(2.8,escala)+';font-weight:900;white-space:normal;overflow-wrap:break-word">{{LOTE}}</div>' +
       '</div>' +
     '</div>' +
     '<div style="display:flex;flex-direction:row">' +
       '<div style="flex:1;min-width:0;padding:.6mm 3mm;border-right:1mm solid #000;box-sizing:border-box">' +
-        '<div style="font-size:'+fsz(1.9,escala)+';font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6">OP</div>' +
-        '<div style="font-size:'+fsz(2.8,escala)+';font-weight:900">{{OP}}</div>' +
+        '<div style="font-size:'+fsz(1.9,escala)+';font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6;white-space:normal;overflow-wrap:break-word">OP</div>' +
+        '<div style="font-size:'+fsz(2.8,escala)+';font-weight:900;white-space:normal;overflow-wrap:break-word">{{OP}}</div>' +
       '</div>' +
       '<div style="flex:1;min-width:0;padding:.6mm 3mm;box-sizing:border-box">' +
-        '<div style="font-size:'+fsz(1.9,escala)+';font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6">REFERÊNCIA</div>' +
-        '<div style="font-size:'+fsz(2.6,escala)+';font-weight:900;font-family:\'Courier New\',monospace">{{REFERENCIA}}</div>' +
+        '<div style="font-size:'+fsz(1.9,escala)+';font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6;white-space:normal;overflow-wrap:break-word">REFERÊNCIA</div>' +
+        '<div style="font-size:'+fsz(2.6,escala)+';font-weight:900;font-family:\'Courier New\',monospace;white-space:normal;overflow-wrap:break-word">{{REFERENCIA}}</div>' +
       '</div>' +
     '</div>' +
   '</div>' +
@@ -1233,18 +1233,32 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
     </div>
 
     <div class="mov-scan-box">
-      <div class="mov-scan-lbl"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg> Aponte a câmera para o QR Code da etiqueta</div>
-      <div class="mov-cam-wrap">
-        <video id="mov-cam-video" autoplay playsinline muted></video>
-        <div class="mov-cam-mira">
-          <span class="cam-corner tl"></span>
-          <span class="cam-corner tr"></span>
-          <span class="cam-corner bl"></span>
-          <span class="cam-corner br"></span>
-          <span class="cam-scanline"></span>
-        </div>
-        <div class="mov-cam-status" id="mov-cam-status">Iniciando câmera...</div>
+      <div class="mov-scan-lbl"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg> Leitura de QR Code</div>
+
+      <div id="mov-cam-fechada" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:var(--cinza);border-radius:var(--radius);padding:40px 20px;border:2px dashed var(--cinza3)">
+        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="var(--azul3)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        <div style="font-size:13px;color:var(--texto2);text-align:center;max-width:280px">A câmera fica desligada até você apertar — evita ler uma etiqueta sem querer.</div>
+        <button onclick="movAbrirCameraParaEscanear()" style="background:var(--azul3);color:#fff;border:none;padding:16px 28px;border-radius:var(--radius);font-size:16px;font-weight:900;cursor:pointer;min-height:48px;display:flex;align-items:center;gap:8px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          Abrir Câmera pra Escanear
+        </button>
       </div>
+
+      <div id="mov-cam-aberta" style="display:none">
+        <div class="mov-cam-wrap">
+          <video id="mov-cam-video" autoplay playsinline muted></video>
+          <div class="mov-cam-mira">
+            <span class="cam-corner tl"></span>
+            <span class="cam-corner tr"></span>
+            <span class="cam-corner bl"></span>
+            <span class="cam-corner br"></span>
+            <span class="cam-scanline"></span>
+          </div>
+          <div class="mov-cam-status" id="mov-cam-status">Iniciando câmera...</div>
+        </div>
+        <button onclick="movFecharCameraManual()" style="width:100%;margin-top:10px;background:var(--cinza2);color:var(--texto2);border:none;padding:12px;border-radius:var(--radius-sm);font-size:13px;font-weight:800;cursor:pointer;min-height:44px">✕ Fechar câmera</button>
+      </div>
+
       <canvas id="mov-cam-canvas" style="display:none"></canvas>
       <div class="mov-fallback"><button onclick="movAbrirManual()">Etiqueta rasgada ou ilegível? Movimentar manualmente →</button></div>
     </div>
@@ -2678,7 +2692,6 @@ function movSelecionarOperador(nome,matricula){
   document.getElementById('mov-ultima').classList.remove('vis');
   movMontarSelectManual();
   movCarregarEstoque();
-  movIniciarCamera();
 }
 function movEscolherAcao(tipo){
   document.getElementById('mov-sel-acao').style.display='none';
@@ -2687,6 +2700,7 @@ function movEscolherAcao(tipo){
 }
 function movTrocarOperador(){
   movPararCamera();
+  movFecharCameraManual();
   S.movOperador=null;
   S.movConferente2=null;
   S.movTipoSaida=null;
@@ -2783,6 +2797,20 @@ function movFecharManual(){
 // ── Câmera + leitura de QR Code (substitui o leitor USB) ──
 var _movCamStream=null, _movCamRAF=null, _movCamPausado=false, _movCamCooldownAte=0;
 
+function movAbrirCameraParaEscanear(){
+  var fechada=document.getElementById('mov-cam-fechada');
+  var aberta=document.getElementById('mov-cam-aberta');
+  if(fechada) fechada.style.display='none';
+  if(aberta) aberta.style.display='block';
+  movIniciarCamera();
+}
+function movFecharCameraManual(){
+  movPararCamera();
+  var fechada=document.getElementById('mov-cam-fechada');
+  var aberta=document.getElementById('mov-cam-aberta');
+  if(aberta) aberta.style.display='none';
+  if(fechada) fechada.style.display='flex';
+}
 function movIniciarCamera(){
   var status=document.getElementById('mov-cam-status');
   if(!status) return; // página não está montada (ex: chamado fora de contexto)
@@ -2867,6 +2895,7 @@ function movProcessarCodigoSaida(caixaId){
     .withSuccessHandler(function(d){
       if(!d){ _movCamPausado=false; mostrarErroScan('Caixa não encontrada na produção. Confira o código lido.'); return; }
       tocarBeep();
+      movFecharCameraManual();
       S.movSaidaAguardando={ caixaId:caixaId, peca:d.Peca, codPeca:d.CodigoPeca, material:d.Material, lote:d.Lote, qtdPecas:d.QtdPecas, numeroCaixa:d.NumeroCaixa };
       var info=document.getElementById('mov-saida-conferir-info');
       info.innerHTML='<div style="font-weight:900;color:var(--azul);font-size:14px">'+d.CodigoPeca+' — '+d.Peca+'</div>'+
@@ -2978,6 +3007,7 @@ function movProcessarCodigoEntrada(caixaId){
     .withSuccessHandler(function(d){
       if(!d){ _movCamPausado=false; mostrarErroScan('Caixa não encontrada na produção. Confira o código lido.'); return; }
       tocarBeep();
+      movFecharCameraManual();
       S.movEntradaAguardando={ caixaId:caixaId, peca:d.Peca, codPeca:d.CodigoPeca, material:d.Material, lote:d.Lote,
         qtdPecas:d.QtdPecas, numeroCaixa:d.NumeroCaixa, trimestre:d.Trimestre, ano:d.Ano, matricula:d.Matricula, operadorProducao:d.Operador };
       var info=document.getElementById('mov-entrada-conferir-info');
