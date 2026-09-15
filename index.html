@@ -1164,6 +1164,22 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
       <div class="op-sel-grid" id="mov-g-op"></div>
     </div>
 
+    <div id="mov-sel-acao" style="display:none;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 160px);gap:20px">
+      <div style="font-size:19px;font-weight:900;color:var(--azul)">O que você vai fazer?</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center;padding:0 16px">
+        <button class="mi-btn mi-btn-mov" style="min-width:220px" onclick="movEscolherAcao('ENTRADA')">
+          <div class="ico"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="6 13 12 19 18 13"/></svg></div>
+          <div class="txt">ENTRADA</div>
+          <div class="desc">Bipar caixas chegando no estoque</div>
+        </button>
+        <button class="mi-btn" style="background:var(--laranja);color:#fff;min-width:220px" onclick="movEscolherAcao('SAIDA')">
+          <div class="ico"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="6 11 12 5 18 11"/></svg></div>
+          <div class="txt">SAÍDA</div>
+          <div class="desc">Bipar caixas saindo do estoque</div>
+        </button>
+      </div>
+    </div>
+
     <div id="mov-sel-tiposaida" style="display:none;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 160px);gap:20px">
       <div style="font-size:19px;font-weight:900;color:var(--azul)">Que tipo de saída é essa?</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center;padding:0 16px">
@@ -1193,14 +1209,19 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
       </div>
     </div>
 
+    <div class="mov-popup" id="mov-entrada-conferir-popup" style="display:none">
+      <div style="font-size:11px;font-weight:800;color:var(--texto2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📥 Etiqueta lida — quem é o Conferente Nº 2?</div>
+      <div id="mov-entrada-conferir-info" style="background:var(--cinza);border-radius:8px;padding:12px;margin-bottom:12px"></div>
+      <div id="mov-entrada-conferir-grid"></div>
+    </div>
+
     <div class="mov-popup" id="mov-entrada-lista-box" style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <div class="mov-ultima-hd" style="margin:0">📦 Caixas escaneadas — revisar antes de confirmar</div>
         <button onclick="document.getElementById('mov-entrada-lista-box').style.display='none'" style="background:var(--cinza2);border:none;width:26px;height:26px;border-radius:50%;font-size:14px;cursor:pointer;color:var(--texto2);flex-shrink:0">✕</button>
       </div>
       <div id="mov-entrada-lista" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px;max-height:35vh;overflow-y:auto"></div>
-      <div id="mov-entrada-conf2-area" style="margin-top:6px"></div>
-      <button id="mov-entrada-confirmar-btn" class="mb-save" style="width:100%;margin-top:10px;padding:12px;border-radius:8px;border:none;font-size:14px;font-weight:800;cursor:pointer" onclick="movConfirmarEntradas()" disabled>✅ Confirme o Conferente 2 pra liberar o envio</button>
+      <button id="mov-entrada-confirmar-btn" class="mb-save" style="width:100%;margin-top:10px;padding:12px;border-radius:8px;border:none;font-size:14px;font-weight:800;cursor:pointer" onclick="movConfirmarEntradas()" disabled>Escaneie ao menos uma caixa</button>
     </div>
 
     <div class="mov-popup" id="mov-saida-conferir-popup" style="display:none;text-align:center">
@@ -2652,20 +2673,26 @@ function movSelecionarOperador(nome,matricula){
   S.movNotaFiscal='';
   S.movCaixasSessao=[];
   S.movEntradaPendentes=[];
+  S.movEntradaAguardando=null;
   S.movSaidaPendentes=[];
   S.movSaidaAguardando=null;
   document.getElementById('mov-saida-atual-txt').style.display='none';
   document.getElementById('mov-saida-trocar-btn').style.display='none';
   document.getElementById('mov-sel-operador').style.display='none';
   document.getElementById('mov-conteudo').style.display='none';
-  document.getElementById('mov-tabs-tipo').style.display='flex';
+  document.getElementById('mov-tabs-tipo').style.display='none';
+  document.getElementById('mov-sel-acao').style.display='flex';
   document.getElementById('mov-op-atual-bar').style.display='flex';
   document.getElementById('mov-op-atual-txt').textContent='Operador: '+(matricula?matricula+' — ':'')+nome;
-  movSetTipo('ENTRADA');
   document.getElementById('mov-ultima').classList.remove('vis');
   movMontarSelectManual();
   movCarregarEstoque();
   movIniciarCamera();
+}
+function movEscolherAcao(tipo){
+  document.getElementById('mov-sel-acao').style.display='none';
+  document.getElementById('mov-tabs-tipo').style.display='flex';
+  movSetTipo(tipo);
 }
 function movTrocarOperador(){
   movPararCamera();
@@ -2675,11 +2702,13 @@ function movTrocarOperador(){
   S.movNotaFiscal='';
   S.movCaixasSessao=[];
   S.movEntradaPendentes=[];
+  S.movEntradaAguardando=null;
   S.movSaidaPendentes=[];
   S.movSaidaAguardando=null;
   document.getElementById('mov-saida-atual-txt').style.display='none';
   document.getElementById('mov-saida-trocar-btn').style.display='none';
   document.getElementById('mov-conteudo').style.display='none';
+  document.getElementById('mov-sel-acao').style.display='none';
   document.getElementById('mov-sel-tiposaida').style.display='none';
   document.getElementById('mov-tabs-tipo').style.display='none';
   document.getElementById('mov-op-atual-bar').style.display='none';
@@ -2691,6 +2720,7 @@ function movSetTipo(tipo){
   S.movTipo=tipo;
   document.getElementById('mtab-entrada').classList.toggle('ativo',tipo==='ENTRADA');
   document.getElementById('mtab-saida').classList.toggle('ativo',tipo==='SAIDA');
+  document.getElementById('mov-sel-acao').style.display='none';
   if(tipo==='SAIDA' && !S.movTipoSaida){
     _movCamPausado=true;
     document.getElementById('mov-conteudo').style.display='none';
@@ -2701,6 +2731,7 @@ function movSetTipo(tipo){
   document.getElementById('mov-conteudo').style.display='';
   document.getElementById('mov-saida-lista-box').style.display='none';
   document.getElementById('mov-saida-conferir-popup').style.display='none';
+  document.getElementById('mov-entrada-conferir-popup').style.display='none';
   document.getElementById('mov-entrada-lista-box').style.display=(tipo==='ENTRADA')?'block':'none';
   if(tipo==='ENTRADA') renderMovEntradaLista();
   if(tipo==='SAIDA') renderMovSaidaPendentesLista();
@@ -2737,41 +2768,6 @@ function movTrocarTipoSaida(){
   document.getElementById('mov-saida-atual-txt').style.display='none';
   document.getElementById('mov-saida-trocar-btn').style.display='none';
   movSetTipo('SAIDA');
-}
-function renderConf2Picker(){
-  var area=document.getElementById('mov-entrada-conf2-area');
-  if(!area) return;
-  if(S.movConferente2){
-    area.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;background:var(--cinza);border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;color:var(--azul)">'+
-      '<span>Conferente 2: '+(S.movConferente2.matricula?S.movConferente2.matricula+' — ':'')+S.movConferente2.nome+'</span>'+
-      '<button onclick="movTrocarConferente2()" style="background:var(--cinza3);border:none;padding:4px 9px;border-radius:6px;font-size:10px;font-weight:800;cursor:pointer">Trocar</button></div>';
-    return;
-  }
-  var label='<div style="font-size:11px;font-weight:800;color:var(--texto2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Quem é o Conferente Nº 2?</div>';
-  if(!S.op.length){ area.innerHTML=label+'<p style="font-size:12px;color:var(--texto2)">Nenhum operador cadastrado. Acesse Admin.</p>'; return; }
-  var grid='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px">'+S.op.map(function(o){
-    var m=o.Matricula||'';
-    return '<div class="op-sel-btn" style="padding:10px 6px;gap:4px" onclick="movSelecionarConferente2(\''+esc(o.Nome)+'\',\''+esc(m)+'\')">'+
-      (m?'<span class="mat" style="font-size:9px;padding:1px 6px">'+m+'</span>':'')+
-      '<span class="nome" style="font-size:12px">'+o.Nome+'</span></div>';
-  }).join('')+'</div>';
-  area.innerHTML=label+grid;
-}
-function movSelecionarConferente2(nome,matricula){
-  S.movConferente2={ nome:nome, matricula:matricula };
-  renderConf2Picker();
-  atualizarBtnConfirmarEntrada();
-  if(S.movTipo==='ENTRADA'){
-    _movCamPausado=false;
-    var status=document.getElementById('mov-cam-status');
-    if(status) status.classList.add('oculto');
-  }
-}
-function movTrocarConferente2(){
-  S.movConferente2=null;
-  renderConf2Picker();
-  atualizarBtnConfirmarEntrada();
-  if(S.movTipo==='ENTRADA' && (S.movEntradaPendentes||[]).length) _movCamPausado=true;
 }
 function movMontarSelectManual(){
   var sp=document.getElementById('mm-peca'); if(!sp) return;
@@ -2992,17 +2988,41 @@ function movProcessarCodigoEntrada(caixaId){
     .withSuccessHandler(function(d){
       if(!d){ _movCamPausado=false; mostrarErroScan('Caixa não encontrada na produção. Confira o código lido.'); return; }
       tocarBeep();
-      S.movEntradaPendentes.push({ caixaId:caixaId, peca:d.Peca, codPeca:d.CodigoPeca, material:d.Material, lote:d.Lote,
-        qtdPecas:d.QtdPecas, numeroCaixa:d.NumeroCaixa, trimestre:d.Trimestre, ano:d.Ano, matricula:d.Matricula, operadorProducao:d.Operador });
-      renderMovEntradaLista();
-      toast(d.CodigoPeca+' — '+d.Peca+' adicionada à leva','sucesso');
-      // Trava a câmera até escolher o Conferente 2 — é obrigatório antes de continuar escaneando.
-      _movCamPausado = !S.movConferente2;
-      var status=document.getElementById('mov-cam-status');
-      if(_movCamPausado && status){ status.textContent='Escolha o Conferente 2 no popup pra continuar escaneando'; status.classList.remove('oculto'); }
+      S.movEntradaAguardando={ caixaId:caixaId, peca:d.Peca, codPeca:d.CodigoPeca, material:d.Material, lote:d.Lote,
+        qtdPecas:d.QtdPecas, numeroCaixa:d.NumeroCaixa, trimestre:d.Trimestre, ano:d.Ano, matricula:d.Matricula, operadorProducao:d.Operador };
+      var info=document.getElementById('mov-entrada-conferir-info');
+      info.innerHTML='<div style="font-weight:900;color:var(--azul);font-size:14px">'+d.CodigoPeca+' — '+d.Peca+'</div>'+
+        '<div style="font-size:12px;color:var(--texto2);margin-top:4px">Material: <b>'+d.Material+'</b></div>'+
+        '<div style="font-size:12px;color:var(--texto2)">Lote: <b>'+(d.Lote||'—')+'</b> • Caixa Nº '+(d.NumeroCaixa||'—')+' • '+d.QtdPecas+' pç</div>';
+      renderGridConferente2Item();
+      document.getElementById('mov-entrada-conferir-popup').style.display='block';
+      // câmera fica travada até escolher o Conferente 2 desta etiqueta — obrigatório sempre, etiqueta por etiqueta.
     })
     .withFailureHandler(function(e){ _movCamPausado=false; toast('Erro: '+(e?e.message:''),'erro'); })
     .getCaixaPorId(caixaId);
+}
+function renderGridConferente2Item(){
+  var g=document.getElementById('mov-entrada-conferir-grid');
+  if(!g) return;
+  if(!S.op.length){ g.innerHTML='<p style="font-size:12px;color:var(--texto2)">Nenhum operador cadastrado. Acesse Admin.</p>'; return; }
+  g.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px">'+S.op.map(function(o){
+    var m=o.Matricula||'';
+    return '<div class="op-sel-btn" style="padding:10px 6px;gap:4px" onclick="movConfirmarConferente2Item(\''+esc(o.Nome)+'\',\''+esc(m)+'\')">'+
+      (m?'<span class="mat" style="font-size:9px;padding:1px 6px">'+m+'</span>':'')+
+      '<span class="nome" style="font-size:12px">'+o.Nome+'</span></div>';
+  }).join('')+'</div>';
+}
+function movConfirmarConferente2Item(nome,matricula){
+  if(!S.movEntradaAguardando) return;
+  var item=S.movEntradaAguardando;
+  item.conferente2Nome=(matricula?matricula+' — ':'')+nome;
+  S.movEntradaPendentes=S.movEntradaPendentes||[];
+  S.movEntradaPendentes.push(item);
+  S.movEntradaAguardando=null;
+  document.getElementById('mov-entrada-conferir-popup').style.display='none';
+  _movCamPausado=false;
+  renderMovEntradaLista();
+  toast(item.codPeca+' — '+item.peca+' adicionada à leva','sucesso');
 }
 
 function renderMovEntradaLista(){
@@ -3015,11 +3035,11 @@ function renderMovEntradaLista(){
     lista.innerHTML='<p style="font-size:12px;color:var(--texto2);padding:4px 0">Nenhuma caixa escaneada ainda nesta leva.</p>';
   } else {
     lista.innerHTML=pend.map(function(c){
-      return '<div class="caixa-row"><span>'+c.codPeca+' — '+c.peca+' ('+c.material+') Lote '+(c.lote||'—')+' — '+c.qtdPecas+' pç</span>'+
+      return '<div class="caixa-row"><span>'+c.codPeca+' — '+c.peca+' ('+c.material+') Lote '+(c.lote||'—')+' — '+c.qtdPecas+' pç'+
+        '<br><span style="color:var(--texto2);font-size:10px">Conferente 2: '+(c.conferente2Nome||'—')+'</span></span>'+
         '<span class="caixa-acts"><button class="bic bic-d" onclick="movRemoverPendenteEntrada(\''+c.caixaId+'\')">🗑️</button></span></div>';
     }).join('');
   }
-  renderConf2Picker();
   atualizarBtnConfirmarEntrada();
 }
 function movRemoverPendenteEntrada(caixaId){
@@ -3045,13 +3065,11 @@ function atualizarBtnConfirmarEntrada(){
   if(!btn) return;
   var pend=S.movEntradaPendentes||[];
   if(!pend.length){ btn.disabled=true; btn.textContent='Escaneie ao menos uma caixa'; return; }
-  if(!S.movConferente2){ btn.disabled=true; btn.textContent='Confirme o Conferente 2 pra liberar o envio'; return; }
   btn.disabled=false; btn.textContent='✅ Confirmar e Enviar '+pend.length+' caixa(s) pro Estoque';
 }
 function movConfirmarEntradas(){
   var pend=(S.movEntradaPendentes||[]).slice();
-  if(!pend.length||!S.movConferente2) return;
-  var conf2Txt=(S.movConferente2.matricula?S.movConferente2.matricula+' — ':'')+S.movConferente2.nome;
+  if(!pend.length) return;
   var btn=document.getElementById('mov-entrada-confirmar-btn');
   btn.disabled=true; btn.textContent='Enviando...';
   var ok=0, falhas=[];
@@ -3065,7 +3083,7 @@ function movConfirmarEntradas(){
       document.getElementById('mov-ultima').classList.add('vis');
       document.getElementById('mov-ultima-ico').textContent='📥';
       document.getElementById('mov-ultima-peca').textContent=ok+' caixa(s) — entrada confirmada';
-      document.getElementById('mov-ultima-det').textContent='Conferente 2: '+conf2Txt;
+      document.getElementById('mov-ultima-det').textContent='Conferentes 2 registrados por caixa';
       return;
     }
     var c=pend[i];
@@ -3075,7 +3093,7 @@ function movConfirmarEntradas(){
         proxima(i+1);
       })
       .withFailureHandler(function(e){ falhas.push(c.codPeca+' ('+(e?e.message:'erro')+')'); proxima(i+1); })
-      .registrarMovimentacao({ CaixaID:c.caixaId, Tipo:'ENTRADA', Origem:'BIPADO', Usuario:movUsuarioAtual(), Conferente2:conf2Txt }, null);
+      .registrarMovimentacao({ CaixaID:c.caixaId, Tipo:'ENTRADA', Origem:'BIPADO', Usuario:movUsuarioAtual(), Conferente2:c.conferente2Nome||'' }, null);
   }
   proxima(0);
 }
