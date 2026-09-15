@@ -1922,6 +1922,25 @@ function gerarEImprimirNF(){
   if(!numero){ toast('Informe o número da nota fiscal','aviso'); return; }
   var partesPeca=pecaVal.split('|');
   var codigo=partesPeca[0], nomePeca=partesPeca[1];
+
+  // Linha COL só sai direto em material NBR — qualquer outro material exige senha de admin.
+  var ehLinhaCol=semAcentoConsulta(codigo).indexOf('col')===0;
+  var ehNBR=semAcentoConsulta(material).indexOf('nbr')===0;
+  if(ehLinhaCol && !ehNBR){
+    var senha=prompt('Peça da linha COL com material diferente de NBR ('+material+') — senha de administrador:');
+    if(!senha){ toast('Senha obrigatória pra imprimir COL com material diferente de NBR','aviso'); return; }
+    google.script.run
+      .withSuccessHandler(function(ok){
+        if(!ok){ toast('Senha incorreta','erro'); return; }
+        executarImpressaoNF(cliente,destino,codigo,nomePeca,material,numero);
+      })
+      .withFailureHandler(function(){ toast('Erro ao verificar senha','erro'); })
+      .verificarSenhaAdmin(senha);
+    return;
+  }
+  executarImpressaoNF(cliente,destino,codigo,nomePeca,material,numero);
+}
+function executarImpressaoNF(cliente,destino,codigo,nomePeca,material,numero){
   var template=(S.modelosEtiqueta&&S.modelosEtiqueta.NF)||'';
   if(!template){ toast('Modelo de etiqueta de NF não carregado — recarregue a página','erro'); return; }
   var valores={ NF:esc(numero), CODIGO:codigo, DESCRICAO:esc(nomePeca+' - '+material), CLIENTE:esc(cliente), DESTINO:esc(destino) };
