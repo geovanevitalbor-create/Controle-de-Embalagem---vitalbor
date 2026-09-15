@@ -155,12 +155,43 @@ function montarTemplatePadraoConferencia(escala){
 }
 var TEMPLATE_PADRAO_CONFERENCIA = montarTemplatePadraoConferencia(1);
 
+function montarTemplatePadraoNF(escala){
+  escala = escala || 1;
+  return '<div style="display:flex;flex-direction:column;width:100%;height:100%;font-family:\'Arial Black\',\'Arial\',sans-serif;color:#000;background:#fff;box-sizing:border-box">' +
+  '<div style="padding:.8mm 4mm;display:flex;justify-content:space-between;align-items:center;border-bottom:.6mm solid #000">' +
+    '<div style="font-size:'+fsz(4,escala)+';font-weight:900;letter-spacing:.6mm">VITALBOR</div>' +
+    '<div style="font-size:'+fsz(3.4,escala)+';font-weight:900">NF: {{NF}}</div>' +
+  '</div>' +
+  '<div style="padding:1mm 4mm;border-bottom:1mm solid #000;text-align:center">' +
+    '<div style="font-size:'+fsz(9,escala)+';font-weight:900;letter-spacing:-.2mm;line-height:1">{{CODIGO}}</div>' +
+  '</div>' +
+  '<div style="padding:.8mm 4mm;border-bottom:1mm solid #000;text-align:center;white-space:normal;overflow-wrap:break-word">' +
+    '<div style="font-size:'+fsz(2.6,escala)+';font-weight:700;letter-spacing:.1mm;text-transform:uppercase">{{DESCRICAO}}</div>' +
+  '</div>' +
+  '<div style="display:flex;flex-direction:row;flex:1;min-height:0">' +
+    '<div style="flex:1;min-width:0;border-right:1mm solid #000;display:flex;align-items:center;justify-content:center;text-align:center;padding:1mm 3mm;box-sizing:border-box">' +
+      '<div style="font-size:'+fsz(4.2,escala)+';font-weight:900;white-space:normal;overflow-wrap:break-word">{{CLIENTE}}</div>' +
+    '</div>' +
+    '<div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:1mm 3mm;box-sizing:border-box">' +
+      '<div style="font-size:'+fsz(4.2,escala)+';font-weight:900;white-space:normal;overflow-wrap:break-word">{{DESTINO}}</div>' +
+    '</div>' +
+  '</div>' +
+  '<div style="border-top:1mm solid #000;padding:.8mm 4mm;display:flex;justify-content:space-between;align-items:center;gap:3mm">' +
+    '<div style="font-size:'+fsz(2,escala)+';font-weight:700">✉ bruno@vitalbor.com.br</div>' +
+    '<div style="font-size:'+fsz(2,escala)+';font-weight:700;text-align:right">Rua Luiz Carlos Zani 3495 - Ibiporã</div>' +
+  '</div>' +
+'</div>';
+}
+var TEMPLATE_PADRAO_NF = montarTemplatePadraoNF(1);
+
 async function getModeloEtiquetaInterno(tipo) {
   try {
     var rows = await sbGet('modelos_etiqueta?tipo=eq.' + tipo + '&select=html');
     if (rows.length && rows[0].html) return rows[0].html;
   } catch (e) {}
-  return tipo === 'PECA' ? TEMPLATE_PADRAO_PECA : TEMPLATE_PADRAO_CONFERENCIA;
+  if (tipo === 'PECA') return TEMPLATE_PADRAO_PECA;
+  if (tipo === 'NF') return TEMPLATE_PADRAO_NF;
+  return TEMPLATE_PADRAO_CONFERENCIA;
 }
 
 // Carrega todos os arranjos de tubo de uma vez e agrupa por peca_id.
@@ -179,6 +210,26 @@ async function backendArranjosPorPeca() {
 
 // ── BACKEND: mesma assinatura de função do Code.gs original ──
 var backend = {
+
+  async getClientes() {
+    var rows = await sbGet('clientes?ativo=eq.true&order=nome.asc');
+    return rows.map(function (c) { return { ID: c.id, Nome: c.nome, Ativo: true, DataCadastro: fmtDataBR(c.data_cadastro) }; });
+  },
+  async getClientesTodos() {
+    var rows = await sbGet('clientes?order=nome.asc');
+    return rows.map(function (c) { return { ID: c.id, Nome: c.nome, Ativo: c.ativo, DataCadastro: fmtDataBR(c.data_cadastro) }; });
+  },
+  async salvarCliente(dados) {
+    try {
+      if (dados.ID) { await sbPatch('clientes', 'id=eq.' + dados.ID, { nome: dados.Nome, ativo: true }); return { ok: true }; }
+      var rows = await sbPost('clientes', { nome: dados.Nome, ativo: true });
+      return { ok: true, id: rows[0].id };
+    } catch (e) { return { ok: false, erro: e.message }; }
+  },
+  async excluirCliente(id) {
+    try { await sbPatch('clientes', 'id=eq.' + id, { ativo: false }); return { ok: true }; }
+    catch (e) { return { ok: false, erro: e.message }; }
+  },
 
   async getOperadores() {
     var rows = await sbGet('operadores?ativo=eq.true&order=nome.asc');
@@ -564,14 +615,14 @@ var backend = {
     } catch (e) { return null; }
   },
 
-  async getModelosPadrao() { return { PECA: TEMPLATE_PADRAO_PECA, CONFERENCIA: TEMPLATE_PADRAO_CONFERENCIA }; },
+  async getModelosPadrao() { return { PECA: TEMPLATE_PADRAO_PECA, CONFERENCIA: TEMPLATE_PADRAO_CONFERENCIA, NF: TEMPLATE_PADRAO_NF }; },
   async getModelosEtiqueta() {
-    var config = { qrSizeMm: 22, escalaTexto: 100, normaFixa: 'NBR 7676', escalaTextoConf: 100 };
+    var config = { qrSizeMm: 22, escalaTexto: 100, normaFixa: 'NBR 7676', escalaTextoConf: 100, escalaTextoNF: 100 };
     try {
       var rows = await sbGet('modelos_etiqueta?tipo=eq.CONFIG&select=html');
       if (rows.length && rows[0].html) config = Object.assign(config, JSON.parse(rows[0].html));
     } catch (e) {}
-    return { PECA: await getModeloEtiquetaInterno('PECA'), CONFERENCIA: await getModeloEtiquetaInterno('CONFERENCIA'), CONFIG: config };
+    return { PECA: await getModeloEtiquetaInterno('PECA'), CONFERENCIA: await getModeloEtiquetaInterno('CONFERENCIA'), NF: await getModeloEtiquetaInterno('NF'), CONFIG: config };
   },
   async salvarModeloEtiqueta(tipo, html) {
     try {
@@ -639,7 +690,7 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-fa
 .mi-sub{color:rgba(255,255,255,.4);font-size:12px;letter-spacing:4px;text-transform:uppercase;margin-bottom:40px;font-weight:700}
 .mi-titulo{color:rgba(255,255,255,.75);font-size:15px;font-weight:700;margin-bottom:24px;text-align:center;letter-spacing:.5px}
 .mi-botoes-row1{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;width:100%;max-width:760px;padding:0 20px;margin-bottom:18px}
-.mi-botoes-row2{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;width:100%;max-width:760px;padding:0 20px}
+.mi-botoes-row2{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;width:100%;max-width:760px;padding:0 20px}
 @media (max-width:640px){
   .mi-botoes-row1{grid-template-columns:1fr}
   .mi-botoes-row2{grid-template-columns:1fr}
@@ -668,6 +719,8 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-fa
 .mi-btn-estoque:hover{background:linear-gradient(155deg,#7d4fd6 0%,#54309a 100%)}
 .mi-btn-verif{background:linear-gradient(155deg,#0e8a7a 0%,#0a6b5e 100%);color:#fff}
 .mi-btn-verif:hover{background:linear-gradient(155deg,#12a190 0%,#0a6b5e 100%)}
+.mi-btn-nf{background:linear-gradient(155deg,#b8860b 0%,#8a6508 100%);color:#fff}
+.mi-btn-nf:hover{background:linear-gradient(155deg,#d19a10 0%,#8a6508 100%)}
 .mi-admin-area{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:32px;padding-top:20px;border-top:1px solid rgba(255,255,255,.08);width:100%;max-width:300px}
 .mi-admin-cap{color:rgba(255,255,255,.3);font-size:10px;letter-spacing:2px;text-transform:uppercase;font-weight:700}
 .mi-btn-admin-standalone{background:transparent;color:#e94560;border:1.5px solid rgba(233,69,96,.5);border-radius:24px;padding:10px 26px;font-size:12px;font-weight:800;letter-spacing:1.5px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:all .15s}
@@ -1142,6 +1195,11 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
       <div class="txt">VERIFICAR</div>
       <div class="desc">Histórico completo de uma caixa pelo QR</div>
     </button>
+    <button class="mi-btn mi-btn-nf" onclick="entrarComoNotaFiscal()">
+      <div class="ico"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg></div>
+      <div class="txt">NOTA FISCAL</div>
+      <div class="desc">Imprimir etiqueta de cliente e destino</div>
+    </button>
   </div>
 
   <div class="mi-admin-area">
@@ -1541,6 +1599,25 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
   </div>
 </div>
 
+<!-- ════════ ETIQUETA DE NOTA FISCAL ════════ -->
+<div id="pag-nota-fiscal" class="pag">
+  <div class="mov-top">
+    <div style="color:#fff;font-size:14px;font-weight:800;display:flex;align-items:center;gap:8px">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+      Etiqueta de Nota Fiscal
+    </div>
+  </div>
+  <div class="mov-body">
+    <div class="mov-scan-box">
+      <div class="fg"><label>Cliente</label><select id="nf-cliente"></select></div>
+      <div class="fg"><label>Destino (cidade/UF)</label><input type="text" id="nf-destino" placeholder="Ex: São Paulo"/></div>
+      <div class="fg"><label>Peça</label><select id="nf-peca"></select></div>
+      <div class="fg"><label>Número da Nota Fiscal</label><input type="text" id="nf-numero" placeholder="Ex: 9999"/></div>
+      <button class="mb-save" style="width:100%;padding:14px;border-radius:8px;border:none;font-size:15px;font-weight:800;cursor:pointer;min-height:48px" onclick="gerarEImprimirNF()">🖨️ Gerar e Imprimir Etiqueta</button>
+    </div>
+  </div>
+</div>
+
 <!-- ════════ ADMIN ════════ -->
 <div id="pag-admin" class="pag">
 
@@ -1556,6 +1633,7 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
     <button class="adm-nav-btn" id="adm-nav-pecas" onclick="admNavIr('pecas')"><span style="display:inline-flex;vertical-align:middle;margin-right:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4.5v9L12 20l-8-4.5v-9L12 2z"/><circle cx="12" cy="12" r="3"/></svg></span>Peças</button>
     <button class="adm-nav-btn" id="adm-nav-materiais" onclick="admNavIr('materiais')"><span style="display:inline-flex;vertical-align:middle;margin-right:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"/><path d="M10 3v6l-5 9a2 2 0 002 3h10a2 2 0 002-3l-5-9V3"/></svg></span>Materiais</button>
     <button class="adm-nav-btn" id="adm-nav-maquinas" onclick="admNavIr('maquinas')"><span style="display:inline-flex;vertical-align:middle;margin-right:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></span>Máquinas</button>
+    <button class="adm-nav-btn" id="adm-nav-clientes" onclick="admNavIr('clientes')"><span style="display:inline-flex;vertical-align:middle;margin-right:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-6h6v6"/></svg></span>Clientes</button>
     <button class="adm-nav-btn" id="adm-nav-movimentacoes" onclick="admNavIr('movimentacoes')"><span style="display:inline-flex;vertical-align:middle;margin-right:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg></span>Movimentações</button>
     <button class="adm-nav-btn" id="adm-nav-modelos" onclick="admNavIr('modelos')"><span style="display:inline-flex;vertical-align:middle;margin-right:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 12.4L12.4 20.6a2 2 0 01-2.8 0l-7.2-7.2a2 2 0 010-2.8L10.6 2.4A2 2 0 0112 2h6a2 2 0 012 2v6a2 2 0 01-.6 1.4z"/><circle cx="16.5" cy="7.5" r="1"/></svg></span>Modelos de Etiqueta</button>
     <button class="adm-nav-btn" id="adm-nav-balanco" onclick="admNavIr('balanco')"><span style="display:inline-flex;vertical-align:middle;margin-right:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></span>Balanço de Estoque</button>
@@ -1637,11 +1715,12 @@ function pad(n){ return String(n).padStart(2,'0'); }
 
 function carregarDados(){
   var done=0;
-  function ck(){ if(++done>=5){ document.getElementById('loader').style.display='none'; } }
+  function ck(){ if(++done>=6){ document.getElementById('loader').style.display='none'; } }
   google.script.run.withSuccessHandler(function(d){ S.op=d||[];    ck(); }).withFailureHandler(function(){ S.op=[];    ck(); }).getOperadores();
   google.script.run.withSuccessHandler(function(d){ S.pecas=d||[]; ck(); }).withFailureHandler(function(){ S.pecas=[]; ck(); }).getPecas();
   google.script.run.withSuccessHandler(function(d){ S.mats=d||[];  ck(); }).withFailureHandler(function(){ S.mats=[];  ck(); }).getMateriais();
   google.script.run.withSuccessHandler(function(d){ S.maqs=d||[];  S.hasMaq=d&&d.length>0; ck(); }).withFailureHandler(function(){ S.maqs=[]; ck(); }).getMaquinas();
+  google.script.run.withSuccessHandler(function(d){ S.clientes=d||[]; ck(); }).withFailureHandler(function(){ S.clientes=[]; ck(); }).getClientes();
   google.script.run.withSuccessHandler(function(d){ S.modelosEtiqueta=d||{}; ck(); }).withFailureHandler(function(){ S.modelosEtiqueta={}; ck(); }).getModelosEtiqueta();
   verificarBalancoAtivo();
   setTimeout(function(){ var l=document.getElementById('loader'); if(l.style.display!=='none'){l.style.display='none';} },20000);
@@ -1769,7 +1848,10 @@ function selecionarConsultaPeca(id){
   var det=document.getElementById('consulta-detalhe');
   det.innerHTML=
     '<div class="cq-detalhe">'+
-      '<div class="cq-detalhe-hd"><span class="cq-detalhe-cod">'+p.Codigo+'</span><span class="cq-detalhe-nome">'+p.Nome+'</span></div>'+
+      '<div class="cq-detalhe-hd" style="justify-content:space-between">'+
+        '<div style="display:flex;align-items:center;gap:9px"><span class="cq-detalhe-cod">'+p.Codigo+'</span><span class="cq-detalhe-nome">'+p.Nome+'</span></div>'+
+        '<button onclick="fecharDetalheConsulta()" style="background:var(--cinza2);border:none;width:28px;height:28px;border-radius:50%;font-size:14px;cursor:pointer;color:var(--texto2);flex-shrink:0">✕</button>'+
+      '</div>'+
       '<div class="cq-stats" style="grid-template-columns:1fr 1fr">'+
         '<div class="cq-stat"><span class="cq-stat-ico">'+icoCaixa+'</span><span class="cq-stat-label">Tamanho da Caixa</span><span class="cq-stat-val sm">'+(p.TamanhoCaixa||'—')+'</span></div>'+
         '<div class="cq-stat '+(temCantoneira?'cantoneira-sim':'cantoneira-nao')+'"><span class="cq-stat-ico">'+icoCantoneira+'</span><span class="cq-stat-label">Cantoneira</span><span class="cq-stat-val">'+(temCantoneira?'SIM':'NÃO')+'</span></div>'+
@@ -1778,6 +1860,11 @@ function selecionarConsultaPeca(id){
       arranjosHtml+
     '</div>';
   det.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function fecharDetalheConsulta(){
+  document.getElementById('consulta-detalhe').innerHTML='';
+  S.consultaSelId=null;
+  renderConsultaLista(document.getElementById('consulta-busca').value);
 }
 
 function entrarComoEstoque(){
@@ -1801,6 +1888,43 @@ function entrarComoVerificacaoCaixa(){
   document.getElementById('verif-resultado').innerHTML='';
   document.getElementById('verif-input-manual').value='';
   verifFecharCamera();
+}
+
+function entrarComoNotaFiscal(){
+  S.modo='notafiscal';
+  document.getElementById('modal-inicio').style.display='none';
+  document.getElementById('topbar').style.display='flex';
+  document.getElementById('tb-modo-label').textContent='Modo:';
+  var b=document.getElementById('tb-badge'); b.textContent='NOTA FISCAL'; b.className='u-badge';
+  mostrarPag('nota-fiscal');
+  var selCliente=document.getElementById('nf-cliente');
+  selCliente.innerHTML=(S.clientes&&S.clientes.length)
+    ? S.clientes.map(function(c){ return '<option value="'+esc(c.Nome)+'">'+c.Nome+'</option>'; }).join('')
+    : '<option value="">Nenhum cliente cadastrado — cadastre em Admin</option>';
+  var selPeca=document.getElementById('nf-peca');
+  selPeca.innerHTML=S.pecas.map(function(p){ return '<option value="'+esc(p.Codigo)+'|'+esc(p.Nome)+'">'+p.Codigo+' — '+p.Nome+'</option>'; }).join('');
+  document.getElementById('nf-destino').value='';
+  document.getElementById('nf-numero').value='';
+}
+function gerarEImprimirNF(){
+  var cliente=document.getElementById('nf-cliente').value;
+  var destino=document.getElementById('nf-destino').value.trim();
+  var pecaVal=document.getElementById('nf-peca').value;
+  var numero=document.getElementById('nf-numero').value.trim();
+  if(!cliente){ toast('Selecione o cliente','aviso'); return; }
+  if(!destino){ toast('Informe o destino','aviso'); return; }
+  if(!pecaVal){ toast('Selecione a peça','aviso'); return; }
+  if(!numero){ toast('Informe o número da nota fiscal','aviso'); return; }
+  var partesPeca=pecaVal.split('|');
+  var codigo=partesPeca[0], nomePeca=partesPeca[1];
+  var template=(S.modelosEtiqueta&&S.modelosEtiqueta.NF)||'';
+  if(!template){ toast('Modelo de etiqueta de NF não carregado — recarregue a página','erro'); return; }
+  var valores={ NF:esc(numero), CODIGO:codigo, DESCRICAO:esc(nomePeca), CLIENTE:esc(cliente), DESTINO:esc(destino) };
+  var html=mdlPreencher(template,valores);
+  var pa=document.getElementById('print-area');
+  pa.innerHTML='<div class="etiq-fisica">'+html+'</div>';
+  pa.style.display='block'; window.print(); pa.style.display='none';
+  toast('Etiqueta de NF enviada pra impressão','sucesso');
 }
 
 var _estAbaAtual='quadro';
@@ -2224,6 +2348,7 @@ function admNavIr(secao){
     pecas:     {fn:'getPecasTodas',     render:rPecas, titulo:'🔩 Peças',     label:'Peça'},
     materiais: {fn:'getMateriaisTodos', render:rMats2, titulo:'🧪 Materiais', label:'Material'},
     maquinas:  {fn:'getMaquinasTodas',  render:rMaqs2, titulo:'⚙️ Máquinas',  label:'Máquina'},
+    clientes:  {fn:'getClientesTodos',  render:rClientes, titulo:'🏢 Clientes', label:'Cliente'},
     logs:      {fn:'getLogs',           render:rLogs,  titulo:'📋 Logs',       label:''}
   };
   var cfg=cfgs[secao];
@@ -2361,6 +2486,9 @@ var DADOS_EXEMPLO_PECA = {
 };
 var DADOS_EXEMPLO_CONF = {
   EMPRESA:'VITALBOR', CONFERENTE_1:'1 — João Silva', DATA_CONF:'06/07/2026'
+};
+var DADOS_EXEMPLO_NF = {
+  NF:'9999', CODIGO:'COL-150', DESCRICAO:'ANEL DE BORRACHA JEI COL. ESG. 150/160MM - NBR', CLIENTE:'TIGRE', DESTINO:'SÃO PAULO'
 };
 
 // ═══════════════════════════════════════
@@ -2588,12 +2716,13 @@ function renderModelos(){
     '<div class="mdl-legenda">'+
       '<b>{{CODIGO}}</b> <b>{{DESCRICAO}}</b> <b>{{MATERIAL}}</b> <b>{{COR}}</b> <b>{{NORMA}}</b> <b>{{QUANTIDADE}}</b> <b>{{QR_CODE}}</b> '+
       '<b>{{DATA}}</b> <b>{{LOTE}}</b> <b>{{OP}}</b> <b>{{REFERENCIA}}</b> <b>{{TRIMESTRE}}</b> <b>{{EMPRESA}}</b> '+
-      '<b>{{CONFERENTE_1}}</b> <b>{{DATA_CONF}}</b>'+
+      '<b>{{CONFERENTE_1}}</b> <b>{{DATA_CONF}}</b> <b>{{NF}}</b> <b>{{CLIENTE}}</b> <b>{{DESTINO}}</b>'+
       '<div style="margin-top:6px">Edite o HTML/CSS livremente — só não invente nomes fora dessa lista, eles não vão ser substituídos. {{QR_CODE}} é especial: vira a imagem do QR, não apague o token.</div>'+
     '</div>'+
     '<div class="mdl-tabs">'+
       '<div class="mdl-tab" id="mdltab-PECA" onclick="mdlSetTab(\'PECA\')">🏷️ Etiqueta de Peça</div>'+
       '<div class="mdl-tab" id="mdltab-CONFERENCIA" onclick="mdlSetTab(\'CONFERENCIA\')">✅ Etiqueta de Conferência (1 canhoto)</div>'+
+      '<div class="mdl-tab" id="mdltab-NF" onclick="mdlSetTab(\'NF\')">🧾 Etiqueta de NF</div>'+
     '</div>'+
     '<div class="mdl-cols">'+
       '<div class="mdl-editor">'+
@@ -2610,6 +2739,11 @@ function renderModelos(){
           '<div style="font-size:12px;font-weight:800;color:var(--azul);margin-bottom:8px">🔧 Ajustes fáceis (sem mexer em HTML)</div>'+
           '<div class="fg" style="margin-bottom:8px"><label>Escala do texto (%)</label><input type="number" id="facil-escala-conf" min="50" max="200" value="100"/></div>'+
           '<button type="button" class="mdl-btn-save" style="width:100%" onclick="mdlAplicarFacilConf()">Aplicar e Salvar</button>'+
+        '</div>'+
+        '<div id="mdl-facil-nf" style="display:none;background:#fff;border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)">'+
+          '<div style="font-size:12px;font-weight:800;color:var(--azul);margin-bottom:8px">🔧 Ajustes fáceis (sem mexer em HTML)</div>'+
+          '<div class="fg" style="margin-bottom:8px"><label>Escala do texto (%)</label><input type="number" id="facil-escala-nf" min="50" max="200" value="100"/></div>'+
+          '<button type="button" class="mdl-btn-save" style="width:100%" onclick="mdlAplicarFacilNF()">Aplicar e Salvar</button>'+
         '</div>'+
         '<textarea id="mdl-textarea" spellcheck="false"></textarea>'+
         '<div class="mdl-acts">'+
@@ -2641,17 +2775,22 @@ function mdlSetTab(tipo){
   _mdlTab = tipo;
   document.getElementById('mdltab-PECA').classList.toggle('ativo', tipo==='PECA');
   document.getElementById('mdltab-CONFERENCIA').classList.toggle('ativo', tipo==='CONFERENCIA');
+  document.getElementById('mdltab-NF').classList.toggle('ativo', tipo==='NF');
   var painelFacil=document.getElementById('mdl-facil-peca');
   var painelFacilConf=document.getElementById('mdl-facil-conf');
+  var painelFacilNF=document.getElementById('mdl-facil-nf');
   if(painelFacil) painelFacil.style.display = (tipo==='PECA') ? '' : 'none';
   if(painelFacilConf) painelFacilConf.style.display = (tipo==='CONFERENCIA') ? '' : 'none';
-  var cfg=(S.modelosEtiqueta&&S.modelosEtiqueta.CONFIG)||{qrSizeMm:22,escalaTexto:100,normaFixa:'NBR 7676',escalaTextoConf:100};
+  if(painelFacilNF) painelFacilNF.style.display = (tipo==='NF') ? '' : 'none';
+  var cfg=(S.modelosEtiqueta&&S.modelosEtiqueta.CONFIG)||{qrSizeMm:22,escalaTexto:100,normaFixa:'NBR 7676',escalaTextoConf:100,escalaTextoNF:100};
   if(tipo==='PECA'){
     var iQr=document.getElementById('facil-qr'); if(iQr) iQr.value=cfg.qrSizeMm;
     var iEsc=document.getElementById('facil-escala'); if(iEsc) iEsc.value=cfg.escalaTexto;
     var iNorma=document.getElementById('facil-norma'); if(iNorma) iNorma.value=cfg.normaFixa;
   } else if(tipo==='CONFERENCIA'){
     var iEscC=document.getElementById('facil-escala-conf'); if(iEscC) iEscC.value=cfg.escalaTextoConf||100;
+  } else if(tipo==='NF'){
+    var iEscN=document.getElementById('facil-escala-nf'); if(iEscN) iEscN.value=cfg.escalaTextoNF||100;
   }
   var ta = document.getElementById('mdl-textarea');
   ta.value = (S.modelosEtiqueta && S.modelosEtiqueta[tipo]) || (_mdlPadrao && _mdlPadrao[tipo]) || '';
@@ -2710,6 +2849,31 @@ function mdlAplicarFacilConf(){
     .withFailureHandler(function(e){ toast('Erro ao salvar modelo: '+(e?e.message:''),'erro'); })
     .salvarModeloEtiqueta('CONFERENCIA', novoTemplate);
 }
+function mdlAplicarFacilNF(){
+  var escalaTextoNF=Number(document.getElementById('facil-escala-nf').value)||100;
+  if(!confirm('Isso gera um modelo novo de Etiqueta de NF com esse tamanho, substituindo o texto atual no editor (perde edições manuais de HTML feitas nele). Continuar?')) return;
+  var novoTemplate=montarTemplatePadraoNF(escalaTextoNF/100);
+  document.getElementById('mdl-textarea').value=novoTemplate;
+  mdlPreview();
+  var cfgAtual=(S.modelosEtiqueta&&S.modelosEtiqueta.CONFIG)||{};
+  var novoCfg=Object.assign({},cfgAtual,{escalaTextoNF:escalaTextoNF});
+  google.script.run
+    .withSuccessHandler(function(r1){
+      if(!r1||!r1.ok){ toast(r1&&r1.erro?r1.erro:'Erro ao salvar modelo','erro'); return; }
+      google.script.run
+        .withSuccessHandler(function(r2){
+          if(!r2||!r2.ok){ toast(r2&&r2.erro?r2.erro:'Modelo salvo, mas config falhou','erro'); return; }
+          S.modelosEtiqueta=S.modelosEtiqueta||{};
+          S.modelosEtiqueta.NF=novoTemplate;
+          S.modelosEtiqueta.CONFIG=novoCfg;
+          toast('Tamanho aplicado e salvo!','sucesso');
+        })
+        .withFailureHandler(function(e){ toast('Modelo salvo, mas config falhou: '+(e?e.message:''),'erro'); })
+        .salvarModeloEtiqueta('CONFIG', JSON.stringify(novoCfg));
+    })
+    .withFailureHandler(function(e){ toast('Erro ao salvar modelo: '+(e?e.message:''),'erro'); })
+    .salvarModeloEtiqueta('NF', novoTemplate);
+}
 
 function mdlPreencher(template, dados){
   var html = template;
@@ -2729,6 +2893,8 @@ function mdlPreview(){
       '<div style="flex:1;border-right:1mm dashed #000">'+mdlPreencher(html,dados)+'</div>'+
       '<div style="flex:1">'+mdlPreencher(html,dados)+'</div>'+
     '</div>';
+  } else if(_mdlTab==='NF'){
+    box.innerHTML = mdlPreencher(html, DADOS_EXEMPLO_NF);
   } else {
     var dados=Object.assign({},DADOS_EXEMPLO_PECA);
     var iQr=document.getElementById('facil-qr');
@@ -3948,6 +4114,21 @@ function bA(v){ return v===true||String(v).toUpperCase()==='TRUE'; }
 // Cache temporário para edição — evita quebrar onclick com caracteres especiais
 var _editCache = {};
 
+function rClientes(d){
+  var el=document.getElementById('adm-lista');
+  if(!el) return;
+  if(!d.length){el.innerHTML='<p style="padding:12px;color:var(--texto2)">Nenhum cliente.</p>';return;}
+  el.innerHTML=d.map(function(c,i){
+    var a=bA(c.Ativo);
+    _editCache['cliente_'+i]=c;
+    return '<div class="ic"><div class="ic-info"><div class="ic-nome">'+c.Nome+'</div>'+
+      '<div class="ic-det"><span class="badge '+(a?'ba':'bi2')+'">'+(a?'Ativo':'Inativo')+'</span><span>'+c.DataCadastro+'</span></div></div>'+
+      '<div class="ic-acts">'+
+      '<button class="bic bic-e" onclick="editFromCache(\'cliente\','+i+')">✏️</button>'+
+      '<button class="bic bic-d" onclick="delItem(\'clientes\',\''+c.ID+'\')">🗑️</button>'+
+      '</div></div>';
+  }).join('');
+}
 function rOps(d){
   var el=document.getElementById('adm-lista');
   if(!el) return;
@@ -4039,6 +4220,10 @@ function editFromCache(tipo, idx){
     S.cadTipo='maquinas';
     document.getElementById('cad-t').textContent='Editar Máquina';
     document.getElementById('cad-body').innerHTML=formCad('maquinas',{Nome:d.Nome||'',Descricao:d.Descricao||''});
+  } else if(tipo==='cliente'){
+    S.cadTipo='clientes';
+    document.getElementById('cad-t').textContent='Editar Cliente';
+    document.getElementById('cad-body').innerHTML=formCad('clientes',{Nome:d.Nome||''});
   }
   resetBtnSalvarCad();
   document.getElementById('mo-cad').classList.add('aberto');
@@ -4064,7 +4249,7 @@ function sugerirCorMaterial(){
   if(mapa[nome]) c.value=mapa[nome];
 }
 function abrirCad(tipo){ S.cadTipo=tipo; S.cadId=null;
-  var t={operadores:'Novo Operador',pecas:'Nova Peça',materiais:'Novo Material',maquinas:'Nova Máquina'};
+  var t={operadores:'Novo Operador',pecas:'Nova Peça',materiais:'Novo Material',maquinas:'Nova Máquina',clientes:'Novo Cliente'};
   document.getElementById('cad-t').textContent=t[tipo];
   document.getElementById('cad-body').innerHTML=formCad(tipo,null);
   if(tipo==='pecas'){ _gruposEdicao=[]; renderGruposEdicao(); }
@@ -4177,6 +4362,7 @@ function formCad(tipo,d){
   if(tipo==='pecas') return '<div class="fg"><label>Código</label><input type="text" id="fc-c" placeholder="Ex: DEF-200" value="'+(d&&d.Codigo?d.Codigo:'')+'"/></div><div class="fg"><label>Nome da Peça</label><input type="text" id="fc-n" placeholder="Ex: Anel Defofo 200mm" value="'+(d&&d.Nome?d.Nome:'')+'"/></div><div class="fg"><label>Qtd Padrão por Caixa</label><input type="number" id="fc-q" oninput="atualizarTotalGrupos()" placeholder="Ex: 540" value="'+(d&&d.QtdPadrao?d.QtdPadrao:'')+'"/></div><div class="fg"><label>Tamanho da Caixa</label><input type="text" id="fc-caixa" placeholder="Ex: Caixa 40x30" value="'+(d&&d.TamanhoCaixa?d.TamanhoCaixa:'')+'"/></div><div class="fg" style="display:flex;align-items:center;gap:8px;flex-direction:row"><input type="checkbox" id="fc-cantoneira" style="width:20px;height:20px" '+(d&&d.Cantoneira?'checked':'')+'/><label style="margin:0">Usa cantoneira na caixa</label></div><div class="fg"><label>Divisão em Tubos (grupos que juntos fecham a caixa)</label><div id="fc-grupos-lista"></div><button type="button" class="arr-add-grupo" onclick="adicionarGrupo()">+ grupo de tubo</button><div class="arr-total" id="grupos-total"></div></div>';
   if(tipo==='materiais') return '<div class="fg"><label>Nome</label><input type="text" id="fc-n" placeholder="Ex: EPDM" value="'+(d&&d.Nome?d.Nome:'')+'" onblur="sugerirCorMaterial()"/></div><div class="fg"><label>Cor (referência impressa na etiqueta)</label><input type="text" id="fc-cor" placeholder="Ex: Verde" value="'+(d&&d.Cor?d.Cor:'')+'"/></div><div class="fg"><label>Descrição / Norma (opcional)</label><input type="text" id="fc-d" placeholder="Ex: NBR 7676" value="'+(d&&d.Descricao?d.Descricao:'')+'"/></div>';
   if(tipo==='maquinas') return '<div class="fg"><label>Nome</label><input type="text" id="fc-n" placeholder="Ex: Injetora 01" value="'+(d&&d.Nome?d.Nome:'')+'"/></div><div class="fg"><label>Descrição (opcional)</label><input type="text" id="fc-d" placeholder="Ex: Engel 150t" value="'+(d&&d.Descricao?d.Descricao:'')+'"/></div>';
+  if(tipo==='clientes') return '<div class="fg"><label>Nome do Cliente</label><input type="text" id="fc-n" placeholder="Ex: Tigre" value="'+(d&&d.Nome?d.Nome:'')+'"/></div>';
   if(tipo==='caixa') return '<div class="fg" style="background:var(--cinza);padding:9px 12px;border-radius:8px;font-size:12px;color:var(--texto2)">'+
       '<div><b style="color:var(--azul)">'+(d&&d.CodigoPeca?d.CodigoPeca:'')+'</b> — '+(d&&d.Peca?d.Peca:'')+'</div>'+
       '<div>Operador: '+(d&&d.Operador?d.Operador:'')+' • Caixa Nº '+(d&&d.NumeroCaixa?d.NumeroCaixa:'')+' • '+(d&&d.DataHora?d.DataHora:'')+'</div>'+
@@ -4243,6 +4429,11 @@ function salvarCad(){
     if(!dados.Nome){ toast('Informe o nome','aviso'); return; }
     _salvandoCad=true; if(btn){ btn.disabled=true; btn.textContent='Salvando...'; }
     google.script.run.withSuccessHandler(cb).withFailureHandler(er).salvarMaquina(dados);
+  } else if(tipo==='clientes'){
+    dados.Nome=document.getElementById('fc-n').value.trim();
+    if(!dados.Nome){ toast('Informe o nome','aviso'); return; }
+    _salvandoCad=true; if(btn){ btn.disabled=true; btn.textContent='Salvando...'; }
+    google.script.run.withSuccessHandler(cb).withFailureHandler(er).salvarCliente(dados);
   } else if(tipo==='caixa'){
     dados.Material=document.getElementById('fc-cx-mat').value;
     dados.Lote=document.getElementById('fc-cx-lote').value.trim();
@@ -4255,7 +4446,7 @@ function salvarCad(){
   }
 }
 function relTipo(tipo){
-  var m={operadores:['getOperadores','op'],pecas:['getPecas','pecas'],materiais:['getMateriais','mats'],maquinas:['getMaquinas','maqs']};
+  var m={operadores:['getOperadores','op'],pecas:['getPecas','pecas'],materiais:['getMateriais','mats'],maquinas:['getMaquinas','maqs'],clientes:['getClientes','clientes']};
   var v=m[tipo]; if(!v) return;
   google.script.run.withSuccessHandler(function(d){
     S[v[1]]=d||[];
@@ -4271,7 +4462,7 @@ function editMat(id,nome,desc){ S.cadTipo='materiais'; S.cadId=id; document.getE
 function editMaq(id,nome,desc){ S.cadTipo='maquinas'; S.cadId=id; document.getElementById('cad-t').textContent='Editar Máquina'; document.getElementById('cad-body').innerHTML=formCad('maquinas',{Nome:nome,Descricao:desc}); document.getElementById('mo-cad').classList.add('aberto'); }
 function delItem(tipo,id){
   if(!confirm('Desativar?')) return;
-  var fns={operadores:'excluirOperador',pecas:'excluirPeca',materiais:'excluirMaterial',maquinas:'excluirMaquina'};
+  var fns={operadores:'excluirOperador',pecas:'excluirPeca',materiais:'excluirMaterial',maquinas:'excluirMaquina',clientes:'excluirCliente'};
   google.script.run.withSuccessHandler(function(){ admNavIr(tipo); relTipo(tipo); toast('Desativado','aviso'); }).withFailureHandler(function(){ toast('Erro','erro'); })[fns[tipo]](id);
 }
 
