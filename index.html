@@ -890,7 +890,7 @@ select.inp-pos option{color:#000;background:#fff}
 @keyframes camScan{0%,100%{top:2%}50%{top:96%}}
 .mov-cam-status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700;background:rgba(0,0,0,.55);text-align:center;padding:12px;box-sizing:border-box}
 .mov-cam-status.oculto{display:none}
-.op-sel-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,200px));gap:18px;justify-content:center}
+.op-sel-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:14px;justify-content:center;max-width:640px;margin:0 auto;width:100%}
 .op-sel-btn{background:#fff;border:2px solid var(--cinza3);border-radius:var(--radius);padding:28px 14px;text-align:center;cursor:pointer;font-weight:800;color:var(--azul);transition:all .12s;display:flex;flex-direction:column;align-items:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
 .op-sel-btn:active{transform:scale(.95);background:var(--cinza2)}
 .op-sel-btn .ico{color:var(--azul3);display:flex}
@@ -945,8 +945,9 @@ select.inp-pos option{color:#000;background:#fff}
 .mov-manual-box.vis{display:block}
 .mov-manual-aviso{background:rgba(246,201,14,.15);border:1px solid rgba(246,201,14,.4);border-radius:8px;padding:10px 12px;font-size:11px;color:#8a6d00;font-weight:700;margin-bottom:12px;display:flex;gap:8px;align-items:flex-start}
 .mov-ultima{background:#fff;border-radius:var(--radius);padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:14px;display:none}
-.mov-popup{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:600;width:92%;max-width:440px;background:#fff;border-radius:var(--radius);padding:14px;box-shadow:0 12px 40px rgba(0,0,0,.4);animation:popIn .22s ease}
-@keyframes popIn{from{opacity:0;transform:translateX(-50%) translateY(-18px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+.mov-popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:600;width:92%;max-width:440px;max-height:80vh;overflow-y:auto;background:#fff;border-radius:var(--radius);padding:16px;box-shadow:0 20px 60px rgba(0,0,0,.5);animation:popIn .22s ease}
+.mov-popup::before{content:'';position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:-1}
+@keyframes popIn{from{opacity:0;transform:translate(-50%,-50%) scale(.92)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
 .mov-cam-wrap.erro-flash{animation:flashErro .5s ease}
 @keyframes flashErro{0%,100%{box-shadow:0 4px 16px rgba(0,0,0,.25)}30%{box-shadow:0 0 0 8px rgba(192,57,43,.7)}}
 .mov-ultima.vis{display:block}
