@@ -419,7 +419,7 @@ var backend = {
       rows.forEach(function (r) {
         var peca = r.peca, mat = r.material;
         if (!peca || !mat) return;
-        var chave = peca + '||' + mat;
+        var chave = (r.codigo_peca || peca) + '||' + mat;
         if (!mapa[chave]) mapa[chave] = { Peca: peca, CodigoPeca: r.codigo_peca, Material: mat, Saldo: 0 };
         var qtd = Number(r.qtd_caixas) || 1;
         if (r.tipo === 'ENTRADA') mapa[chave].Saldo += qtd; else if (r.tipo === 'SAIDA') mapa[chave].Saldo -= qtd;
@@ -447,6 +447,15 @@ var backend = {
           Conferente2: r.conferente2 || '', TipoSaida: r.tipo_saida || '', NotaFiscal: r.nota_fiscal || '' };
       });
     } catch (e) { return []; }
+  },
+
+  async getStatusTodasCaixas() {
+    try {
+      var rows = await sbGet('movimentacoes?select=caixa_id,tipo,data_hora&caixa_id=not.is.null&order=data_hora.asc&limit=100000');
+      var mapa = {};
+      rows.forEach(function (r) { if (r.caixa_id) mapa[r.caixa_id] = r.tipo; }); // sobrescreve — o último (mais recente) vence
+      return mapa;
+    } catch (e) { return {}; }
   },
 
   async getCaixaPorId(id) {
@@ -1356,7 +1365,10 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
           <div class="df-campo"><label>Nº da Nota Fiscal</label><input type="text" id="estmov-f-nf" placeholder="Ex: 13590"/></div>
           <div></div>
         </div>
-        <button class="btn-filtrar" onclick="estMovFiltrar()">🔍 Aplicar Filtro</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn-filtrar" style="background:var(--cinza2);color:var(--texto2);flex:1" onclick="estMovLimparFiltro()">✕ Limpar Filtros</button>
+          <button class="btn-filtrar" style="flex:2" onclick="estMovFiltrar()">🔍 Aplicar Filtro</button>
+        </div>
       </div>
       <div class="mov-tabela-wrap" style="margin-top:12px">
         <table class="mov-tabela" id="estmov-tabela"><thead><tr><th>Data/Hora</th></tr></thead><tbody><tr><td style="text-align:center;color:var(--texto2);padding:20px">Escolha um filtro e clique em Aplicar</td></tr></tbody></table>
@@ -1616,6 +1628,16 @@ function estMovPopularFiltros(){
   }
 }
 
+function estMovLimparFiltro(){
+  document.getElementById('estmov-f-peca').value='';
+  document.getElementById('estmov-f-op').value='';
+  document.getElementById('estmov-f-ini').value='';
+  document.getElementById('estmov-f-fim').value='';
+  document.getElementById('estmov-f-tipo').value='';
+  document.getElementById('estmov-f-origem').value='';
+  document.getElementById('estmov-f-nf').value='';
+  document.getElementById('estmov-tabela').innerHTML='<thead><tr><th>Data/Hora</th></tr></thead><tbody><tr><td style="text-align:center;color:var(--texto2);padding:20px">Escolha um filtro e clique em Aplicar</td></tr></tbody>';
+}
 function estMovFiltrar(){
   var peca=document.getElementById('estmov-f-peca').value;
   var operador=document.getElementById('estmov-f-op').value;
@@ -1641,17 +1663,38 @@ function estMovFiltrar(){
     .withSuccessHandler(function(regs){
       regs=regs||[];
       if(!regs.length){ tabela.innerHTML='<thead><tr><th>Data/Hora</th></tr></thead><tbody><tr><td style="text-align:center;color:var(--texto2);padding:20px">Nenhuma movimentação encontrada com esse filtro.</td></tr></tbody>'; return; }
-      var html='<thead><tr><th>Data/Hora</th><th>Tipo</th><th>Peça</th><th>Material</th><th>Lote</th><th>Qtd</th><th>Origem</th><th>Operador</th><th>Conferente 2</th><th>Tipo Saída</th><th>NF</th><th>Código</th><th>Motivo</th><th>Etiqueta</th></tr></thead><tbody>';
-      regs.forEach(function(r){
-        var btnReimp = r.Origem==='BIPADO' && r.CaixaID ? '<button class="bic bic-e" onclick="reimprimirPorCaixaId(\''+r.CaixaID+'\')" title="Reimprimir etiqueta">🖨️</button>' : '—';
-        var codigoUnico = r.CaixaID ? '<span style="font-family:monospace;font-size:10px">'+formatarReferencia(r.CaixaID)+'</span>' : '—';
-        html+='<tr><td>'+r.DataHora+'</td><td>'+(r.Tipo==='ENTRADA'?'📥 Entrada':'📤 Saída')+'</td><td>'+r.Peca+'</td><td>'+r.Material+'</td><td>'+(r.Lote||'—')+'</td><td>'+r.QtdCaixas+'</td><td>'+(r.Origem==='MANUAL'?'✋ Manual':'🔫 Bipado')+'</td><td>'+(r.Usuario||'—')+'</td><td>'+(r.Conferente2||'—')+'</td><td>'+(r.TipoSaida==='CORRECAO'?'Correção':r.TipoSaida==='PEDIDO'?'Pedido':'—')+'</td><td>'+(r.NotaFiscal||'—')+'</td><td>'+codigoUnico+'</td><td>'+(r.Motivo||'—')+'</td><td>'+btnReimp+'</td></tr>';
-      });
-      html+='</tbody>';
-      tabela.innerHTML=html;
+      google.script.run
+        .withSuccessHandler(function(statusMap){
+          var html='<thead><tr><th>Data/Hora</th><th>Tipo</th><th>Peça</th><th>Material</th><th>Lote</th><th>Qtd</th><th>Origem</th><th>Operador</th><th>Conferente 2</th><th>Tipo Saída</th><th>NF</th><th>Código</th><th>Status da Caixa</th><th>Motivo</th><th>Etiqueta</th></tr></thead><tbody>';
+          regs.forEach(function(r){
+            var btnReimp = r.Origem==='BIPADO' && r.CaixaID ? '<button class="bic bic-e" onclick="reimprimirPorCaixaId(\''+r.CaixaID+'\')" title="Reimprimir etiqueta">🖨️</button>' : '—';
+            var codigoUnico = r.CaixaID ? '<span style="font-family:monospace;font-size:10px">'+formatarReferencia(r.CaixaID)+'</span>' : '—';
+            html+='<tr><td>'+r.DataHora+'</td><td>'+(r.Tipo==='ENTRADA'?'📥 Entrada':'📤 Saída')+'</td><td>'+r.Peca+'</td><td>'+r.Material+'</td><td>'+(r.Lote||'—')+'</td><td>'+r.QtdCaixas+'</td><td>'+(r.Origem==='MANUAL'?'✋ Manual':'🔫 Bipado')+'</td><td>'+(r.Usuario||'—')+'</td><td>'+(r.Conferente2||'—')+'</td><td>'+(r.TipoSaida==='CORRECAO'?'Correção':r.TipoSaida==='PEDIDO'?'Pedido':'—')+'</td><td>'+(r.NotaFiscal||'—')+'</td><td>'+codigoUnico+'</td><td>'+movStatusCaixaHtml(r.CaixaID,statusMap)+'</td><td>'+(r.Motivo||'—')+'</td><td>'+btnReimp+'</td></tr>';
+          });
+          html+='</tbody>';
+          tabela.innerHTML=html;
+        })
+        .withFailureHandler(function(){
+          var html='<thead><tr><th>Data/Hora</th><th>Tipo</th><th>Peça</th><th>Material</th><th>Lote</th><th>Qtd</th><th>Origem</th><th>Operador</th><th>Conferente 2</th><th>Tipo Saída</th><th>NF</th><th>Código</th><th>Motivo</th><th>Etiqueta</th></tr></thead><tbody>';
+          regs.forEach(function(r){
+            var btnReimp = r.Origem==='BIPADO' && r.CaixaID ? '<button class="bic bic-e" onclick="reimprimirPorCaixaId(\''+r.CaixaID+'\')" title="Reimprimir etiqueta">🖨️</button>' : '—';
+            var codigoUnico = r.CaixaID ? '<span style="font-family:monospace;font-size:10px">'+formatarReferencia(r.CaixaID)+'</span>' : '—';
+            html+='<tr><td>'+r.DataHora+'</td><td>'+(r.Tipo==='ENTRADA'?'📥 Entrada':'📤 Saída')+'</td><td>'+r.Peca+'</td><td>'+r.Material+'</td><td>'+(r.Lote||'—')+'</td><td>'+r.QtdCaixas+'</td><td>'+(r.Origem==='MANUAL'?'✋ Manual':'🔫 Bipado')+'</td><td>'+(r.Usuario||'—')+'</td><td>'+(r.Conferente2||'—')+'</td><td>'+(r.TipoSaida==='CORRECAO'?'Correção':r.TipoSaida==='PEDIDO'?'Pedido':'—')+'</td><td>'+(r.NotaFiscal||'—')+'</td><td>'+codigoUnico+'</td><td>'+(r.Motivo||'—')+'</td><td>'+btnReimp+'</td></tr>';
+          });
+          html+='</tbody>';
+          tabela.innerHTML=html;
+        })
+        .getStatusTodasCaixas();
     })
     .withFailureHandler(function(){ tabela.innerHTML='<thead><tr><th>Data/Hora</th></tr></thead><tbody><tr><td>Erro ao carregar.</td></tr></tbody>'; })
     .getMovimentacoes(filtros);
+}
+function movStatusCaixaHtml(caixaId,statusMap){
+  if(!caixaId) return '—';
+  var tipo=statusMap?statusMap[caixaId]:null;
+  if(tipo==='ENTRADA') return '<span style="color:var(--verde);font-weight:800">🟢 Em Estoque</span>';
+  if(tipo==='SAIDA') return '<span style="color:#c0392b;font-weight:800">🔴 Fora do Estoque</span>';
+  return '—';
 }
 
 // Mapa de cor cadastrada no Material -> paleta visual da coluna no quadro.
@@ -1694,7 +1737,7 @@ function renderQuadroEstoque(){
     .withSuccessHandler(function(estoque){
       estoque=estoque||[];
       var saldos={};
-      estoque.forEach(function(e){ saldos[e.Peca+'||'+e.Material]=e.Saldo; });
+      estoque.forEach(function(e){ saldos[(e.CodigoPeca||e.Peca)+'||'+e.Material]=e.Saldo; });
 
       if(!S.pecas.length||!S.mats.length){
         tabela.innerHTML='<thead><tr><th>Peça</th></tr></thead><tbody><tr><td style="text-align:center;color:var(--texto2);padding:20px">Cadastre peças e materiais primeiro.</td></tr></tbody>';
@@ -1715,7 +1758,7 @@ function renderQuadroEstoque(){
         var vals={};
         grupos.forEach(function(g){
           var total=0;
-          g.membros.forEach(function(matNome){ total+=saldos[p.Nome+'||'+matNome]||0; });
+          g.membros.forEach(function(matNome){ total+=saldos[p.Codigo+'||'+matNome]||0; });
           vals[g.nome]=total;
         });
         return { peca:p, vals:vals };
@@ -1908,7 +1951,10 @@ function renderAdmMovimentacoes(){
         '<div class="df-campo"><label>Nº da Nota Fiscal</label><input type="text" id="admmov-f-nf" placeholder="Ex: 13590"/></div>'+
         '<div></div>'+
       '</div>'+
-      '<button class="btn-filtrar" onclick="admMovFiltrar()">🔍 Aplicar Filtro</button>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button class="btn-filtrar" style="background:var(--cinza2);color:var(--texto2);flex:1" onclick="admMovLimparFiltro()">✕ Limpar Filtros</button>'+
+        '<button class="btn-filtrar" style="flex:2" onclick="admMovFiltrar()">🔍 Aplicar Filtro</button>'+
+      '</div>'+
     '</div>'+
     '<div class="mov-tabela-wrap" style="margin-top:12px" id="admmov-tabela-wrap">'+
       '<table class="mov-tabela" id="admmov-tabela"><thead><tr><th>Data/Hora</th></tr></thead><tbody><tr><td style="text-align:center;color:var(--texto2);padding:20px">Carregando...</td></tr></tbody></table>'+
@@ -1917,6 +1963,16 @@ function renderAdmMovimentacoes(){
   sp.innerHTML='<option value="">Todas</option>'+S.pecas.map(function(p){ return '<option value="'+esc(p.Nome)+'">'+p.Codigo+' — '+p.Nome+'</option>'; }).join('');
   var so=document.getElementById('admmov-f-op');
   so.innerHTML='<option value="">Todos</option>'+S.op.map(function(o){ return '<option value="'+esc(o.Nome)+'">'+(o.Matricula?o.Matricula+' — ':'')+o.Nome+'</option>'; }).join('');
+  admMovFiltrar();
+}
+function admMovLimparFiltro(){
+  document.getElementById('admmov-f-peca').value='';
+  document.getElementById('admmov-f-op').value='';
+  document.getElementById('admmov-f-ini').value='';
+  document.getElementById('admmov-f-fim').value='';
+  document.getElementById('admmov-f-tipo').value='';
+  document.getElementById('admmov-f-origem').value='';
+  document.getElementById('admmov-f-nf').value='';
   admMovFiltrar();
 }
 function admMovFiltrar(){
@@ -1944,16 +2000,32 @@ function admMovFiltrar(){
     .withSuccessHandler(function(d){
       var regs=d||[];
       if(!regs.length){ wrap.innerHTML='<div class="dash-empty"><div class="dei">📭</div><div>Nenhuma movimentação encontrada com esse filtro.</div></div>'; return; }
-      var html='<table class="mov-tabela"><thead><tr>'+
-        '<th>Data/Hora</th><th>Tipo</th><th>Peça</th><th>Material</th><th>Lote</th><th>Qtd (cx)</th><th>Origem</th><th>Usuário</th><th>Conferente 2</th><th>Tipo Saída</th><th>NF</th><th>Código</th><th>Motivo</th><th>Etiqueta</th>'+
-        '</tr></thead><tbody>';
-      regs.forEach(function(r){
-        var btnReimp = r.Origem==='BIPADO' && r.CaixaID ? '<button class="bic bic-e" onclick="reimprimirPorCaixaId(\''+r.CaixaID+'\')" title="Reimprimir etiqueta">🖨️</button>' : '—';
-        var codigoUnico = r.CaixaID ? '<span style="font-family:monospace;font-size:10px">'+formatarReferencia(r.CaixaID)+'</span>' : '—';
-        html+='<tr><td>'+r.DataHora+'</td><td>'+(r.Tipo==='ENTRADA'?'📥 Entrada':'📤 Saída')+'</td><td>'+r.Peca+'</td><td>'+r.Material+'</td><td>'+(r.Lote||'—')+'</td><td>'+r.QtdCaixas+'</td><td>'+(r.Origem==='MANUAL'?'✋ Manual':'🔫 Bipado')+'</td><td>'+(r.Usuario||'—')+'</td><td>'+(r.Conferente2||'—')+'</td><td>'+(r.TipoSaida==='CORRECAO'?'Correção':r.TipoSaida==='PEDIDO'?'Pedido':'—')+'</td><td>'+(r.NotaFiscal||'—')+'</td><td>'+codigoUnico+'</td><td>'+(r.Motivo||'—')+'</td><td>'+btnReimp+'</td></tr>';
-      });
-      html+='</tbody></table>';
-      wrap.innerHTML=html;
+      google.script.run
+        .withSuccessHandler(function(statusMap){
+          var html='<table class="mov-tabela"><thead><tr>'+
+            '<th>Data/Hora</th><th>Tipo</th><th>Peça</th><th>Material</th><th>Lote</th><th>Qtd (cx)</th><th>Origem</th><th>Usuário</th><th>Conferente 2</th><th>Tipo Saída</th><th>NF</th><th>Código</th><th>Status da Caixa</th><th>Motivo</th><th>Etiqueta</th>'+
+            '</tr></thead><tbody>';
+          regs.forEach(function(r){
+            var btnReimp = r.Origem==='BIPADO' && r.CaixaID ? '<button class="bic bic-e" onclick="reimprimirPorCaixaId(\''+r.CaixaID+'\')" title="Reimprimir etiqueta">🖨️</button>' : '—';
+            var codigoUnico = r.CaixaID ? '<span style="font-family:monospace;font-size:10px">'+formatarReferencia(r.CaixaID)+'</span>' : '—';
+            html+='<tr><td>'+r.DataHora+'</td><td>'+(r.Tipo==='ENTRADA'?'📥 Entrada':'📤 Saída')+'</td><td>'+r.Peca+'</td><td>'+r.Material+'</td><td>'+(r.Lote||'—')+'</td><td>'+r.QtdCaixas+'</td><td>'+(r.Origem==='MANUAL'?'✋ Manual':'🔫 Bipado')+'</td><td>'+(r.Usuario||'—')+'</td><td>'+(r.Conferente2||'—')+'</td><td>'+(r.TipoSaida==='CORRECAO'?'Correção':r.TipoSaida==='PEDIDO'?'Pedido':'—')+'</td><td>'+(r.NotaFiscal||'—')+'</td><td>'+codigoUnico+'</td><td>'+movStatusCaixaHtml(r.CaixaID,statusMap)+'</td><td>'+(r.Motivo||'—')+'</td><td>'+btnReimp+'</td></tr>';
+          });
+          html+='</tbody></table>';
+          wrap.innerHTML=html;
+        })
+        .withFailureHandler(function(){
+          var html='<table class="mov-tabela"><thead><tr>'+
+            '<th>Data/Hora</th><th>Tipo</th><th>Peça</th><th>Material</th><th>Lote</th><th>Qtd (cx)</th><th>Origem</th><th>Usuário</th><th>Conferente 2</th><th>Tipo Saída</th><th>NF</th><th>Código</th><th>Motivo</th><th>Etiqueta</th>'+
+            '</tr></thead><tbody>';
+          regs.forEach(function(r){
+            var btnReimp = r.Origem==='BIPADO' && r.CaixaID ? '<button class="bic bic-e" onclick="reimprimirPorCaixaId(\''+r.CaixaID+'\')" title="Reimprimir etiqueta">🖨️</button>' : '—';
+            var codigoUnico = r.CaixaID ? '<span style="font-family:monospace;font-size:10px">'+formatarReferencia(r.CaixaID)+'</span>' : '—';
+            html+='<tr><td>'+r.DataHora+'</td><td>'+(r.Tipo==='ENTRADA'?'📥 Entrada':'📤 Saída')+'</td><td>'+r.Peca+'</td><td>'+r.Material+'</td><td>'+(r.Lote||'—')+'</td><td>'+r.QtdCaixas+'</td><td>'+(r.Origem==='MANUAL'?'✋ Manual':'🔫 Bipado')+'</td><td>'+(r.Usuario||'—')+'</td><td>'+(r.Conferente2||'—')+'</td><td>'+(r.TipoSaida==='CORRECAO'?'Correção':r.TipoSaida==='PEDIDO'?'Pedido':'—')+'</td><td>'+(r.NotaFiscal||'—')+'</td><td>'+codigoUnico+'</td><td>'+(r.Motivo||'—')+'</td><td>'+btnReimp+'</td></tr>';
+          });
+          html+='</tbody></table>';
+          wrap.innerHTML=html;
+        })
+        .getStatusTodasCaixas();
     })
     .withFailureHandler(function(){ wrap.innerHTML='<p style="padding:12px;color:#c0392b">Erro ao carregar movimentações.</p>'; })
     .getMovimentacoes(filtros);
@@ -2168,6 +2240,7 @@ function mdlBaixar(){
 // DASHBOARD — renderiza dentro do admin
 // ═══════════════════════════════════════
 function renderDash(){
+  _caixasSelecionadas.clear();
   var hoje = new Date();
   var ini  = new Date(); ini.setDate(hoje.getDate()-30);
 
@@ -2183,7 +2256,10 @@ function renderDash(){
         '<div class="df-campo"><label>Operador</label><select id="f-op"><option value="">Todos</option></select></div>'+
         '<div class="df-campo"><label>Peça</label><select id="f-peca"><option value="">Todas</option></select></div>'+
       '</div>'+
-      '<button class="btn-filtrar" onclick="aplicarFiltro()">🔍 Aplicar Filtro</button>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button class="btn-filtrar" style="background:var(--cinza2);color:var(--texto2);flex:1" onclick="limparFiltroDash()">✕ Limpar Filtros</button>'+
+        '<button class="btn-filtrar" style="flex:2" onclick="aplicarFiltro()">🔍 Aplicar Filtro</button>'+
+      '</div>'+
     '</div>'+
     '<div class="kpi-grid">'+
       '<div class="kpi"><div class="kl">Período</div><div class="kv" id="kp-per">—</div><div class="ks">caixas</div></div>'+
@@ -2192,6 +2268,13 @@ function renderDash(){
       '<div class="kpi"><div class="kl">Total Geral</div><div class="kv" id="kp-tt">—</div><div class="ks">histórico</div></div>'+
     '</div>'+
     '<div class="hist-row"><div class="hist-titulo">👥 Histórico por Operador</div><div class="hist-periodo" id="hist-lbl"></div></div>'+
+    '<div id="barra-selecao-caixas" style="display:none;align-items:center;justify-content:space-between;background:var(--azul);color:#fff;padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:8px;gap:10px;flex-wrap:wrap">'+
+      '<span id="barra-selecao-txt" style="font-size:13px;font-weight:800">0 caixas selecionadas</span>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button onclick="limparSelecaoCaixas()" style="background:rgba(255,255,255,.15);border:none;color:#fff;padding:8px 12px;border-radius:6px;font-size:12px;font-weight:800;cursor:pointer;min-height:36px">Limpar seleção</button>'+
+        '<button id="barra-selecao-btn" onclick="excluirSelecionadasConfirm()" style="background:var(--laranja);border:none;color:#fff;padding:8px 14px;border-radius:6px;font-size:12px;font-weight:800;cursor:pointer;min-height:36px">🗑️ Excluir selecionadas</button>'+
+      '</div>'+
+    '</div>'+
     '<div id="hist-ops"><div class="dash-empty"><div class="dei">⏳</div><div style="font-size:13px">Carregando dados...</div></div></div>';
 
   // Popula selects APÓS o HTML estar no DOM
@@ -2257,6 +2340,15 @@ function parseBR(str){
   return null;
 }
 
+function limparFiltroDash(){
+  var hoje=new Date();
+  var ini=new Date(); ini.setDate(hoje.getDate()-30);
+  document.getElementById('f-inicio').value=fmtDI(ini);
+  document.getElementById('f-fim').value=fmtDI(hoje);
+  document.getElementById('f-op').value='';
+  document.getElementById('f-peca').value='';
+  aplicarFiltro();
+}
 function aplicarFiltro(){
   var iniEl = document.getElementById('f-inicio');
   var fimEl = document.getElementById('f-fim');
@@ -2308,6 +2400,7 @@ function aplicarFiltro(){
   else if(fim) lbl='até '+fim.split('-').reverse().join('/');
   var hlEl=document.getElementById('hist-lbl'); if(hlEl) hlEl.textContent=lbl;
 
+  _ultimoFilRegs=fil;
   renderHistOps(fil);
 }
 
@@ -2347,7 +2440,8 @@ function renderHistOps(regs){
           return '<div class="lote-chip" style="cursor:pointer" onclick="togLote(\''+lid+'\')"><span class="lcn">'+lk+'</span><span>('+p.lotes[lk].count+'cx) ▾</span></div>'+
             '<div class="lote-caixas" id="'+lid+'" style="display:none;width:100%">'+
               p.lotes[lk].caixas.map(function(cx){
-                return '<div class="caixa-row"><span>Cx '+(cx.NumeroCaixa||'—')+' — '+cx.QtdPecas+' pç — '+cx.DataHora+(cx.AjusteManual?' <em>(editada)</em>':'')+' <span style="font-family:monospace;color:var(--texto2);font-size:10px">— '+formatarReferencia(cx.ID)+'</span></span>'+
+                var marcado=_caixasSelecionadas.has(cx.ID)?'checked':'';
+                return '<div class="caixa-row"><span style="display:flex;align-items:center;gap:8px"><input type="checkbox" '+marcado+' onchange="toggleSelecaoCaixa(\''+cx.ID+'\',this.checked)" style="width:18px;height:18px;flex-shrink:0"/>Cx '+(cx.NumeroCaixa||'—')+' — '+cx.QtdPecas+' pç — '+cx.DataHora+(cx.AjusteManual?' <em>(editada)</em>':'')+' <span style="font-family:monospace;color:var(--texto2);font-size:10px">— '+formatarReferencia(cx.ID)+'</span></span>'+
                   '<span class="caixa-acts">'+
                   '<button class="bic bic-e" onclick="editarCaixa(\''+cx.ID+'\')">✏️</button>'+
                   '<button class="bic bic-d" onclick="excluirCaixaConfirm(\''+cx.ID+'\')">🗑️</button>'+
@@ -2365,8 +2459,49 @@ function renderHistOps(regs){
       '<div class="op-body" id="ob-'+idx+'">'+pecasHtml+'</div>'+
     '</div>';
   }).join('');
+  renderBarraSelecaoCaixas();
 }
 var _histCaixasCache={};
+var _ultimoFilRegs=[];
+var _caixasSelecionadas=new Set();
+function toggleSelecaoCaixa(id,marcado){
+  if(marcado) _caixasSelecionadas.add(id); else _caixasSelecionadas.delete(id);
+  renderBarraSelecaoCaixas();
+}
+function renderBarraSelecaoCaixas(){
+  var barra=document.getElementById('barra-selecao-caixas');
+  if(!barra) return;
+  var n=_caixasSelecionadas.size;
+  if(!n){ barra.style.display='none'; return; }
+  barra.style.display='flex';
+  document.getElementById('barra-selecao-txt').textContent=n+' caixa'+(n===1?'':'s')+' selecionada'+(n===1?'':'s');
+}
+function limparSelecaoCaixas(){
+  _caixasSelecionadas.clear();
+  renderBarraSelecaoCaixas();
+  renderHistOps(_ultimoFilRegs||[]);
+}
+function excluirSelecionadasConfirm(){
+  var ids=Array.from(_caixasSelecionadas);
+  if(!ids.length) return;
+  if(!confirm('Excluir '+ids.length+' caixa(s) selecionada(s) da produção?\n\nIsso NÃO desfaz movimentações de estoque já registradas pra elas — só remove o registro de produção. Não pode ser desfeito.')) return;
+  var btn=document.getElementById('barra-selecao-btn');
+  if(btn){ btn.disabled=true; btn.textContent='Excluindo...'; }
+  var ok=0, falhas=0;
+  function proxima(i){
+    if(i>=ids.length){
+      _caixasSelecionadas.clear();
+      buscarProducaoEFiltrar();
+      toast(ok+' caixa(s) excluída(s)'+(falhas?', '+falhas+' falharam':''),falhas?'erro':'aviso');
+      return;
+    }
+    google.script.run
+      .withSuccessHandler(function(r){ if(r&&r.ok) ok++; else falhas++; proxima(i+1); })
+      .withFailureHandler(function(){ falhas++; proxima(i+1); })
+      .excluirProducao(ids[i]);
+  }
+  proxima(0);
+}
 function togLote(id){
   var el=document.getElementById(id);
   if(!el) return;
@@ -3024,8 +3159,14 @@ function movProcessarCodigoEntrada(caixaId){
 function renderGridConferente2Item(){
   var g=document.getElementById('mov-entrada-conferir-grid');
   if(!g) return;
-  if(!S.op.length){ g.innerHTML='<p style="font-size:12px;color:var(--texto2)">Nenhum operador cadastrado. Acesse Admin.</p>'; return; }
-  g.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px">'+S.op.map(function(o){
+  var conferente1Nome=S.movEntradaAguardando?S.movEntradaAguardando.operadorProducao:null;
+  var conferente1Mat=S.movEntradaAguardando?S.movEntradaAguardando.matricula:null;
+  var opcoes=S.op.filter(function(o){
+    if(conferente1Mat && o.Matricula) return o.Matricula!==conferente1Mat;
+    return o.Nome!==conferente1Nome;
+  });
+  if(!opcoes.length){ g.innerHTML='<p style="font-size:12px;color:var(--texto2)">Não há outro operador cadastrado além de quem produziu esta caixa ('+(conferente1Nome||'—')+'). Cadastre outro operador em Admin.</p>'; return; }
+  g.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px">'+opcoes.map(function(o){
     var m=o.Matricula||'';
     return '<div class="op-sel-btn" style="padding:10px 6px;gap:4px" onclick="movConfirmarConferente2Item(\''+esc(o.Nome)+'\',\''+esc(m)+'\')">'+
       (m?'<span class="mat" style="font-size:9px;padding:1px 6px">'+m+'</span>':'')+
