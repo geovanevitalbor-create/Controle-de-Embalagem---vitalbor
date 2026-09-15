@@ -3388,6 +3388,23 @@ function adjC(d){ var i=document.getElementById('inp-cx');  i.value=Math.max(1,(
 function chkAdj(){ var q=Number(document.getElementById('inp-qtd').value)||0; document.getElementById('aviso-adj').style.display=(q!==S.sel.qtdPad)?'block':'none'; updSidebar(); }
 
 function confirmarProd(){
+  var ehLinhaCol=semAcentoConsulta(S.sel.codPeca||'').indexOf('col')===0;
+  var ehNBR=semAcentoConsulta(S.sel.mat||'').indexOf('nbr')===0;
+  if(ehLinhaCol && !ehNBR && !S.adm){
+    var senha=prompt('Peça da linha COL com material diferente de NBR ('+S.sel.mat+') — senha de administrador:');
+    if(!senha){ toast('Senha obrigatória pra registrar COL com material diferente de NBR','aviso'); return; }
+    google.script.run
+      .withSuccessHandler(function(ok){
+        if(!ok){ toast('Senha incorreta','erro'); return; }
+        confirmarProdContinuar();
+      })
+      .withFailureHandler(function(){ toast('Erro ao verificar senha','erro'); })
+      .verificarSenhaAdmin(senha);
+    return;
+  }
+  confirmarProdContinuar();
+}
+function confirmarProdContinuar(){
   var q=Number(document.getElementById('inp-qtd').value)||0;
   var c=Number(document.getElementById('inp-cx').value)||1;
   if(!S.sel.op||!S.sel.peca||!S.sel.mat||!S.sel.trim||!S.sel.lote){ toast('Complete todas as seleções','aviso'); return; }
