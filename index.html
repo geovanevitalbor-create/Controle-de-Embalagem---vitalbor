@@ -607,10 +607,16 @@ var backend = {
       var rows = await sbGet('producao?id=eq.' + id);
       if (!rows.length) return null;
       var r = rows[0];
+      var statusAtual = null;
+      try {
+        var movs = await sbGet('movimentacoes?caixa_id=eq.' + id + '&select=tipo,data_hora&order=data_hora.desc&limit=1');
+        if (movs.length) statusAtual = movs[0].tipo;
+      } catch (e2) {}
       return {
         ID: r.id, DataHora: fmtDataHoraBR(r.data_hora), Matricula: r.matricula || '', Operador: r.operador,
         Peca: r.peca, CodigoPeca: r.codigo_peca, Material: r.material, Maquina: r.maquina || '', Lote: r.lote,
-        Trimestre: r.trimestre, Ano: r.ano, NumeroCaixa: r.numero_caixa, QtdPecas: r.qtd_pecas, QtdPadrao: r.qtd_padrao
+        Trimestre: r.trimestre, Ano: r.ano, NumeroCaixa: r.numero_caixa, QtdPecas: r.qtd_pecas, QtdPadrao: r.qtd_padrao,
+        StatusAtual: statusAtual
       };
     } catch (e) { return null; }
   },
@@ -2987,6 +2993,9 @@ function renderDash(){
         '<div class="df-campo"><label>Operador</label><select id="f-op"><option value="">Todos</option></select></div>'+
         '<div class="df-campo"><label>Peça</label><select id="f-peca"><option value="">Todas</option></select></div>'+
       '</div>'+
+      '<div class="df-row">'+
+        '<div class="df-campo" style="flex:1"><label>Buscar por código da etiqueta</label><input type="text" id="f-codigo" placeholder="Ex: D867-7102-83F6" onkeydown="if(event.key===\'Enter\')aplicarFiltro()"/></div>'+
+      '</div>'+
       '<div style="display:flex;gap:8px">'+
         '<button class="btn-filtrar" style="background:var(--cinza2);color:var(--texto2);flex:1" onclick="limparFiltroDash()">✕ Limpar Filtros</button>'+
         '<button class="btn-filtrar" style="flex:2" onclick="aplicarFiltro()">🔍 Aplicar Filtro</button>'+
@@ -3078,6 +3087,7 @@ function limparFiltroDash(){
   document.getElementById('f-fim').value=fmtDI(hoje);
   document.getElementById('f-op').value='';
   document.getElementById('f-peca').value='';
+  document.getElementById('f-codigo').value='';
   aplicarFiltro();
 }
 function aplicarFiltro(){
@@ -3085,12 +3095,14 @@ function aplicarFiltro(){
   var fimEl = document.getElementById('f-fim');
   var fOpEl = document.getElementById('f-op');
   var fPcEl = document.getElementById('f-peca');
+  var fCodEl = document.getElementById('f-codigo');
   if(!iniEl) return;
 
   var ini = iniEl.value; // "yyyy-MM-dd"
   var fim = fimEl.value;
   var fOp = fOpEl ? fOpEl.value.trim() : '';
   var fPc = fPcEl ? fPcEl.value.trim() : '';
+  var fCod = fCodEl ? fCodEl.value.trim().replace(/[^A-Za-z0-9]/g,'').toUpperCase() : '';
 
   // Datas do filtro como meia-noite local
   var dI = null, dF = null;
@@ -3103,16 +3115,24 @@ function aplicarFiltro(){
     dF = new Date(+pf[0], +pf[1]-1, +pf[2], 23, 59, 59, 999);
   }
 
-  var fil = S.todosProd.filter(function(r){
-    var d = parseBR(r.DataHora);
-    if(!d) return false;
-    if(dI && d < dI) return false;
-    if(dF && d > dF) return false;
-    // Operador: compara nome exato
-    if(fOp && String(r.Operador||'').trim() !== fOp) return false;
-    if(fPc && String(r.Peca||'').trim() !== fPc) return false;
-    return true;
-  });
+  var fil;
+  if(fCod){
+    // Busca por código único da etiqueta ignora data/operador/peça — acha a caixa não importa quando foi feita.
+    fil = S.todosProd.filter(function(r){
+      return String(r.ID||'').replace(/[^A-Za-z0-9]/g,'').toUpperCase().indexOf(fCod)>=0;
+    });
+  } else {
+    fil = S.todosProd.filter(function(r){
+      var d = parseBR(r.DataHora);
+      if(!d) return false;
+      if(dI && d < dI) return false;
+      if(dF && d > dF) return false;
+      // Operador: compara nome exato
+      if(fOp && String(r.Operador||'').trim() !== fOp) return false;
+      if(fPc && String(r.Peca||'').trim() !== fPc) return false;
+      return true;
+    });
+  }
 
   var hoje   = new Date(); hoje.setHours(0,0,0,0);
   var iniSem = new Date(hoje); iniSem.setDate(hoje.getDate()-hoje.getDay());
@@ -3174,6 +3194,7 @@ function renderHistOps(regs){
                 var marcado=_caixasSelecionadas.has(cx.ID)?'checked':'';
                 return '<div class="caixa-row"><span style="display:flex;align-items:center;gap:8px"><input type="checkbox" '+marcado+' onchange="toggleSelecaoCaixa(\''+cx.ID+'\',this.checked)" style="width:18px;height:18px;flex-shrink:0"/>Cx '+(cx.NumeroCaixa||'—')+' — '+cx.QtdPecas+' pç — '+cx.DataHora+(cx.AjusteManual?' <em>(editada)</em>':'')+' <span style="font-family:monospace;color:var(--texto2);font-size:10px">— '+formatarReferencia(cx.ID)+'</span></span>'+
                   '<span class="caixa-acts">'+
+                  '<button class="bic bic-e" onclick="reimprimirCaixa(\''+cx.ID+'\')" title="Reimprimir etiqueta de peça + conferência">🖨️</button>'+
                   '<button class="bic bic-e" onclick="editarCaixa(\''+cx.ID+'\')">✏️</button>'+
                   '<button class="bic bic-d" onclick="excluirCaixaConfirm(\''+cx.ID+'\')">🗑️</button>'+
                   '</span></div>';
@@ -3794,6 +3815,7 @@ function movProcessarCodigoSaida(caixaId){
   google.script.run
     .withSuccessHandler(function(d){
       if(!d){ _movCamPausado=false; mostrarErroScan('Caixa não encontrada na produção. Confira o código lido.'); return; }
+      if(d.StatusAtual!=='ENTRADA'){ _movCamPausado=false; mostrarErroScan('Essa caixa não está em estoque — precisa dar entrada nela de novo antes de poder dar saída.'); return; }
       tocarBeep();
       movFecharCameraManual();
       S.movSaidaAguardando={ caixaId:caixaId, peca:d.Peca, codPeca:d.CodigoPeca, material:d.Material, lote:d.Lote, qtdPecas:d.QtdPecas, numeroCaixa:d.NumeroCaixa };
@@ -3906,6 +3928,7 @@ function movProcessarCodigoEntrada(caixaId){
   google.script.run
     .withSuccessHandler(function(d){
       if(!d){ _movCamPausado=false; mostrarErroScan('Caixa não encontrada na produção. Confira o código lido.'); return; }
+      if(d.StatusAtual==='ENTRADA'){ _movCamPausado=false; mostrarErroScan('Essa caixa já está em estoque — não é possível dar entrada de novo nela.'); return; }
       tocarBeep();
       movFecharCameraManual();
       S.movEntradaAguardando={ caixaId:caixaId, peca:d.Peca, codPeca:d.CodigoPeca, material:d.Material, lote:d.Lote,
