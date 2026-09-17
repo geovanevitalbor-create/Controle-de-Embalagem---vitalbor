@@ -96,37 +96,39 @@ function montarTemplatePadraoPeca(escala){
     '<div style="font-size:'+fsz(5,escala)+';font-weight:900;letter-spacing:.4mm;line-height:1">{{MATERIAL}}</div>' +
     '<div style="position:absolute;bottom:1mm;right:3mm;max-width:42mm;font-size:'+fsz(2.1,escala)+';font-weight:700;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{NORMA}}</div>' +
   '</div>' +
-  '<div style="display:flex;flex-direction:row;flex:1;min-height:0">' +
-    '<div style="flex:1;min-width:0;border-right:1mm solid #000;margin:-0.3mm 0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:1mm 3mm;box-sizing:border-box">' +
-      '<div style="font-size:'+fsz(2.1,escala)+';font-weight:900;letter-spacing:.4mm;text-transform:uppercase;opacity:.6;white-space:normal;overflow-wrap:break-word">QUANTIDADE</div>' +
-      '<div style="font-size:'+fsz(10,escala)+';font-weight:900;line-height:1;letter-spacing:-.4mm">{{QUANTIDADE}}</div>' +
-    '</div>' +
-    '<div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:center;padding:1mm;box-sizing:border-box">' +
-      '{{QR_CODE}}' +
-    '</div>' +
-  '</div>' +
-  '<div style="border-top:1mm solid #000;display:flex;flex-direction:column">' +
-    '<div style="display:flex;flex-direction:row;border-bottom:1mm solid #000">' +
-      '<div style="flex:1;min-width:0;padding:.6mm 3mm;border-right:1mm solid #000;margin:-0.3mm 0;box-sizing:border-box">' +
+  '<table style="width:100%;flex:1;min-height:0;border-collapse:collapse;table-layout:fixed"><tr>' +
+    '<td style="width:50%;border-right:1mm solid #000;text-align:center;padding:1mm 3mm;box-sizing:border-box;vertical-align:middle">' +
+      '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%">' +
+        '<div style="font-size:'+fsz(2.1,escala)+';font-weight:900;letter-spacing:.4mm;text-transform:uppercase;opacity:.6;white-space:normal;overflow-wrap:break-word">QUANTIDADE</div>' +
+        '<div style="font-size:'+fsz(10,escala)+';font-weight:900;line-height:1;letter-spacing:-.4mm">{{QUANTIDADE}}</div>' +
+      '</div>' +
+    '</td>' +
+    '<td style="width:50%;text-align:center;padding:1mm;box-sizing:border-box;vertical-align:middle">' +
+      '<div style="display:flex;align-items:center;justify-content:center;height:100%;width:100%">{{QR_CODE}}</div>' +
+    '</td>' +
+  '</tr></table>' +
+  '<table style="width:100%;border-collapse:collapse;table-layout:fixed;border-top:1mm solid #000">' +
+    '<tr style="border-bottom:1mm solid #000">' +
+      '<td style="width:50%;padding:.6mm 3mm;border-right:1mm solid #000;box-sizing:border-box">' +
         '<div style="font-size:'+fsz(1.9,escala)+';font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6;white-space:normal;overflow-wrap:break-word">DATA</div>' +
         '<div style="font-size:'+fsz(2.8,escala)+';font-weight:900;white-space:normal;overflow-wrap:break-word">{{DATA}}</div>' +
-      '</div>' +
-      '<div style="flex:1;min-width:0;padding:.6mm 3mm;box-sizing:border-box">' +
+      '</td>' +
+      '<td style="width:50%;padding:.6mm 3mm;box-sizing:border-box">' +
         '<div style="font-size:'+fsz(1.9,escala)+';font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6;white-space:normal;overflow-wrap:break-word">LOTE</div>' +
         '<div style="font-size:'+fsz(2.8,escala)+';font-weight:900;white-space:normal;overflow-wrap:break-word">{{LOTE}}</div>' +
-      '</div>' +
-    '</div>' +
-    '<div style="display:flex;flex-direction:row">' +
-      '<div style="flex:1;min-width:0;padding:.6mm 3mm;border-right:1mm solid #000;margin:-0.3mm 0;box-sizing:border-box">' +
+      '</td>' +
+    '</tr>' +
+    '<tr>' +
+      '<td style="width:50%;padding:.6mm 3mm;border-right:1mm solid #000;box-sizing:border-box">' +
         '<div style="font-size:'+fsz(1.9,escala)+';font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6;white-space:normal;overflow-wrap:break-word">OP</div>' +
         '<div style="font-size:'+fsz(2.8,escala)+';font-weight:900;white-space:normal;overflow-wrap:break-word">{{OP}}</div>' +
-      '</div>' +
-      '<div style="flex:1;min-width:0;padding:.6mm 3mm;box-sizing:border-box">' +
+      '</td>' +
+      '<td style="width:50%;padding:.6mm 3mm;box-sizing:border-box">' +
         '<div style="font-size:'+fsz(1.9,escala)+';font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6;white-space:normal;overflow-wrap:break-word">REFERÊNCIA</div>' +
         '<div style="font-size:'+fsz(2.6,escala)+';font-weight:900;font-family:\'Courier New\',monospace;white-space:normal;overflow-wrap:break-word">{{REFERENCIA}}</div>' +
-      '</div>' +
-    '</div>' +
-  '</div>' +
+      '</td>' +
+    '</tr>' +
+  '</table>' +
 '</div>';
 }
 var TEMPLATE_PADRAO_PECA = montarTemplatePadraoPeca(1);
