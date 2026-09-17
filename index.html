@@ -97,7 +97,7 @@ function montarTemplatePadraoPeca(escala){
     '<div style="position:absolute;bottom:1mm;right:3mm;max-width:42mm;font-size:'+fsz(2.1,escala)+';font-weight:700;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{NORMA}}</div>' +
   '</div>' +
   '<div style="display:flex;flex-direction:row;flex:1;min-height:0">' +
-    '<div style="flex:1;min-width:0;border-right:1mm solid #000;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:1mm 3mm;box-sizing:border-box">' +
+    '<div style="flex:1;min-width:0;border-right:1mm solid #000;margin:-0.3mm 0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:1mm 3mm;box-sizing:border-box">' +
       '<div style="font-size:'+fsz(2.1,escala)+';font-weight:900;letter-spacing:.4mm;text-transform:uppercase;opacity:.6;white-space:normal;overflow-wrap:break-word">QUANTIDADE</div>' +
       '<div style="font-size:'+fsz(10,escala)+';font-weight:900;line-height:1;letter-spacing:-.4mm">{{QUANTIDADE}}</div>' +
     '</div>' +
@@ -107,7 +107,7 @@ function montarTemplatePadraoPeca(escala){
   '</div>' +
   '<div style="border-top:1mm solid #000;display:flex;flex-direction:column">' +
     '<div style="display:flex;flex-direction:row;border-bottom:1mm solid #000">' +
-      '<div style="flex:1;min-width:0;padding:.6mm 3mm;border-right:1mm solid #000;box-sizing:border-box">' +
+      '<div style="flex:1;min-width:0;padding:.6mm 3mm;border-right:1mm solid #000;margin:-0.3mm 0;box-sizing:border-box">' +
         '<div style="font-size:'+fsz(1.9,escala)+';font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6;white-space:normal;overflow-wrap:break-word">DATA</div>' +
         '<div style="font-size:'+fsz(2.8,escala)+';font-weight:900;white-space:normal;overflow-wrap:break-word">{{DATA}}</div>' +
       '</div>' +
@@ -117,7 +117,7 @@ function montarTemplatePadraoPeca(escala){
       '</div>' +
     '</div>' +
     '<div style="display:flex;flex-direction:row">' +
-      '<div style="flex:1;min-width:0;padding:.6mm 3mm;border-right:1mm solid #000;box-sizing:border-box">' +
+      '<div style="flex:1;min-width:0;padding:.6mm 3mm;border-right:1mm solid #000;margin:-0.3mm 0;box-sizing:border-box">' +
         '<div style="font-size:'+fsz(1.9,escala)+';font-weight:900;letter-spacing:.3mm;text-transform:uppercase;opacity:.6;white-space:normal;overflow-wrap:break-word">OP</div>' +
         '<div style="font-size:'+fsz(2.8,escala)+';font-weight:900;white-space:normal;overflow-wrap:break-word">{{OP}}</div>' +
       '</div>' +
@@ -169,7 +169,7 @@ function montarTemplatePadraoNF(escala){
     '<div style="font-size:'+fsz(2.6,escala)+';font-weight:700;letter-spacing:.1mm;text-transform:uppercase">{{DESCRICAO}}</div>' +
   '</div>' +
   '<div style="display:flex;flex-direction:row;flex:1;min-height:0">' +
-    '<div style="flex:1;min-width:0;border-right:1mm solid #000;display:flex;align-items:center;justify-content:center;text-align:center;padding:1mm 3mm;box-sizing:border-box">' +
+    '<div style="flex:1;min-width:0;border-right:1mm solid #000;margin:-0.3mm 0;display:flex;align-items:center;justify-content:center;text-align:center;padding:1mm 3mm;box-sizing:border-box">' +
       '<div style="font-size:'+fsz(6.5,escala)+';font-weight:900;white-space:normal;overflow-wrap:break-word">{{CLIENTE}}</div>' +
     '</div>' +
     '<div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:1mm 3mm;box-sizing:border-box">' +
@@ -1277,23 +1277,23 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
     </div>
     <!-- SP2 Peça -->
     <div id="sp2" style="display:none;flex-direction:column;flex:1;min-height:0">
-      <div class="pos-panel-head"><button class="pos-back-btn" onclick="goStep(1)">◀ Voltar</button><div><div class="pph-titulo">Selecione a Peça</div><div class="pph-sub">Produto a ser embalado</div></div></div>
+      <div class="pos-panel-head"><button class="pos-back-btn" onclick="voltarProd()">◀ Voltar</button><div><div class="pph-titulo">Selecione a Peça</div><div class="pph-sub">Produto a ser embalado</div></div></div>
       <div style="padding:0 10px"><input type="text" class="inp-pos" id="busca-peca" placeholder="Buscar peça por código ou nome..." oninput="renderGridPeca(this.value)"/></div>
       <div class="pos-grid-wrap"><div class="pos-grid" id="g-peca"></div></div>
     </div>
     <!-- SP3 Material -->
     <div id="sp3" style="display:none;flex-direction:column;flex:1;min-height:0">
-      <div class="pos-panel-head"><button class="pos-back-btn" onclick="goStep(2)">◀ Voltar</button><div><div class="pph-titulo">Matéria-Prima</div><div class="pph-sub">Composto sendo utilizado</div></div></div>
+      <div class="pos-panel-head"><button class="pos-back-btn" onclick="voltarProd()">◀ Voltar</button><div><div class="pph-titulo">Matéria-Prima</div><div class="pph-sub">Composto sendo utilizado</div></div></div>
       <div class="pos-grid-wrap"><div class="pos-grid" id="g-mat"></div><div class="pos-paginacao" id="pag-mat" style="display:none"><button class="ppag-btn" id="pag-mat-prev" onclick="pgMat(-1)">◀</button><div class="ppag-info" id="pag-mat-info">1/1</div><button class="ppag-btn" id="pag-mat-next" onclick="pgMat(1)">▶</button></div></div>
     </div>
     <!-- SP4 Máquina -->
     <div id="sp4" style="display:none;flex-direction:column;flex:1;min-height:0">
-      <div class="pos-panel-head"><button class="pos-back-btn" onclick="goStep(3)">◀ Voltar</button><div><div class="pph-titulo">Máquina</div><div class="pph-sub">Injetora em operação</div></div></div>
+      <div class="pos-panel-head"><button class="pos-back-btn" onclick="voltarProd()">◀ Voltar</button><div><div class="pph-titulo">Máquina</div><div class="pph-sub">Injetora em operação</div></div></div>
       <div class="pos-grid-wrap"><div class="pos-grid" id="g-maq"></div></div>
     </div>
     <!-- SP5 Trimestre/Lote -->
     <div id="sp5" style="display:none;flex-direction:column;flex:1;min-height:0">
-      <div class="pos-panel-head"><button class="pos-back-btn" onclick="voltarS5()">◀ Voltar</button><div><div class="pph-titulo">Trimestre e Lote</div></div></div>
+      <div class="pos-panel-head"><button class="pos-back-btn" onclick="voltarProd()">◀ Voltar</button><div><div class="pph-titulo">Trimestre e Lote</div></div></div>
       <div class="pos-grid-wrap" style="overflow-y:auto">
         <div class="grid-trim"><div class="tbtn" onclick="selTrim('T1')">T1</div><div class="tbtn" onclick="selTrim('T2')">T2</div><div class="tbtn" onclick="selTrim('T3')">T3</div><div class="tbtn" onclick="selTrim('T4')">T4</div></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px">
@@ -1305,7 +1305,7 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
     </div>
     <!-- SP6 Quantidade -->
     <div id="sp6" style="display:none;flex-direction:column;flex:1;min-height:0">
-      <div class="pos-panel-head"><button class="pos-back-btn" onclick="goStep(5)">◀ Voltar</button><div><div class="pph-titulo">Quantidade e Caixas</div></div></div>
+      <div class="pos-panel-head"><button class="pos-back-btn" onclick="voltarProd()">◀ Voltar</button><div><div class="pph-titulo">Quantidade e Caixas</div></div></div>
       <div class="pos-grid-wrap" style="overflow-y:auto">
         <div class="cx-row">
           <div>
@@ -3392,7 +3392,6 @@ function renderGridMaq(){
 }
 function selMaq(n){ S.sel.maq=n; updSidebar(); goStep(5); }
 
-function voltarS5(){ goStep(S.hasMaq?4:3); }
 function selTrim(t){
   S.sel.trim=t;
   document.querySelectorAll('.tbtn').forEach(function(b){ b.classList.toggle('sel',b.textContent.trim()===t); });
@@ -3488,15 +3487,23 @@ function enviarProd(qtd,cx,senha){
     .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); document.getElementById('btn-registrar').classList.add('pronto'); })
     .registrarProducao(d,senha);
 }
-function novaProd(){
+function resetSelProd(){
   S.sel={matricula:'',op:'',peca:'',codPeca:'',qtdPad:0,mat:'',maq:'',trim:'',ano:String(new Date().getFullYear()),lote:''};
   document.getElementById('inp-lote').value='';
   var bo=document.getElementById('busca-op'); if(bo) bo.value='';
+  var bp=document.getElementById('busca-peca'); if(bp) bp.value='';
   document.querySelectorAll('.tbtn').forEach(function(b){b.classList.remove('sel');});
+}
+function novaProd(){
+  resetSelProd();
   document.getElementById('btn-registrar').style.display='';
   document.getElementById('btn-registrar').classList.remove('pronto');
   document.getElementById('btn-imprimir').classList.remove('vis');
   document.getElementById('btn-nova').classList.remove('vis');
+  updSidebar(); renderGridOp(); goStep(1);
+}
+function voltarProd(){
+  resetSelProd();
   updSidebar(); renderGridOp(); goStep(1);
 }
 
