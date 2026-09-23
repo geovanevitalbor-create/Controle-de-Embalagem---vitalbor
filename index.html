@@ -1983,7 +1983,8 @@ var MAPA_CORES_PT={
 function corMaterial(nomeMaterial){
   var m=(S.mats||[]).find(function(x){ return x.Nome===nomeMaterial; });
   var corTexto=m&&m.Cor?semAcentoConsulta(m.Cor).trim():'';
-  return MAPA_CORES_PT[corTexto] || '#e4e6ea';
+  var achada=Object.keys(MAPA_CORES_PT).find(function(chave){ return corTexto.indexOf(chave)>=0; });
+  return achada ? MAPA_CORES_PT[achada] : '#e4e6ea';
 }
 function renderRelatorio(regs, tipoFiltro){
   var el=document.getElementById('rel-resultado');
