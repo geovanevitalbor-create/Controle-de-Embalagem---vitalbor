@@ -1975,29 +1975,45 @@ function relFiltrar(){
     .withFailureHandler(function(e){ el.innerHTML='<p style="padding:12px;color:#c0392b">Erro ao carregar: '+(e?e.message:'')+'</p>'; })
     .getMovimentacoes(filtros);
 }
+function corMaterial(nomeMaterial){
+  var m=(S.mats||[]).find(function(x){ return x.Nome===nomeMaterial; });
+  return (m&&m.Cor) ? m.Cor : '#8a8f9c';
+}
+function corTextoContraste(hex){
+  hex=String(hex||'').replace('#','');
+  if(hex.length!==6) return '#fff';
+  var r=parseInt(hex.substr(0,2),16), g=parseInt(hex.substr(2,2),16), b=parseInt(hex.substr(4,2),16);
+  var luminancia=(0.299*r+0.587*g+0.114*b)/255;
+  return luminancia>0.6 ? '#000' : '#fff';
+}
 function renderRelatorio(regs, tipoFiltro){
   var el=document.getElementById('rel-resultado');
   if(!regs.length){ el.innerHTML='<div class="dash-empty"><div class="dei">📭</div><div>Nenhuma movimentação encontrada nesse período.</div></div>'; return; }
   var mapa={};
+  var codigosDistintos={};
   var totalEnt=0, totalSai=0;
   regs.forEach(function(r){
-    var chave=r.CodigoPeca+'||'+r.Peca;
-    if(!mapa[chave]) mapa[chave]={ Codigo:r.CodigoPeca, Peca:r.Peca, entrada:0, saida:0 };
+    var chave=r.CodigoPeca+'||'+r.Peca+'||'+r.Material;
+    if(!mapa[chave]) mapa[chave]={ Codigo:r.CodigoPeca, Peca:r.Peca, Material:r.Material, entrada:0, saida:0 };
+    codigosDistintos[r.CodigoPeca]=true;
     var qtd=Number(r.QtdCaixas)||1;
     if(r.Tipo==='ENTRADA'){ mapa[chave].entrada+=qtd; totalEnt+=qtd; }
     else if(r.Tipo==='SAIDA'){ mapa[chave].saida+=qtd; totalSai+=qtd; }
   });
-  var linhas=Object.keys(mapa).map(function(k){ return mapa[k]; }).sort(function(a,b){ return a.Codigo.localeCompare(b.Codigo); });
+  var linhas=Object.keys(mapa).map(function(k){ return mapa[k]; }).sort(function(a,b){ return a.Codigo.localeCompare(b.Codigo)||a.Material.localeCompare(b.Material); });
   var mostrarEnt = tipoFiltro!=='SAIDA';
   var mostrarSai = tipoFiltro!=='ENTRADA';
   var html='<div class="kpi-grid" style="grid-template-columns:repeat('+((mostrarEnt&&mostrarSai)?3:2)+',1fr);margin-bottom:14px">';
   if(mostrarEnt) html+='<div class="kpi v"><div class="kl">Total Entradas</div><div class="kv">'+totalEnt+'</div><div class="ks">caixas</div></div>';
   if(mostrarSai) html+='<div class="kpi r"><div class="kl">Total Saídas</div><div class="kv">'+totalSai+'</div><div class="ks">caixas</div></div>';
-  html+='<div class="kpi"><div class="kl">Peças distintas</div><div class="kv">'+linhas.length+'</div><div class="ks">no período</div></div>';
+  html+='<div class="kpi"><div class="kl">Peças distintas</div><div class="kv">'+Object.keys(codigosDistintos).length+'</div><div class="ks">no período</div></div>';
   html+='</div>';
-  html+='<div class="mov-tabela-wrap"><table class="mov-tabela"><thead><tr><th>Código</th><th style="text-align:left">Peça</th>'+(mostrarEnt?'<th>Entradas (cx)</th>':'')+(mostrarSai?'<th>Saídas (cx)</th>':'')+'</tr></thead><tbody>';
+  html+='<div class="mov-tabela-wrap"><table class="mov-tabela"><thead><tr><th>Código</th><th style="text-align:left">Peça</th><th>Matéria-Prima</th>'+(mostrarEnt?'<th>Entradas (cx)</th>':'')+(mostrarSai?'<th>Saídas (cx)</th>':'')+'</tr></thead><tbody>';
   linhas.forEach(function(l){
-    html+='<tr><td>'+l.Codigo+'</td><td style="text-align:left">'+l.Peca+'</td>'+(mostrarEnt?'<td>'+l.entrada+'</td>':'')+(mostrarSai?'<td>'+l.saida+'</td>':'')+'</tr>';
+    var cor=corMaterial(l.Material);
+    var corTxt=corTextoContraste(cor);
+    var tag='<span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:800;background:'+cor+';color:'+corTxt+'">'+l.Material+'</span>';
+    html+='<tr><td>'+l.Codigo+'</td><td style="text-align:left">'+l.Peca+'</td><td>'+tag+'</td>'+(mostrarEnt?'<td>'+l.entrada+'</td>':'')+(mostrarSai?'<td>'+l.saida+'</td>':'')+'</tr>';
   });
   html+='</tbody></table></div>';
   el.innerHTML=html;
