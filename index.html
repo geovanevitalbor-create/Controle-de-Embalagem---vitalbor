@@ -1995,11 +1995,11 @@ function renderRelatorio(regs, tipoFiltro){
   if(mostrarSai) html+='<div class="kpi r"><div class="kl">Total Saídas</div><div class="kv">'+totalSai+'</div><div class="ks">caixas</div></div>';
   html+='<div class="kpi"><div class="kl">Peças distintas</div><div class="kv">'+linhas.length+'</div><div class="ks">no período</div></div>';
   html+='</div>';
-  html+='<table class="mov-tabela"><thead><tr><th>Código</th><th>Peça</th>'+(mostrarEnt?'<th>Entradas (cx)</th>':'')+(mostrarSai?'<th>Saídas (cx)</th>':'')+'</tr></thead><tbody>';
+  html+='<div class="mov-tabela-wrap"><table class="mov-tabela"><thead><tr><th>Código</th><th style="text-align:left">Peça</th>'+(mostrarEnt?'<th>Entradas (cx)</th>':'')+(mostrarSai?'<th>Saídas (cx)</th>':'')+'</tr></thead><tbody>';
   linhas.forEach(function(l){
-    html+='<tr><td>'+l.Codigo+'</td><td>'+l.Peca+'</td>'+(mostrarEnt?'<td>'+l.entrada+'</td>':'')+(mostrarSai?'<td>'+l.saida+'</td>':'')+'</tr>';
+    html+='<tr><td>'+l.Codigo+'</td><td style="text-align:left">'+l.Peca+'</td>'+(mostrarEnt?'<td>'+l.entrada+'</td>':'')+(mostrarSai?'<td>'+l.saida+'</td>':'')+'</tr>';
   });
-  html+='</tbody></table>';
+  html+='</tbody></table></div>';
   el.innerHTML=html;
 }
 
