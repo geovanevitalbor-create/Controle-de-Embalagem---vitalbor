@@ -1976,21 +1976,14 @@ function relFiltrar(){
     .getMovimentacoes(filtros);
 }
 var MAPA_CORES_PT={
-  verde:'#1d7a4e', amarelo:'#d4a017', azul:'#1f5fa8', vermelho:'#c0392b', roxo:'#6c3fc5',
-  laranja:'#d9711f', cinza:'#7a7f8c', preto:'#222', branco:'#e8e8e8', rosa:'#d6558c',
-  marrom:'#7a5230', bege:'#c9b48a', dourado:'#b8860b', prata:'#9aa0a8', vinho:'#7a1f2b'
+  verde:'#c8e6d0', amarelo:'#f5e3a8', azul:'#c3d9f0', vermelho:'#f0c3c0', roxo:'#ddd0f2',
+  laranja:'#f5d9b8', cinza:'#dcdfe3', preto:'#d5d5d5', branco:'#ececec', rosa:'#f5d3e3',
+  marrom:'#e3d3c0', bege:'#ede4d0', dourado:'#f0e0a8', prata:'#e0e2e5', vinho:'#e8c8cc'
 };
 function corMaterial(nomeMaterial){
   var m=(S.mats||[]).find(function(x){ return x.Nome===nomeMaterial; });
   var corTexto=m&&m.Cor?semAcentoConsulta(m.Cor).trim():'';
-  return MAPA_CORES_PT[corTexto] || '#5a6270';
-}
-function corTextoContraste(hex){
-  hex=String(hex||'').replace('#','');
-  if(hex.length!==6) return '#fff';
-  var r=parseInt(hex.substr(0,2),16), g=parseInt(hex.substr(2,2),16), b=parseInt(hex.substr(4,2),16);
-  var luminancia=(0.299*r+0.587*g+0.114*b)/255;
-  return luminancia>0.6 ? '#000' : '#fff';
+  return MAPA_CORES_PT[corTexto] || '#e4e6ea';
 }
 function renderRelatorio(regs, tipoFiltro){
   var el=document.getElementById('rel-resultado');
@@ -2017,8 +2010,7 @@ function renderRelatorio(regs, tipoFiltro){
   html+='<div class="mov-tabela-wrap"><table class="mov-tabela"><thead><tr><th>Código</th><th style="text-align:left">Peça</th><th>Matéria-Prima</th>'+(mostrarEnt?'<th>Entradas (cx)</th>':'')+(mostrarSai?'<th>Saídas (cx)</th>':'')+'</tr></thead><tbody>';
   linhas.forEach(function(l){
     var cor=corMaterial(l.Material);
-    var corTxt=corTextoContraste(cor);
-    var tag='<span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:800;background:'+cor+';color:'+corTxt+'">'+l.Material+'</span>';
+    var tag='<span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:800;background:'+cor+';color:#1a1a1a">'+(l.Material||'—')+'</span>';
     html+='<tr><td>'+l.Codigo+'</td><td style="text-align:left">'+l.Peca+'</td><td>'+tag+'</td>'+(mostrarEnt?'<td>'+l.entrada+'</td>':'')+(mostrarSai?'<td>'+l.saida+'</td>':'')+'</tr>';
   });
   html+='</tbody></table></div>';
