@@ -1975,9 +1975,15 @@ function relFiltrar(){
     .withFailureHandler(function(e){ el.innerHTML='<p style="padding:12px;color:#c0392b">Erro ao carregar: '+(e?e.message:'')+'</p>'; })
     .getMovimentacoes(filtros);
 }
+var MAPA_CORES_PT={
+  verde:'#1d7a4e', amarelo:'#d4a017', azul:'#1f5fa8', vermelho:'#c0392b', roxo:'#6c3fc5',
+  laranja:'#d9711f', cinza:'#7a7f8c', preto:'#222', branco:'#e8e8e8', rosa:'#d6558c',
+  marrom:'#7a5230', bege:'#c9b48a', dourado:'#b8860b', prata:'#9aa0a8', vinho:'#7a1f2b'
+};
 function corMaterial(nomeMaterial){
   var m=(S.mats||[]).find(function(x){ return x.Nome===nomeMaterial; });
-  return (m&&m.Cor) ? m.Cor : '#8a8f9c';
+  var corTexto=m&&m.Cor?semAcentoConsulta(m.Cor).trim():'';
+  return MAPA_CORES_PT[corTexto] || '#5a6270';
 }
 function corTextoContraste(hex){
   hex=String(hex||'').replace('#','');
