@@ -698,7 +698,7 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-fa
 .mi-sub{color:rgba(255,255,255,.4);font-size:12px;letter-spacing:4px;text-transform:uppercase;margin-bottom:40px;font-weight:700}
 .mi-titulo{color:rgba(255,255,255,.75);font-size:15px;font-weight:700;margin-bottom:24px;text-align:center;letter-spacing:.5px}
 .mi-botoes-row1{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;width:100%;max-width:760px;padding:0 20px;margin-bottom:18px}
-.mi-botoes-row2{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;width:100%;max-width:760px;padding:0 20px}
+.mi-botoes-row2{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;width:100%;max-width:760px;padding:0 20px}
 @media (max-width:640px){
   .mi-botoes-row1{grid-template-columns:1fr}
   .mi-botoes-row2{grid-template-columns:1fr}
@@ -729,6 +729,8 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-fa
 .mi-btn-verif:hover{background:linear-gradient(155deg,#12a190 0%,#0a6b5e 100%)}
 .mi-btn-nf{background:linear-gradient(155deg,#b8860b 0%,#8a6508 100%);color:#fff}
 .mi-btn-nf:hover{background:linear-gradient(155deg,#d19a10 0%,#8a6508 100%)}
+.mi-btn-rel{background:linear-gradient(155deg,#2c5f8a 0%,#1d4666 100%);color:#fff}
+.mi-btn-rel:hover{background:linear-gradient(155deg,#37749f 0%,#1d4666 100%)}
 .mi-admin-area{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:32px;padding-top:20px;border-top:1px solid rgba(255,255,255,.08);width:100%;max-width:300px}
 .mi-admin-cap{color:rgba(255,255,255,.3);font-size:10px;letter-spacing:2px;text-transform:uppercase;font-weight:700}
 .mi-btn-admin-standalone{background:transparent;color:#e94560;border:1.5px solid rgba(233,69,96,.5);border-radius:24px;padding:10px 26px;font-size:12px;font-weight:800;letter-spacing:1.5px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:all .15s}
@@ -1208,6 +1210,11 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
       <div class="txt">NOTA FISCAL</div>
       <div class="desc">Imprimir etiqueta de cliente e destino</div>
     </button>
+    <button class="mi-btn mi-btn-rel" onclick="entrarComoRelatorio()">
+      <div class="ico"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg></div>
+      <div class="txt">RELATÓRIO</div>
+      <div class="desc">Caixas enviadas ao estoque por peça e período</div>
+    </button>
   </div>
 
   <div class="mi-admin-area">
@@ -1627,6 +1634,30 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
   </div>
 </div>
 
+<!-- ════════ RELATÓRIO — caixas enviadas ao estoque por peça e período ════════ -->
+<div id="pag-relatorio" class="pag">
+  <div class="mov-top">
+    <div style="color:#fff;font-size:14px;font-weight:800;display:flex;align-items:center;gap:8px">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>
+      Relatório — Caixas por Peça
+    </div>
+  </div>
+  <div class="mov-body">
+    <div class="dash-filtro">
+      <div class="df-titulo">📅 Filtrar período</div>
+      <div class="df-row">
+        <div class="df-campo"><label>Data Início</label><input type="date" id="rel-ini"/></div>
+        <div class="df-campo"><label>Data Fim</label><input type="date" id="rel-fim"/></div>
+      </div>
+      <div class="df-row">
+        <div class="df-campo"><label>Tipo</label><select id="rel-tipo"><option value="">Entrada e Saída</option><option value="ENTRADA">Só Entrada</option><option value="SAIDA">Só Saída</option></select></div>
+      </div>
+      <button class="btn-filtrar" onclick="relFiltrar()">🔍 Aplicar Filtro</button>
+    </div>
+    <div id="rel-resultado"></div>
+  </div>
+</div>
+
 <!-- ════════ ADMIN ════════ -->
 <div id="pag-admin" class="pag">
 
@@ -1911,6 +1942,65 @@ function entrarComoVerificacaoCaixa(){
   document.getElementById('verif-resultado').innerHTML='';
   document.getElementById('verif-input-manual').value='';
   verifFecharCamera();
+}
+
+function entrarComoRelatorio(){
+  S.modo='relatorio';
+  document.getElementById('modal-inicio').style.display='none';
+  document.getElementById('topbar').style.display='flex';
+  document.getElementById('tb-modo-label').textContent='Modo:';
+  var b=document.getElementById('tb-badge'); b.textContent='RELATÓRIO'; b.className='u-badge';
+  mostrarPag('relatorio');
+  var hoje=new Date();
+  document.getElementById('rel-ini').value=fmtDI(hoje);
+  document.getElementById('rel-fim').value=fmtDI(hoje);
+  document.getElementById('rel-tipo').value='';
+  document.getElementById('rel-resultado').innerHTML='';
+}
+function relFiltrar(){
+  var ini=document.getElementById('rel-ini').value;
+  var fim=document.getElementById('rel-fim').value;
+  var tipo=document.getElementById('rel-tipo').value;
+  if(!ini||!fim){ toast('Escolha data início e fim','aviso'); return; }
+  var filtros={ limite:100000 };
+  filtros.dataInicioISO=new Date(ini+'T00:00:00').toISOString();
+  filtros.dataFimISO=new Date(fim+'T23:59:59').toISOString();
+  if(tipo) filtros.tipo=tipo;
+  var el=document.getElementById('rel-resultado');
+  el.innerHTML='<div class="dash-empty"><div class="spinner" style="border-top-color:var(--azul3);margin:0 auto"></div></div>';
+  google.script.run
+    .withSuccessHandler(function(regs){
+      renderRelatorio(regs||[], tipo);
+    })
+    .withFailureHandler(function(e){ el.innerHTML='<p style="padding:12px;color:#c0392b">Erro ao carregar: '+(e?e.message:'')+'</p>'; })
+    .getMovimentacoes(filtros);
+}
+function renderRelatorio(regs, tipoFiltro){
+  var el=document.getElementById('rel-resultado');
+  if(!regs.length){ el.innerHTML='<div class="dash-empty"><div class="dei">📭</div><div>Nenhuma movimentação encontrada nesse período.</div></div>'; return; }
+  var mapa={};
+  var totalEnt=0, totalSai=0;
+  regs.forEach(function(r){
+    var chave=r.CodigoPeca+'||'+r.Peca;
+    if(!mapa[chave]) mapa[chave]={ Codigo:r.CodigoPeca, Peca:r.Peca, entrada:0, saida:0 };
+    var qtd=Number(r.QtdCaixas)||1;
+    if(r.Tipo==='ENTRADA'){ mapa[chave].entrada+=qtd; totalEnt+=qtd; }
+    else if(r.Tipo==='SAIDA'){ mapa[chave].saida+=qtd; totalSai+=qtd; }
+  });
+  var linhas=Object.keys(mapa).map(function(k){ return mapa[k]; }).sort(function(a,b){ return a.Codigo.localeCompare(b.Codigo); });
+  var mostrarEnt = tipoFiltro!=='SAIDA';
+  var mostrarSai = tipoFiltro!=='ENTRADA';
+  var html='<div class="kpi-grid" style="grid-template-columns:repeat('+((mostrarEnt&&mostrarSai)?3:2)+',1fr);margin-bottom:14px">';
+  if(mostrarEnt) html+='<div class="kpi v"><div class="kl">Total Entradas</div><div class="kv">'+totalEnt+'</div><div class="ks">caixas</div></div>';
+  if(mostrarSai) html+='<div class="kpi r"><div class="kl">Total Saídas</div><div class="kv">'+totalSai+'</div><div class="ks">caixas</div></div>';
+  html+='<div class="kpi"><div class="kl">Peças distintas</div><div class="kv">'+linhas.length+'</div><div class="ks">no período</div></div>';
+  html+='</div>';
+  html+='<table class="mov-tabela"><thead><tr><th>Código</th><th>Peça</th>'+(mostrarEnt?'<th>Entradas (cx)</th>':'')+(mostrarSai?'<th>Saídas (cx)</th>':'')+'</tr></thead><tbody>';
+  linhas.forEach(function(l){
+    html+='<tr><td>'+l.Codigo+'</td><td>'+l.Peca+'</td>'+(mostrarEnt?'<td>'+l.entrada+'</td>':'')+(mostrarSai?'<td>'+l.saida+'</td>':'')+'</tr>';
+  });
+  html+='</tbody></table>';
+  el.innerHTML=html;
 }
 
 function entrarComoNotaFiscal(){
