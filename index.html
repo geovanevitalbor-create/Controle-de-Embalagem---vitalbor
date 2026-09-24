@@ -481,6 +481,32 @@ var backend = {
     } catch (e) { return []; }
   },
 
+  async getMovimentacoesComPecas(filtros) {
+    var movs = await backend.getMovimentacoes(filtros);
+    var idsComCaixa = movs.filter(function (m) { return m.CaixaID; }).map(function (m) { return m.CaixaID; });
+    var qtdPorCaixa = {};
+    if (idsComCaixa.length) {
+      try {
+        var prodRows = await sbGet('producao?id=in.(' + idsComCaixa.join(',') + ')&select=id,qtd_pecas');
+        prodRows.forEach(function (r) { qtdPorCaixa[r.id] = r.qtd_pecas; });
+      } catch (e) {}
+    }
+    var padraoPorCodigo = {};
+    try {
+      var pecasRows = await sbGet('pecas?select=codigo,qtd_padrao');
+      pecasRows.forEach(function (r) { padraoPorCodigo[r.codigo] = r.qtd_padrao; });
+    } catch (e) {}
+    movs.forEach(function (m) {
+      if (m.CaixaID && qtdPorCaixa[m.CaixaID] != null) {
+        m.QtdPecas = qtdPorCaixa[m.CaixaID];
+      } else {
+        var padrao = padraoPorCodigo[m.CodigoPeca] || 0;
+        m.QtdPecas = padrao * (Number(m.QtdCaixas) || 1);
+      }
+    });
+    return movs;
+  },
+
   async getMovimentacoes(filtros) {
     try {
       var lim = (filtros && filtros.limite) ? filtros.limite : 300;
@@ -1973,7 +1999,7 @@ function relFiltrar(){
       renderRelatorio(regs||[], tipo);
     })
     .withFailureHandler(function(e){ el.innerHTML='<p style="padding:12px;color:#c0392b">Erro ao carregar: '+(e?e.message:'')+'</p>'; })
-    .getMovimentacoes(filtros);
+    .getMovimentacoesComPecas(filtros);
 }
 var MAPA_CORES_PT={
   verde:'#c8e6d0', amarelo:'#f5e3a8', azul:'#c3d9f0', vermelho:'#f0c3c0', roxo:'#ddd0f2',
@@ -1991,28 +2017,36 @@ function renderRelatorio(regs, tipoFiltro){
   if(!regs.length){ el.innerHTML='<div class="dash-empty"><div class="dei">📭</div><div>Nenhuma movimentação encontrada nesse período.</div></div>'; return; }
   var mapa={};
   var codigosDistintos={};
-  var totalEnt=0, totalSai=0;
+  var totalEnt=0, totalSai=0, totalEntPc=0, totalSaiPc=0;
   regs.forEach(function(r){
     var chave=r.CodigoPeca+'||'+r.Peca+'||'+r.Material;
-    if(!mapa[chave]) mapa[chave]={ Codigo:r.CodigoPeca, Peca:r.Peca, Material:r.Material, entrada:0, saida:0 };
+    if(!mapa[chave]) mapa[chave]={ Codigo:r.CodigoPeca, Peca:r.Peca, Material:r.Material, entrada:0, saida:0, entradaPc:0, saidaPc:0 };
     codigosDistintos[r.CodigoPeca]=true;
     var qtd=Number(r.QtdCaixas)||1;
-    if(r.Tipo==='ENTRADA'){ mapa[chave].entrada+=qtd; totalEnt+=qtd; }
-    else if(r.Tipo==='SAIDA'){ mapa[chave].saida+=qtd; totalSai+=qtd; }
+    var qtdPc=Number(r.QtdPecas)||0;
+    if(r.Tipo==='ENTRADA'){ mapa[chave].entrada+=qtd; mapa[chave].entradaPc+=qtdPc; totalEnt+=qtd; totalEntPc+=qtdPc; }
+    else if(r.Tipo==='SAIDA'){ mapa[chave].saida+=qtd; mapa[chave].saidaPc+=qtdPc; totalSai+=qtd; totalSaiPc+=qtdPc; }
   });
   var linhas=Object.keys(mapa).map(function(k){ return mapa[k]; }).sort(function(a,b){ return a.Codigo.localeCompare(b.Codigo)||a.Material.localeCompare(b.Material); });
   var mostrarEnt = tipoFiltro!=='SAIDA';
   var mostrarSai = tipoFiltro!=='ENTRADA';
-  var html='<div class="kpi-grid" style="grid-template-columns:repeat('+((mostrarEnt&&mostrarSai)?3:2)+',1fr);margin-bottom:14px">';
-  if(mostrarEnt) html+='<div class="kpi v"><div class="kl">Total Entradas</div><div class="kv">'+totalEnt+'</div><div class="ks">caixas</div></div>';
-  if(mostrarSai) html+='<div class="kpi r"><div class="kl">Total Saídas</div><div class="kv">'+totalSai+'</div><div class="ks">caixas</div></div>';
+  var nKpis=1+(mostrarEnt?2:0)+(mostrarSai?2:0);
+  var html='<div class="kpi-grid" style="grid-template-columns:repeat('+nKpis+',1fr);margin-bottom:14px">';
+  if(mostrarEnt){
+    html+='<div class="kpi v"><div class="kl">Total Entradas</div><div class="kv">'+totalEnt+'</div><div class="ks">caixas</div></div>';
+    html+='<div class="kpi v"><div class="kl">Peças (Entrada)</div><div class="kv">'+totalEntPc+'</div><div class="ks">unidades</div></div>';
+  }
+  if(mostrarSai){
+    html+='<div class="kpi r"><div class="kl">Total Saídas</div><div class="kv">'+totalSai+'</div><div class="ks">caixas</div></div>';
+    html+='<div class="kpi r"><div class="kl">Peças (Saída)</div><div class="kv">'+totalSaiPc+'</div><div class="ks">unidades</div></div>';
+  }
   html+='<div class="kpi"><div class="kl">Peças distintas</div><div class="kv">'+Object.keys(codigosDistintos).length+'</div><div class="ks">no período</div></div>';
   html+='</div>';
-  html+='<div class="mov-tabela-wrap"><table class="mov-tabela"><thead><tr><th>Código</th><th style="text-align:left">Peça</th><th>Matéria-Prima</th>'+(mostrarEnt?'<th>Entradas (cx)</th>':'')+(mostrarSai?'<th>Saídas (cx)</th>':'')+'</tr></thead><tbody>';
+  html+='<div class="mov-tabela-wrap"><table class="mov-tabela"><thead><tr><th>Código</th><th style="text-align:left">Peça</th><th>Matéria-Prima</th>'+(mostrarEnt?'<th>Entradas (cx)</th><th>Entradas (pç)</th>':'')+(mostrarSai?'<th>Saídas (cx)</th><th>Saídas (pç)</th>':'')+'</tr></thead><tbody>';
   linhas.forEach(function(l){
     var cor=corMaterial(l.Material);
     var tag='<span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:800;background:'+cor+';color:#1a1a1a">'+(l.Material||'—')+'</span>';
-    html+='<tr><td>'+l.Codigo+'</td><td style="text-align:left">'+l.Peca+'</td><td>'+tag+'</td>'+(mostrarEnt?'<td>'+l.entrada+'</td>':'')+(mostrarSai?'<td>'+l.saida+'</td>':'')+'</tr>';
+    html+='<tr><td>'+l.Codigo+'</td><td style="text-align:left">'+l.Peca+'</td><td>'+tag+'</td>'+(mostrarEnt?'<td>'+l.entrada+'</td><td>'+l.entradaPc+'</td>':'')+(mostrarSai?'<td>'+l.saida+'</td><td>'+l.saidaPc+'</td>':'')+'</tr>';
   });
   html+='</tbody></table></div>';
   el.innerHTML=html;
@@ -2133,7 +2167,7 @@ function verifLoopCamera(){
       ctx.drawImage(video,0,0,canvas.width,canvas.height);
       try{
         var img=ctx.getImageData(0,0,canvas.width,canvas.height);
-        var codigo=jsQR(img.data,img.width,img.height,{ inversionAttempts:'dontInvert' });
+        var codigo=jsQR(img.data,img.width,img.height,{ inversionAttempts:'attemptBoth' });
         if(codigo && codigo.data){
           _verifCamCooldownAte=Date.now()+2500;
           var raw=String(codigo.data).trim();
@@ -2762,7 +2796,7 @@ function balLoopCamera(){
       ctx.drawImage(video,0,0,canvas.width,canvas.height);
       try{
         var img=ctx.getImageData(0,0,canvas.width,canvas.height);
-        var codigo=jsQR(img.data,img.width,img.height,{ inversionAttempts:'dontInvert' });
+        var codigo=jsQR(img.data,img.width,img.height,{ inversionAttempts:'attemptBoth' });
         if(codigo && codigo.data){
           _balCamCooldownAte=Date.now()+1800;
           var raw=String(codigo.data).trim(); var caixaId=raw;
@@ -3654,7 +3688,7 @@ function gerarEtiquetas(dados,caixas){
     el.innerHTML=mdlPreencher(template,valores);
     lista.appendChild(el);
     setTimeout(function(){
-      try{ new QRCode(document.getElementById(qrId),{text:qrData,width:256,height:256,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.M}); }catch(e){}
+      try{ new QRCode(document.getElementById(qrId),{text:qrData,width:512,height:512,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.H}); }catch(e){}
     },200);
   });
   gerarConferencia(dados,caixas.length);
@@ -3895,7 +3929,7 @@ function movLoopCamera(){
       ctx.drawImage(video,0,0,canvas.width,canvas.height);
       try{
         var img=ctx.getImageData(0,0,canvas.width,canvas.height);
-        var codigo=jsQR(img.data,img.width,img.height,{ inversionAttempts:'dontInvert' });
+        var codigo=jsQR(img.data,img.width,img.height,{ inversionAttempts:'attemptBoth' });
         if(codigo && codigo.data){
           _movCamCooldownAte=Date.now()+2500; // evita reler a mesma etiqueta em sequência
           movProcessarCodigo(codigo.data);
