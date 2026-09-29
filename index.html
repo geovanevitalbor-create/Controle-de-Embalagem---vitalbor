@@ -2396,10 +2396,24 @@ function planOrdenarPor(col){
   renderDestinosPlanejamento();
 }
 function planSetaOrdenacao(col){ return _planOrdenacao.coluna===col ? (_planOrdenacao.dir===1?' ▲':' ▼') : ''; }
+function planPrefixoGrupo(codigo){
+  var m=(codigo||'').match(/^[A-Za-zÀ-ú]+/);
+  return m?m[0].toUpperCase():'';
+}
+function planOrdemPadrao(a,b){
+  var ordem={ PBA:1, COL:2, DEF:3 };
+  var pa=ordem[planPrefixoGrupo(a.Codigo)]||99;
+  var pb=ordem[planPrefixoGrupo(b.Codigo)]||99;
+  if(pa!==pb) return pa-pb;
+  var na=parseInt((a.Codigo.match(/\d+/)||['0'])[0],10);
+  var nb=parseInt((b.Codigo.match(/\d+/)||['0'])[0],10);
+  if(na!==nb) return na-nb;
+  return a.Codigo.localeCompare(b.Codigo);
+}
 function planPecasOrdenadas(){
   var pecas=(S.planPecasTodas||[]).slice();
   var col=_planOrdenacao.coluna;
-  if(!col){ pecas.sort(function(a,b){ return a.Codigo.localeCompare(b.Codigo); }); return pecas; }
+  if(!col){ pecas.sort(planOrdemPadrao); return pecas; }
   pecas.sort(function(a,b){
     var va,vb;
     if(col==='peca'){ va=a.Codigo; vb=b.Codigo; }
@@ -2409,6 +2423,16 @@ function planPecasOrdenadas(){
     return 0;
   });
   return pecas;
+}
+function planCelulaBloqueada(codigoPeca, grupoNome){
+  return semAcentoConsulta(codigoPeca).indexOf('col')===0 && semAcentoConsulta(grupoNome).indexOf('nbr')!==0;
+}
+function planDesbloquearCelula(idx, chave, grupoNome){
+  abrirModalColNBR(grupoNome, function(){
+    S.planColOverride=S.planColOverride||{};
+    S.planColOverride[idx+'-'+chave]=true;
+    renderDestinosPlanejamento();
+  });
 }
 function planSelecionarLinha(codigo){
   S.planLinhaSelecionada=(S.planLinhaSelecionada===codigo)?null:codigo;
@@ -2426,9 +2450,9 @@ function renderPainelReferencia(){
   var pecas=planPecasOrdenadas();
   var restante=calcularRestantePlanejamento();
   if(!pecas.length){ el.innerHTML='<div class="dash-empty"><div class="dei">📭</div><div>Nenhuma peça com estoque no momento.</div></div>'; return; }
-  var thead='<tr><th style="text-align:left;font-size:12px;padding:10px 14px;width:170px;cursor:pointer" onclick="planOrdenarPor(\'peca\')">PEÇA'+planSetaOrdenacao('peca')+'</th>'+grupos.map(function(g){
+  var thead='<tr><th style="text-align:left;font-size:12px;padding:8px 6px;width:34%;cursor:pointer" onclick="planOrdenarPor(\'peca\')">PEÇA'+planSetaOrdenacao('peca')+'</th>'+grupos.map(function(g){
     var pal=paletaDoMaterial(g.cor,g.nome);
-    return '<th style="background:'+pal.header+';color:#fff;font-size:12px;padding:10px 8px;text-align:center;width:150px;cursor:pointer" onclick="planOrdenarPor(\''+esc(g.nome)+'\')">'+g.nome.toUpperCase()+planSetaOrdenacao(g.nome)+'</th>';
+    return '<th style="background:'+pal.header+';color:#fff;font-size:11px;padding:8px 3px;text-align:center;width:22%;cursor:pointer" onclick="planOrdenarPor(\''+esc(g.nome)+'\')">'+g.nome.toUpperCase()+planSetaOrdenacao(g.nome)+'</th>';
   }).join('')+'</tr>';
   var linhas=pecas.map(function(p){
     var celulas=grupos.map(function(g){
@@ -2438,11 +2462,11 @@ function renderPainelReferencia(){
       var rest=restante[chave]!=null?restante[chave]:atual;
       var mudou=rest!==atual;
       var corRest=rest<0?'#c0392b':pal.texto;
-      var html='<div style="font-weight:800;font-size:15px;color:'+(atual===0?'#b7bcc4':pal.texto)+'">'+atual+'</div>';
-      if(mudou) html+='<div style="font-size:11px;font-weight:800;color:'+corRest+';margin-top:2px">→ '+rest+'</div>';
-      return '<td style="background:'+(rest<0?'#f8e6e5':pal.bg)+';padding:10px 8px;text-align:center;vertical-align:middle">'+html+'</td>';
+      var html='<div style="font-weight:800;font-size:13px;color:'+(atual===0?'#b7bcc4':pal.texto)+'">'+atual+'</div>';
+      if(mudou) html+='<div style="font-size:10px;font-weight:800;color:'+corRest+';margin-top:1px">→'+rest+'</div>';
+      return '<td style="background:'+(rest<0?'#f8e6e5':pal.bg)+';padding:6px 3px;text-align:center;vertical-align:middle">'+html+'</td>';
     }).join('');
-    return '<tr'+planLinhaAttrs(p.Codigo)+'><td style="text-align:left;font-weight:800;white-space:nowrap;font-size:13px;padding:10px 14px;cursor:pointer" onclick="planSelecionarLinha(\''+esc(p.Codigo)+'\')">'+p.Codigo+'</td>'+celulas+'</tr>';
+    return '<tr'+planLinhaAttrs(p.Codigo)+'><td style="text-align:left;font-weight:800;white-space:nowrap;font-size:12px;padding:6px;cursor:pointer;overflow:hidden;text-overflow:ellipsis" onclick="planSelecionarLinha(\''+esc(p.Codigo)+'\')">'+p.Codigo+'</td>'+celulas+'</tr>';
   }).join('');
   el.innerHTML='<table class="plan-card-tabela" style="table-layout:fixed;width:100%">'+
     '<thead>'+thead+'</thead><tbody>'+linhas+'</tbody></table>';
@@ -2458,25 +2482,32 @@ function renderDestinosPlanejamento(){
         var chave=p.Codigo+'||'+g.nome;
         var val=dest.alocacoes[chave]||'';
         var pecasEq=val?planPecasEquivalentes(Number(val),p.Codigo):0;
-        return '<td style="background:'+pal.bg+';padding:6px">'+
-          '<input type="number" min="0" value="'+val+'" id="plan-in-'+idx+'-'+esc(chave)+'" style="width:100%;text-align:center;padding:9px 4px;border:none;background:transparent;color:'+pal.texto+';font-weight:800;font-size:15px;border-radius:4px" '+
+        var bloqueada=planCelulaBloqueada(p.Codigo,g.nome) && !(S.planColOverride&&S.planColOverride[idx+'-'+chave]);
+        if(bloqueada){
+          return '<td style="background:#e9e9ec;padding:6px;text-align:center;cursor:pointer" onclick="planDesbloquearCelula('+idx+',\''+esc(chave)+'\',\''+esc(g.nome)+'\')" title="Peça COL só usa NBR — clique pra liberar com senha de admin">'+
+            '<span style="color:#9a9ea6;font-size:16px">🔒</span>'+
+          '</td>';
+        }
+        return '<td style="background:'+pal.bg+';padding:8px">'+
+          '<input type="number" min="0" value="'+val+'" id="plan-in-'+idx+'-'+esc(chave)+'" style="width:100%;text-align:center;padding:11px 4px;border:none;background:transparent;color:'+pal.texto+';font-weight:800;font-size:17px;border-radius:4px" '+
           'onfocus="this.style.background=\'rgba(255,255,255,.6)\'" onblur="this.style.background=\'transparent\'" '+
           'onchange="onAlocacaoChange('+idx+',\''+esc(chave)+'\',this.value)"/>'+
-          '<div id="plan-cx-'+idx+'-'+esc(chave)+'" style="text-align:center;font-size:10px;font-weight:700;color:'+pal.texto+';opacity:.75;margin-top:-2px">'+(pecasEq?'= '+pecasEq+' pç':'')+'</div>'+
+          '<div id="plan-cx-'+idx+'-'+esc(chave)+'" style="text-align:center;font-size:11px;font-weight:700;color:'+pal.texto+';opacity:.75;margin-top:-2px">'+(pecasEq?'= '+pecasEq+' pç':'')+'</div>'+
         '</td>';
       }).join('');
-      return '<tr'+planLinhaAttrs(p.Codigo)+'><td style="text-align:left;font-weight:800;white-space:nowrap;font-size:13px;padding:10px 14px;cursor:pointer" onclick="planSelecionarLinha(\''+esc(p.Codigo)+'\')">'+p.Codigo+'<div style="font-size:10px;font-weight:600;color:var(--texto2)">'+(p.QtdPadrao?p.QtdPadrao+' pç/cx':'')+'</div></td>'+celulas+'</tr>';
+      return '<tr'+planLinhaAttrs(p.Codigo)+'><td style="text-align:left;font-weight:800;white-space:nowrap;font-size:14px;padding:12px 16px;cursor:pointer" onclick="planSelecionarLinha(\''+esc(p.Codigo)+'\')">'+p.Codigo+'<div style="font-size:11px;font-weight:600;color:var(--texto2)">'+(p.QtdPadrao?p.QtdPadrao+' pç/cx':'')+'</div></td>'+celulas+'</tr>';
     }).join('');
-    var thead='<tr><th style="text-align:left;font-size:12px;width:170px;padding:10px 14px;cursor:pointer" onclick="planOrdenarPor(\'peca\')">PEÇA'+planSetaOrdenacao('peca')+' <span style="font-weight:500;opacity:.7">(em caixas)</span></th>'+grupos.map(function(g){
+    var larguraMaterial=(70/grupos.length).toFixed(1);
+    var thead='<tr><th style="text-align:left;font-size:13px;width:30%;padding:12px 16px;cursor:pointer" onclick="planOrdenarPor(\'peca\')">PEÇA'+planSetaOrdenacao('peca')+' <span style="font-weight:500;opacity:.7">(em caixas)</span></th>'+grupos.map(function(g){
       var pal=paletaDoMaterial(g.cor,g.nome);
-      return '<th style="background:'+pal.header+';color:#fff;font-size:12px;padding:10px 8px;width:150px;cursor:pointer" onclick="planOrdenarPor(\''+esc(g.nome)+'\')">'+g.nome.toUpperCase()+planSetaOrdenacao(g.nome)+'</th>';
+      return '<th style="background:'+pal.header+';color:#fff;font-size:13px;padding:12px 8px;width:'+larguraMaterial+'%;cursor:pointer" onclick="planOrdenarPor(\''+esc(g.nome)+'\')">'+g.nome.toUpperCase()+planSetaOrdenacao(g.nome)+'</th>';
     }).join('')+'</tr>';
     return '<div class="plan-card plan-card-largo">'+
       '<div class="plan-card-hd">'+
         '<input type="text" value="'+esc(dest.nome)+'" placeholder="Nome do destino (ex: cliente — cidade/UF)" onchange="S.planAtual.destinos['+idx+'].nome=this.value"/>'+
         (S.planAtual.destinos.length>1?'<button class="bic bic-d" onclick="removerDestino('+idx+')">🗑️</button>':'')+
       '</div>'+
-      '<table class="plan-card-tabela" style="table-layout:fixed">'+
+      '<table class="plan-card-tabela" style="table-layout:fixed;width:100%">'+
       '<thead>'+thead+'</thead><tbody>'+linhas+'</tbody></table>'+
     '</div>';
   }).join('')+'</div>';
