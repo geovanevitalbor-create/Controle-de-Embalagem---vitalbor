@@ -857,10 +857,10 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-fa
 .mi-planejamento-wrap{width:100%;max-width:760px;padding:0 20px;margin-top:14px}
 .plan-colunas{display:flex;gap:20px;align-items:flex-start}
 .plan-col-esquerda{flex:1;min-width:0}
-.plan-col-direita{flex:0 0 440px;position:sticky;top:16px;max-height:calc(100vh - 32px);overflow-y:auto}
+.plan-col-direita{flex:0 0 440px;position:sticky;top:16px}
 @media (max-width:900px){
   .plan-colunas{flex-direction:column}
-  .plan-col-direita{width:100%;flex:1 1 auto;position:static;max-height:none}
+  .plan-col-direita{width:100%;flex:1 1 auto;position:static}
 }
 #plan-painel-referencia-wrap{background:#fff;border-radius:var(--radius);box-shadow:0 2px 10px rgba(0,0,0,.1);padding:14px}
 .plan-ref-hd{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px}
@@ -2485,7 +2485,7 @@ function renderDestinosPlanejamento(){
         var bloqueada=planCelulaBloqueada(p.Codigo,g.nome) && !(S.planColOverride&&S.planColOverride[idx+'-'+chave]);
         if(bloqueada){
           return '<td style="background:#e9e9ec;padding:6px;text-align:center;cursor:pointer" onclick="planDesbloquearCelula('+idx+',\''+esc(chave)+'\',\''+esc(g.nome)+'\')" title="Peça COL só usa NBR — clique pra liberar com senha de admin">'+
-            '<span style="color:#9a9ea6;font-size:16px">🔒</span>'+
+            '<span style="color:#9a9ea6;font-size:18px;font-weight:800">—</span>'+
           '</td>';
         }
         return '<td style="background:'+pal.bg+';padding:8px">'+
