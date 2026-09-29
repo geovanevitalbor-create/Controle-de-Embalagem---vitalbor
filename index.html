@@ -857,10 +857,7 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-fa
 .mi-planejamento-wrap{width:100%;max-width:760px;padding:0 20px;margin-top:14px}
 .plan-colunas{display:flex;gap:20px;align-items:flex-start}
 .plan-col-esquerda{flex:1;min-width:0}
-.plan-col-direita{flex:0 0 440px;position:sticky;top:16px;max-height:calc(100vh - 32px);overflow-y:auto;scrollbar-width:auto}
-.plan-col-direita::-webkit-scrollbar{width:10px}
-.plan-col-direita::-webkit-scrollbar-thumb{background:#b7bcc4;border-radius:5px}
-.plan-col-direita::-webkit-scrollbar-track{background:#eef0f3}
+.plan-col-direita{flex:0 0 440px;position:sticky;top:16px}
 @media (max-width:900px){
   .plan-colunas{flex-direction:column}
   .plan-col-direita{width:100%;flex:1 1 auto;position:static}
@@ -2449,9 +2446,9 @@ function renderPainelReferencia(){
   var pecas=planPecasOrdenadas();
   var restante=calcularRestantePlanejamento();
   if(!pecas.length){ el.innerHTML='<div class="dash-empty"><div class="dei">📭</div><div>Nenhuma peça com estoque no momento.</div></div>'; return; }
-  var thead='<tr><th style="text-align:left;font-size:12px;padding:8px 6px;width:34%;cursor:pointer;position:sticky;top:0;background:#fff;z-index:2" onclick="planOrdenarPor(\'peca\')">PEÇA'+planSetaOrdenacao('peca')+'</th>'+grupos.map(function(g){
+  var thead='<tr><th style="text-align:left;font-size:12px;padding:8px 6px;width:34%;cursor:pointer" onclick="planOrdenarPor(\'peca\')">PEÇA'+planSetaOrdenacao('peca')+'</th>'+grupos.map(function(g){
     var pal=paletaDoMaterial(g.cor,g.nome);
-    return '<th style="background:'+pal.header+';color:#fff;font-size:11px;padding:8px 3px;text-align:center;width:22%;cursor:pointer;position:sticky;top:0;z-index:2" onclick="planOrdenarPor(\''+esc(g.nome)+'\')">'+g.nome.toUpperCase()+planSetaOrdenacao(g.nome)+'</th>';
+    return '<th style="background:'+pal.header+';color:#fff;font-size:11px;padding:8px 3px;text-align:center;width:22%;cursor:pointer" onclick="planOrdenarPor(\''+esc(g.nome)+'\')">'+g.nome.toUpperCase()+planSetaOrdenacao(g.nome)+'</th>';
   }).join('')+'</tr>';
   var linhas=pecas.map(function(p){
     var celulas=grupos.map(function(g){
