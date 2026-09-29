@@ -857,7 +857,10 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-fa
 .mi-planejamento-wrap{width:100%;max-width:760px;padding:0 20px;margin-top:14px}
 .plan-colunas{display:flex;gap:20px;align-items:flex-start}
 .plan-col-esquerda{flex:1;min-width:0}
-.plan-col-direita{flex:0 0 440px;position:sticky;top:16px}
+.plan-col-direita{flex:0 0 440px;position:sticky;top:16px;max-height:calc(100vh - 32px);overflow-y:auto}
+.plan-col-direita::-webkit-scrollbar{width:10px}
+.plan-col-direita::-webkit-scrollbar-thumb{background:#b7bcc4;border-radius:5px}
+.plan-col-direita::-webkit-scrollbar-track{background:#eef0f3}
 @media (max-width:900px){
   .plan-colunas{flex-direction:column}
   .plan-col-direita{width:100%;flex:1 1 auto;position:static}
@@ -3013,7 +3016,7 @@ function renderQuadroEstoque(){
           return 0;
         });
       } else {
-        linhas.sort(function(a,b){ return a.peca.Codigo.localeCompare(b.peca.Codigo); });
+        linhas.sort(function(a,b){ return planOrdemPadrao(a.peca,b.peca); });
       }
 
       function seta(col){ return _estoqueOrdenacao.coluna===col ? (_estoqueOrdenacao.dir===1?' ▲':' ▼') : ''; }
