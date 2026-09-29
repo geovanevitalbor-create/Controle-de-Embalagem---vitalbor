@@ -855,6 +855,14 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-fa
 .mi-btn-rel{background:linear-gradient(155deg,#2c5f8a 0%,#1d4666 100%);color:#fff}
 .mi-btn-rel:hover{background:linear-gradient(155deg,#37749f 0%,#1d4666 100%)}
 .mi-planejamento-wrap{width:100%;max-width:760px;padding:0 20px;margin-top:14px}
+.plan-cards-wrap{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:14px}
+.plan-card{background:#fff;border-radius:var(--radius-sm);box-shadow:0 1px 4px rgba(0,0,0,.08);overflow:hidden;flex:0 0 auto}
+.plan-card-hd{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--cinza);border-bottom:1px solid var(--cinza2)}
+.plan-card-hd input[type="text"]{flex:1;border:1px solid var(--cinza3);border-radius:6px;padding:6px 8px;font-weight:800;font-size:12px}
+.plan-card-tabela{border-collapse:collapse}
+.plan-card-tabela td,.plan-card-tabela th{border:1px solid rgba(0,0,0,.06)}
+.plan-card-tabela th{white-space:nowrap}
+.plan-card-tabela input[type="number"]::-webkit-inner-spin-button,.plan-card-tabela input[type="number"]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 .mi-btn-planejamento{width:100%;background:linear-gradient(155deg,#1a5276 0%,#0e3450 100%);color:#fff}
 .mi-btn-planejamento:hover{background:linear-gradient(155deg,#20638f 0%,#0e3450 100%)}
 .mi-admin-area{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:20px;padding-top:16px;padding-bottom:16px;border-top:1px solid rgba(255,255,255,.08);width:100%;max-width:300px}
@@ -1815,6 +1823,7 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
         <div class="fg"><label>Título do Planejamento</label><input type="text" id="plan-titulo" placeholder="Ex: Pedido semana 39" oninput="S.planAtual.titulo=this.value"/></div>
         <div id="plan-setup-destinos"></div>
       </div>
+      <div id="plan-estoque-atual-card"></div>
       <div id="plan-destinos-lista"></div>
       <button type="button" onclick="adicionarDestino()" style="background:none;border:2px dashed var(--cinza3);color:var(--texto2);padding:10px;border-radius:var(--radius-sm);width:100%;cursor:pointer;font-weight:800;font-size:13px;margin-bottom:14px">+ Adicionar outro destino</button>
 
@@ -1958,7 +1967,7 @@ function verificarBalancoAtivo(){
     .withSuccessHandler(function(b){
       var aviso=document.getElementById('balanco-aviso-global');
       if(!aviso) return;
-      if(!b){ aviso.style.display='none'; return; }
+      if(!b){ aviso.style.display='none'; ajustarModalInicioPeloAviso(); return; }
       var escopo=b.EscopoNome||'todas as peças';
       var txt;
       if(b.Status==='AGENDADO'){
@@ -1970,10 +1979,19 @@ function verificarBalancoAtivo(){
       }
       aviso.style.display='flex';
       aviso.textContent=txt;
+      ajustarModalInicioPeloAviso();
     })
     .withFailureHandler(function(){})
     .getBalancoAtivo();
 }
+function ajustarModalInicioPeloAviso(){
+  var aviso=document.getElementById('balanco-aviso-global');
+  var modal=document.getElementById('modal-inicio');
+  if(!aviso||!modal) return;
+  var h=(aviso.style.display!=='none')?aviso.offsetHeight:0;
+  modal.style.top=h+'px';
+}
+window.addEventListener('resize', function(){ ajustarModalInicioPeloAviso(); });
 
 // ═══════════════════════════════════════
 // MODAL INICIAL
@@ -2299,35 +2317,65 @@ function carregarEstoqueBasePlanejamento(){
           saldoPecaGrupo[p.Codigo+'||'+g.nome]=total;
         });
       });
-      S.planGrupos=grupos.map(function(g){ return g.nome; });
+      S.planGrupos=grupos;
       S.planEstoqueBase=saldoPecaGrupo;
+      renderCardEstoqueAtual();
       renderDestinosPlanejamento();
       renderPainelRestante();
     })
     .withFailureHandler(function(){ toast('Erro ao carregar estoque atual','erro'); })
     .getEstoqueAtual();
 }
+function renderCardEstoqueAtual(){
+  var el=document.getElementById('plan-estoque-atual-card');
+  if(!el) return;
+  var grupos=S.planGrupos||[];
+  var base=S.planEstoqueBase||{};
+  var linhas=S.pecas.map(function(p){
+    var celulas=grupos.map(function(g){
+      var pal=paletaDoMaterial(g.cor,g.nome);
+      var v=base[p.Codigo+'||'+g.nome]||0;
+      var corTexto=v===0?'#8a8f99':pal.texto;
+      return '<td style="background:'+pal.bg+';color:'+corTexto+';font-weight:800;font-size:12px;padding:4px">'+v+'</td>';
+    }).join('');
+    return '<tr><td style="text-align:left;font-weight:800;white-space:nowrap;font-size:12px;padding:4px 8px">'+p.Codigo+'</td>'+celulas+'</tr>';
+  }).join('');
+  var thead='<tr><th style="text-align:left;font-size:11px">PEÇA</th>'+grupos.map(function(g){
+    var pal=paletaDoMaterial(g.cor,g.nome);
+    return '<th style="background:'+pal.header+';color:#fff;font-size:11px;padding:5px 4px">'+g.nome.toUpperCase()+'</th>';
+  }).join('')+'</tr>';
+  el.innerHTML='<div class="plan-cards-wrap"><div class="plan-card">'+
+    '<div class="plan-card-hd" style="justify-content:center"><b>ESTOQUE ATUAL</b></div>'+
+    '<table class="plan-card-tabela"><thead>'+thead+'</thead><tbody>'+linhas+'</tbody></table>'+
+  '</div></div>';
+}
 function renderDestinosPlanejamento(){
   var el=document.getElementById('plan-destinos-lista');
   var grupos=S.planGrupos||[];
-  el.innerHTML=S.planAtual.destinos.map(function(dest,idx){
+  el.innerHTML='<div class="plan-cards-wrap">'+S.planAtual.destinos.map(function(dest,idx){
     var linhas=S.pecas.map(function(p){
       var celulas=grupos.map(function(g){
-        var chave=p.Codigo+'||'+g;
+        var pal=paletaDoMaterial(g.cor,g.nome);
+        var chave=p.Codigo+'||'+g.nome;
         var val=dest.alocacoes[chave]||'';
-        return '<td><input type="number" min="0" value="'+val+'" style="width:70px;text-align:center;padding:5px;border:1px solid var(--cinza3);border-radius:6px" '+
-          'onchange="onAlocacaoChange('+idx+',\''+chave+'\',this.value)"/></td>';
+        return '<td style="background:'+pal.bg+';padding:2px">'+
+          '<input type="number" min="0" value="'+val+'" style="width:44px;text-align:center;padding:4px 2px;border:none;background:transparent;color:'+pal.texto+';font-weight:800;font-size:12px" '+
+          'onchange="onAlocacaoChange('+idx+',\''+esc(chave)+'\',this.value)"/></td>';
       }).join('');
-      return '<tr><td style="text-align:left;font-weight:800;white-space:nowrap">'+p.Codigo+'</td>'+celulas+'</tr>';
+      return '<tr><td style="text-align:left;font-weight:800;white-space:nowrap;font-size:12px;padding:4px 8px">'+p.Codigo+'</td>'+celulas+'</tr>';
     }).join('');
-    return '<div class="dash-filtro" style="margin-bottom:14px">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px">'+
-        '<input type="text" value="'+esc(dest.nome)+'" placeholder="Nome do destino (ex: ASPERBRAS SP - PENÁPOLIS)" style="flex:1;padding:10px;border:1px solid var(--cinza3);border-radius:8px;font-weight:800" onchange="S.planAtual.destinos['+idx+'].nome=this.value"/>'+
+    var thead='<tr><th style="text-align:left;font-size:11px">PEÇA</th>'+grupos.map(function(g){
+      var pal=paletaDoMaterial(g.cor,g.nome);
+      return '<th style="background:'+pal.header+';color:#fff;font-size:11px;padding:5px 4px">'+g.nome.toUpperCase()+'</th>';
+    }).join('')+'</tr>';
+    return '<div class="plan-card">'+
+      '<div class="plan-card-hd">'+
+        '<input type="text" value="'+esc(dest.nome)+'" placeholder="Nome do destino" onchange="S.planAtual.destinos['+idx+'].nome=this.value"/>'+
         (S.planAtual.destinos.length>1?'<button class="bic bic-d" onclick="removerDestino('+idx+')">🗑️</button>':'')+
       '</div>'+
-      '<div class="mov-tabela-wrap"><table class="mov-tabela"><thead><tr><th style="text-align:left">Peça</th>'+grupos.map(function(g){ return '<th>'+g+'</th>'; }).join('')+'</tr></thead><tbody>'+linhas+'</tbody></table></div>'+
+      '<table class="plan-card-tabela"><thead>'+thead+'</thead><tbody>'+linhas+'</tbody></table>'+
     '</div>';
-  }).join('');
+  }).join('')+'</div>';
 }
 function onAlocacaoChange(idx,chave,valor){
   var n=Number(valor)||0;
@@ -2361,15 +2409,23 @@ function renderPainelRestante(){
   var restante=calcularRestantePlanejamento();
   var linhas=S.pecas.map(function(p){
     var celulas=grupos.map(function(g){
-      var chave=p.Codigo+'||'+g;
+      var pal=paletaDoMaterial(g.cor,g.nome);
+      var chave=p.Codigo+'||'+g.nome;
       var v=restante[chave]||0;
-      var cor=v<0?'#c0392b':'var(--texto)';
-      var peso=v<0?'900':'700';
-      return '<td style="color:'+cor+';font-weight:'+peso+'">'+v+'</td>';
+      var bg=v<0?'#f8e6e5':pal.bg;
+      var cor=v<0?'#8a221c':pal.texto;
+      return '<td style="background:'+bg+';color:'+cor+';font-weight:800;font-size:12px;padding:4px">'+v+'</td>';
     }).join('');
-    return '<tr><td style="text-align:left;font-weight:800;white-space:nowrap">'+p.Codigo+'</td>'+celulas+'</tr>';
+    return '<tr><td style="text-align:left;font-weight:800;white-space:nowrap;font-size:12px;padding:4px 8px">'+p.Codigo+'</td>'+celulas+'</tr>';
   }).join('');
-  el.innerHTML='<div class="mov-tabela-wrap"><table class="mov-tabela"><thead><tr><th style="text-align:left">Peça</th>'+grupos.map(function(g){ return '<th>'+g+'</th>'; }).join('')+'</tr></thead><tbody>'+linhas+'</tbody></table></div>';
+  var thead='<tr><th style="text-align:left;font-size:11px">PEÇA</th>'+grupos.map(function(g){
+    var pal=paletaDoMaterial(g.cor,g.nome);
+    return '<th style="background:'+pal.header+';color:#fff;font-size:11px;padding:5px 4px">'+g.nome.toUpperCase()+'</th>';
+  }).join('')+'</tr>';
+  el.innerHTML='<div class="plan-cards-wrap"><div class="plan-card">'+
+    '<div class="plan-card-hd" style="justify-content:center"><b>ESTOQUE RESTANTE</b></div>'+
+    '<table class="plan-card-tabela"><thead>'+thead+'</thead><tbody>'+linhas+'</tbody></table>'+
+  '</div></div>';
 }
 function salvarPlanejamentoAtual(){
   if(!S.planAtual.destinos||!S.planAtual.destinos.length){ toast('Gere pelo menos um destino antes de salvar','aviso'); return; }
