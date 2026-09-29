@@ -875,8 +875,14 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-fa
 .plan-card-hd input[type="text"]{flex:1;border:1px solid var(--cinza3);border-radius:6px;padding:6px 8px;font-weight:800;font-size:12px}
 .plan-card-tabela{border-collapse:collapse}
 .plan-card-tabela tbody tr:hover td{filter:brightness(.96)}
-.plan-resumo-vazio{color:var(--texto2);font-size:13px;font-style:italic;padding:6px 0}
+.plan-topo-flex{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap}
+.plan-topo-titulo{flex:1 1 280px;min-width:240px}
+.plan-topo-resumo{flex:2 1 420px;min-width:280px}
+.plan-resumo-vazio{color:var(--texto2);font-size:13px;font-style:italic;padding:10px 0;display:flex;align-items:center;height:100%}
 .plan-resumo-aviso{margin-top:10px;font-size:12px;font-weight:700;color:#8a6d00;background:#fbf3d9;padding:8px 12px;border-radius:8px}
+#pag-planejamento .mov-body{padding:24px 28px}
+.plan-colunas{gap:28px}
+.dash-filtro{padding:20px 24px}
 .plan-card-hd{background:linear-gradient(155deg,var(--azul) 0%,#0c2b52 100%)}
 .plan-card-hd input[type="text"]{background:rgba(255,255,255,.95)}
 .plan-card{box-shadow:0 3px 12px rgba(0,0,0,.1);border:1px solid rgba(0,0,0,.05)}
@@ -1841,10 +1847,14 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
     <div id="plan-edit-view" style="display:none">
       <div class="dash-filtro">
         <button class="pos-back-btn" onclick="voltarListaPlanejamentos()" style="margin-bottom:10px">◀ Voltar à lista</button>
-        <div class="fg"><label>Título do Planejamento</label><input type="text" id="plan-titulo" placeholder="Ex: Pedido semana 39" oninput="S.planAtual.titulo=this.value"/></div>
-        <div id="plan-setup-destinos"></div>
+        <div class="plan-topo-flex">
+          <div class="plan-topo-titulo">
+            <div class="fg" style="margin-bottom:0"><label>Título do Planejamento</label><input type="text" id="plan-titulo" placeholder="Ex: Pedido semana 39" oninput="S.planAtual.titulo=this.value"/></div>
+            <div id="plan-setup-destinos"></div>
+          </div>
+          <div id="plan-resumo-pedido" class="plan-topo-resumo"></div>
+        </div>
       </div>
-      <div id="plan-resumo-pedido" class="dash-filtro"></div>
 
       <div class="plan-colunas">
         <div class="plan-col-esquerda">
@@ -1862,7 +1872,6 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
           <div id="plan-painel-referencia-wrap">
             <div class="plan-ref-hd">
               <div class="plan-ref-titulo">📊 Estoque Atual</div>
-              <label class="plan-ref-toggle"><input type="checkbox" id="plan-toggle-todas" onchange="S.planMostrarTodasPecas=this.checked;renderPainelReferencia();renderDestinosPlanejamento();"/> Mostrar todas</label>
             </div>
             <div id="plan-painel-referencia"></div>
           </div>
@@ -2369,7 +2378,6 @@ function carregarEstoqueBasePlanejamento(){
     S.planPecasRelevantes=pecas.filter(function(p){
       return grupos.some(function(g){ return (saldoPecaGrupo[p.Codigo+'||'+g.nome]||0)>0; });
     });
-    S.planMostrarTodasPecas=false;
     renderPainelReferencia();
     renderResumoPedido();
     renderDestinosPlanejamento();
@@ -2385,7 +2393,7 @@ function renderPainelReferencia(){
   var el=document.getElementById('plan-painel-referencia');
   if(!el) return;
   var grupos=S.planGrupos||[];
-  var pecas=(S.planMostrarTodasPecas?S.planPecasTodas:S.planPecasRelevantes)||[];
+  var pecas=S.planPecasTodas||[];
   var restante=calcularRestantePlanejamento();
   if(!pecas.length){ el.innerHTML='<div class="dash-empty"><div class="dei">📭</div><div>Nenhuma peça com estoque no momento.</div></div>'; return; }
   var thead='<tr><th style="text-align:left;font-size:12px;padding:10px 12px">PEÇA</th>'+grupos.map(function(g){
@@ -2412,7 +2420,7 @@ function renderPainelReferencia(){
 function renderDestinosPlanejamento(){
   var el=document.getElementById('plan-destinos-lista');
   var grupos=S.planGrupos||[];
-  var pecas=(S.planMostrarTodasPecas?S.planPecasTodas:S.planPecasRelevantes)||[];
+  var pecas=S.planPecasTodas||[];
   el.innerHTML='<div class="plan-destinos-stack">'+S.planAtual.destinos.map(function(dest,idx){
     var linhas=pecas.map(function(p){
       var celulas=grupos.map(function(g){
