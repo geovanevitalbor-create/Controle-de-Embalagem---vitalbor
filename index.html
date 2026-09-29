@@ -855,13 +855,22 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-fa
 .mi-btn-rel{background:linear-gradient(155deg,#2c5f8a 0%,#1d4666 100%);color:#fff}
 .mi-btn-rel:hover{background:linear-gradient(155deg,#37749f 0%,#1d4666 100%)}
 .mi-planejamento-wrap{width:100%;max-width:760px;padding:0 20px;margin-top:14px}
-#plan-painel-referencia-wrap{position:sticky;top:0;z-index:20;background:var(--cinza);padding-bottom:10px;margin-bottom:6px;box-shadow:0 6px 10px -6px rgba(0,0,0,.15)}
-.plan-ref-hd{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px}
-.plan-ref-titulo{font-size:13px;font-weight:800;color:var(--azul)}
+.plan-colunas{display:flex;gap:20px;align-items:flex-start}
+.plan-col-esquerda{flex:1;min-width:0}
+.plan-col-direita{flex:0 0 340px;position:sticky;top:16px}
+@media (max-width:900px){
+  .plan-colunas{flex-direction:column}
+  .plan-col-direita{width:100%;flex:1 1 auto;position:static}
+}
+#plan-painel-referencia-wrap{background:#fff;border-radius:var(--radius);box-shadow:0 2px 10px rgba(0,0,0,.1);padding:14px}
+.plan-ref-hd{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.plan-ref-titulo{font-size:14px;font-weight:900;color:var(--azul)}
 .plan-ref-toggle{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--texto2);cursor:pointer}
-#plan-painel-referencia{background:#fff;border-radius:var(--radius-sm);box-shadow:0 1px 4px rgba(0,0,0,.08);overflow-x:auto;overflow-y:auto;max-height:38vh}
+#plan-painel-referencia{overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 140px)}
+.plan-destinos-stack{display:flex;flex-direction:column;gap:18px;margin-bottom:14px}
 .plan-cards-wrap{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:14px}
 .plan-card{background:#fff;border-radius:var(--radius-sm);box-shadow:0 1px 4px rgba(0,0,0,.08);overflow:hidden;flex:0 0 auto}
+.plan-card-largo{width:100%}
 .plan-card-hd{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--cinza);border-bottom:1px solid var(--cinza2)}
 .plan-card-hd input[type="text"]{flex:1;border:1px solid var(--cinza3);border-radius:6px;padding:6px 8px;font-weight:800;font-size:12px}
 .plan-card-tabela{border-collapse:collapse}
@@ -1828,21 +1837,27 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
         <div class="fg"><label>Título do Planejamento</label><input type="text" id="plan-titulo" placeholder="Ex: Pedido semana 39" oninput="S.planAtual.titulo=this.value"/></div>
         <div id="plan-setup-destinos"></div>
       </div>
-      <div id="plan-painel-referencia-wrap">
-        <div class="plan-ref-hd">
-          <div class="plan-ref-titulo">📊 Estoque — atual e restante após esse pedido</div>
-          <label class="plan-ref-toggle"><input type="checkbox" id="plan-toggle-todas" onchange="S.planMostrarTodasPecas=this.checked;renderPainelReferencia();renderDestinosPlanejamento();"/> Mostrar peças sem estoque</label>
+      <div class="plan-colunas">
+        <div class="plan-col-esquerda">
+          <div class="hist-titulo" style="margin-top:0">🏭 Destinos deste pedido</div>
+          <div id="plan-destinos-lista"></div>
+          <button type="button" onclick="adicionarDestino()" style="background:none;border:2px dashed var(--cinza3);color:var(--texto2);padding:10px;border-radius:var(--radius-sm);width:100%;cursor:pointer;font-weight:800;font-size:13px;margin-bottom:14px">+ Adicionar outro destino</button>
+
+          <div style="display:flex;gap:10px;margin-top:14px">
+            <button class="btn-filtrar" style="background:var(--verde)" onclick="salvarPlanejamentoAtual()">💾 Salvar Planejamento</button>
+            <button class="btn-filtrar" style="background:#8a2be2" onclick="gerarPDFPlanejamento()">🖨️ Gerar PDF</button>
+          </div>
         </div>
-        <div id="plan-painel-referencia"></div>
-      </div>
 
-      <div class="hist-titulo" style="margin-top:18px">🏭 Destinos deste pedido</div>
-      <div id="plan-destinos-lista"></div>
-      <button type="button" onclick="adicionarDestino()" style="background:none;border:2px dashed var(--cinza3);color:var(--texto2);padding:10px;border-radius:var(--radius-sm);width:100%;cursor:pointer;font-weight:800;font-size:13px;margin-bottom:14px">+ Adicionar outro destino</button>
-
-      <div style="display:flex;gap:10px;margin-top:14px">
-        <button class="btn-filtrar" style="background:var(--verde)" onclick="salvarPlanejamentoAtual()">💾 Salvar Planejamento</button>
-        <button class="btn-filtrar" style="background:#8a2be2" onclick="gerarPDFPlanejamento()">🖨️ Gerar PDF</button>
+        <div class="plan-col-direita">
+          <div id="plan-painel-referencia-wrap">
+            <div class="plan-ref-hd">
+              <div class="plan-ref-titulo">📊 Estoque Atual</div>
+              <label class="plan-ref-toggle"><input type="checkbox" id="plan-toggle-todas" onchange="S.planMostrarTodasPecas=this.checked;renderPainelReferencia();renderDestinosPlanejamento();"/> Mostrar todas</label>
+            </div>
+            <div id="plan-painel-referencia"></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -2371,28 +2386,29 @@ function renderDestinosPlanejamento(){
   var el=document.getElementById('plan-destinos-lista');
   var grupos=S.planGrupos||[];
   var pecas=(S.planMostrarTodasPecas?S.pecas:S.planPecasRelevantes)||[];
-  el.innerHTML='<div class="plan-cards-wrap">'+S.planAtual.destinos.map(function(dest,idx){
+  el.innerHTML='<div class="plan-destinos-stack">'+S.planAtual.destinos.map(function(dest,idx){
     var linhas=pecas.map(function(p){
       var celulas=grupos.map(function(g){
         var pal=paletaDoMaterial(g.cor,g.nome);
         var chave=p.Codigo+'||'+g.nome;
         var val=dest.alocacoes[chave]||'';
-        return '<td style="background:'+pal.bg+';padding:2px">'+
-          '<input type="number" min="0" value="'+val+'" style="width:44px;text-align:center;padding:4px 2px;border:none;background:transparent;color:'+pal.texto+';font-weight:800;font-size:12px" '+
+        return '<td style="background:'+pal.bg+';padding:4px">'+
+          '<input type="number" min="0" value="'+val+'" style="width:100%;min-width:56px;text-align:center;padding:8px 4px;border:none;background:transparent;color:'+pal.texto+';font-weight:800;font-size:14px" '+
           'onchange="onAlocacaoChange('+idx+',\''+esc(chave)+'\',this.value)"/></td>';
       }).join('');
-      return '<tr><td style="text-align:left;font-weight:800;white-space:nowrap;font-size:12px;padding:4px 8px">'+p.Codigo+'</td>'+celulas+'</tr>';
+      return '<tr><td style="text-align:left;font-weight:800;white-space:nowrap;font-size:13px;padding:8px 12px">'+p.Codigo+'</td>'+celulas+'</tr>';
     }).join('');
-    var thead='<tr><th style="text-align:left;font-size:11px">PEÇA</th>'+grupos.map(function(g){
+    var thead='<tr><th style="text-align:left;font-size:12px">PEÇA</th>'+grupos.map(function(g){
       var pal=paletaDoMaterial(g.cor,g.nome);
-      return '<th style="background:'+pal.header+';color:#fff;font-size:11px;padding:5px 4px">'+g.nome.toUpperCase()+'</th>';
+      return '<th style="background:'+pal.header+';color:#fff;font-size:12px;padding:8px 6px">'+g.nome.toUpperCase()+'</th>';
     }).join('')+'</tr>';
-    return '<div class="plan-card">'+
+    return '<div class="plan-card plan-card-largo">'+
       '<div class="plan-card-hd">'+
-        '<input type="text" value="'+esc(dest.nome)+'" placeholder="Nome do destino" onchange="S.planAtual.destinos['+idx+'].nome=this.value"/>'+
+        '<input type="text" value="'+esc(dest.nome)+'" placeholder="Nome do destino (ex: cliente — cidade/UF)" onchange="S.planAtual.destinos['+idx+'].nome=this.value"/>'+
         (S.planAtual.destinos.length>1?'<button class="bic bic-d" onclick="removerDestino('+idx+')">🗑️</button>':'')+
       '</div>'+
-      '<table class="plan-card-tabela"><thead>'+thead+'</thead><tbody>'+linhas+'</tbody></table>'+
+      '<table class="plan-card-tabela" style="width:100%">'+
+      '<thead>'+thead+'</thead><tbody>'+linhas+'</tbody></table>'+
     '</div>';
   }).join('')+'</div>';
 }
