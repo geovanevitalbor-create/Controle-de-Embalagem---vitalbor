@@ -212,8 +212,8 @@ async function backendArranjosPorPeca() {
 function montarPecaComCaixa(p, tamanhosPorId, arranjosPorPeca, ativo) {
   var tam = tamanhosPorId[p.tamanho_caixa_id] || null;
   var pesoUnitarioG = p.peso_unitario_g || null;
-  var pesoCaixaFechadaKg = (pesoUnitarioG && tam && tam.PesoVazioG != null && p.qtd_padrao)
-    ? (pesoUnitarioG * p.qtd_padrao + tam.PesoVazioG) / 1000
+  var pesoCaixaFechadaKg = (pesoUnitarioG && p.qtd_padrao)
+    ? (pesoUnitarioG * p.qtd_padrao) / 1000
     : null;
   return {
     ID: p.id, Codigo: p.codigo, Nome: p.nome, QtdPadrao: p.qtd_padrao, PecasPorTubo: p.pecas_por_tubo,
