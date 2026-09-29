@@ -2322,35 +2322,52 @@ function abrirPlanejamento(id){
     .getPlanejamentoPorId(id);
 }
 function carregarEstoqueBasePlanejamento(){
+  var el=document.getElementById('plan-destinos-lista');
+  if(el) el.innerHTML='<div class="dash-empty"><div class="spinner" style="border-top-color:var(--azul3);margin:0 auto"></div></div>';
+  var pronto={ estoque:null, mats:null, pecas:null };
+  function tentarMontar(){
+    if(!pronto.estoque||!pronto.mats||!pronto.pecas) return;
+    var estoque=pronto.estoque, mats=pronto.mats, pecas=pronto.pecas;
+    var saldos={};
+    estoque.forEach(function(e){ saldos[(e.CodigoPeca||e.Peca)+'||'+e.Material]=e.Saldo; });
+    var gruposMapa={};
+    mats.forEach(function(m){
+      var g=agruparNomeMaterialQuadro(m.Nome);
+      if(!gruposMapa[g]) gruposMapa[g]={ nome:g, membros:[], cor:'' };
+      gruposMapa[g].membros.push(m.Nome);
+      if(!gruposMapa[g].cor && m.Cor) gruposMapa[g].cor=m.Cor;
+    });
+    var grupos=Object.keys(gruposMapa).sort().map(function(k){ return gruposMapa[k]; });
+    if(!grupos.length){
+      if(el) el.innerHTML='<div class="dash-empty"><div class="dei">⚠️</div><div>Nenhum material cadastrado ainda. Cadastre em Admin → Materiais antes de planejar um pedido.</div></div>';
+      return;
+    }
+    if(!pecas.length){
+      if(el) el.innerHTML='<div class="dash-empty"><div class="dei">⚠️</div><div>Nenhuma peça cadastrada ainda. Cadastre em Admin → Peças antes de planejar um pedido.</div></div>';
+      return;
+    }
+    var saldoPecaGrupo={};
+    pecas.forEach(function(p){
+      grupos.forEach(function(g){
+        var total=0;
+        g.membros.forEach(function(matNome){ total+=saldos[p.Codigo+'||'+matNome]||0; });
+        saldoPecaGrupo[p.Codigo+'||'+g.nome]=total;
+      });
+    });
+    S.planGrupos=grupos;
+    S.planEstoqueBase=saldoPecaGrupo;
+    S.planPecasTodas=pecas;
+    S.planPecasRelevantes=pecas.filter(function(p){
+      return grupos.some(function(g){ return (saldoPecaGrupo[p.Codigo+'||'+g.nome]||0)>0; });
+    });
+    S.planMostrarTodasPecas=false;
+    renderPainelReferencia();
+    renderDestinosPlanejamento();
+  }
+  google.script.run.withSuccessHandler(function(d){ pronto.mats=d||[]; tentarMontar(); }).withFailureHandler(function(){ pronto.mats=[]; tentarMontar(); }).getMateriais();
+  google.script.run.withSuccessHandler(function(d){ pronto.pecas=d||[]; tentarMontar(); }).withFailureHandler(function(){ pronto.pecas=[]; tentarMontar(); }).getPecas();
   google.script.run
-    .withSuccessHandler(function(estoque){
-      estoque=estoque||[];
-      var saldos={};
-      estoque.forEach(function(e){ saldos[(e.CodigoPeca||e.Peca)+'||'+e.Material]=e.Saldo; });
-      var gruposMapa={};
-      S.mats.forEach(function(m){
-        var g=agruparNomeMaterialQuadro(m.Nome);
-        if(!gruposMapa[g]) gruposMapa[g]={ nome:g, membros:[] };
-        gruposMapa[g].membros.push(m.Nome);
-      });
-      var grupos=Object.keys(gruposMapa).sort().map(function(k){ return gruposMapa[k]; });
-      var saldoPecaGrupo={};
-      S.pecas.forEach(function(p){
-        grupos.forEach(function(g){
-          var total=0;
-          g.membros.forEach(function(matNome){ total+=saldos[p.Codigo+'||'+matNome]||0; });
-          saldoPecaGrupo[p.Codigo+'||'+g.nome]=total;
-        });
-      });
-      S.planGrupos=grupos;
-      S.planEstoqueBase=saldoPecaGrupo;
-      S.planPecasRelevantes=S.pecas.filter(function(p){
-        return grupos.some(function(g){ return (saldoPecaGrupo[p.Codigo+'||'+g.nome]||0)>0; });
-      });
-      S.planMostrarTodasPecas=false;
-      renderPainelReferencia();
-      renderDestinosPlanejamento();
-    })
+    .withSuccessHandler(function(estoque){ pronto.estoque=estoque||[]; tentarMontar(); })
     .withFailureHandler(function(){ toast('Erro ao carregar estoque atual','erro'); })
     .getEstoqueAtual();
 }
@@ -2358,7 +2375,7 @@ function renderPainelReferencia(){
   var el=document.getElementById('plan-painel-referencia');
   if(!el) return;
   var grupos=S.planGrupos||[];
-  var pecas=(S.planMostrarTodasPecas?S.pecas:S.planPecasRelevantes)||[];
+  var pecas=(S.planMostrarTodasPecas?S.planPecasTodas:S.planPecasRelevantes)||[];
   var restante=calcularRestantePlanejamento();
   if(!pecas.length){ el.innerHTML='<div class="dash-empty"><div class="dei">📭</div><div>Nenhuma peça com estoque no momento.</div></div>'; return; }
   var thead='<tr><th style="text-align:left;font-size:11px">PEÇA</th>'+grupos.map(function(g){
@@ -2385,7 +2402,7 @@ function renderPainelReferencia(){
 function renderDestinosPlanejamento(){
   var el=document.getElementById('plan-destinos-lista');
   var grupos=S.planGrupos||[];
-  var pecas=(S.planMostrarTodasPecas?S.pecas:S.planPecasRelevantes)||[];
+  var pecas=(S.planMostrarTodasPecas?S.planPecasTodas:S.planPecasRelevantes)||[];
   el.innerHTML='<div class="plan-destinos-stack">'+S.planAtual.destinos.map(function(dest,idx){
     var linhas=pecas.map(function(p){
       var celulas=grupos.map(function(g){
