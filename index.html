@@ -2458,8 +2458,10 @@ function renderPainelReferencia(){
       var rest=restante[chave]!=null?restante[chave]:atual;
       var mudou=rest!==atual;
       var corRest=rest<0?'#c0392b':pal.texto;
-      var html='<div style="font-weight:800;font-size:13px;color:'+(atual===0?'#b7bcc4':pal.texto)+'">'+atual+'</div>';
-      if(mudou) html+='<div style="font-size:10px;font-weight:800;color:'+corRest+';margin-top:1px">→'+rest+'</div>';
+      var html='<div style="font-size:8px;color:#999;text-transform:uppercase;letter-spacing:.3px;line-height:1.3">Estoque</div>'+
+        '<div style="font-weight:800;font-size:13px;color:'+(atual===0?'#b7bcc4':pal.texto)+(mudou?';text-decoration:line-through;opacity:.55':'')+'">'+atual+'</div>';
+      if(mudou) html+='<div style="font-size:8px;color:#999;text-transform:uppercase;letter-spacing:.3px;margin-top:2px;line-height:1.3">Resta</div>'+
+        '<div style="font-size:13px;font-weight:900;color:'+corRest+'">'+rest+'</div>';
       return '<td style="background:'+(rest<0?'#f8e6e5':pal.bg)+';padding:6px 3px;text-align:center;vertical-align:middle">'+html+'</td>';
     }).join('');
     return '<tr'+planLinhaAttrs(p.Codigo)+'><td style="text-align:left;font-weight:800;white-space:nowrap;font-size:12px;padding:6px;cursor:pointer;overflow:hidden;text-overflow:ellipsis" onclick="planSelecionarLinha(\''+esc(p.Codigo)+'\')">'+p.Codigo+'</td>'+celulas+'</tr>';
