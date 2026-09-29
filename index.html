@@ -875,6 +875,12 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-fa
 .plan-card-hd input[type="text"]{flex:1;border:1px solid var(--cinza3);border-radius:6px;padding:6px 8px;font-weight:800;font-size:12px}
 .plan-card-tabela{border-collapse:collapse}
 .plan-card-tabela tbody tr:hover td{filter:brightness(.96)}
+.plan-resumo-vazio{color:var(--texto2);font-size:13px;font-style:italic;padding:6px 0}
+.plan-resumo-aviso{margin-top:10px;font-size:12px;font-weight:700;color:#8a6d00;background:#fbf3d9;padding:8px 12px;border-radius:8px}
+.plan-card-hd{background:linear-gradient(155deg,var(--azul) 0%,#0c2b52 100%)}
+.plan-card-hd input[type="text"]{background:rgba(255,255,255,.95)}
+.plan-card{box-shadow:0 3px 12px rgba(0,0,0,.1);border:1px solid rgba(0,0,0,.05)}
+#plan-painel-referencia-wrap{border-top:3px solid var(--azul3)}
 .plan-card-tabela td,.plan-card-tabela th{border:1px solid rgba(0,0,0,.06)}
 .plan-card-tabela th{white-space:nowrap}
 .plan-card-tabela input[type="number"]::-webkit-inner-spin-button,.plan-card-tabela input[type="number"]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
@@ -1838,6 +1844,8 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
         <div class="fg"><label>Título do Planejamento</label><input type="text" id="plan-titulo" placeholder="Ex: Pedido semana 39" oninput="S.planAtual.titulo=this.value"/></div>
         <div id="plan-setup-destinos"></div>
       </div>
+      <div id="plan-resumo-pedido" class="dash-filtro"></div>
+
       <div class="plan-colunas">
         <div class="plan-col-esquerda">
           <div class="hist-titulo" style="margin-top:0">🏭 Destinos deste pedido</div>
@@ -2305,6 +2313,7 @@ function gerarDestinosIniciais(){
   document.getElementById('plan-setup-destinos').innerHTML='';
   renderDestinosPlanejamento();
   renderPainelReferencia();
+  renderResumoPedido();
 }
 function abrirPlanejamento(id){
   document.getElementById('plan-lista-view').style.display='none';
@@ -2362,6 +2371,7 @@ function carregarEstoqueBasePlanejamento(){
     });
     S.planMostrarTodasPecas=false;
     renderPainelReferencia();
+    renderResumoPedido();
     renderDestinosPlanejamento();
   }
   google.script.run.withSuccessHandler(function(d){ pronto.mats=d||[]; tentarMontar(); }).withFailureHandler(function(){ pronto.mats=[]; tentarMontar(); }).getMateriais();
@@ -2435,16 +2445,19 @@ function onAlocacaoChange(idx,chave,valor){
   if(n<=0){ delete S.planAtual.destinos[idx].alocacoes[chave]; }
   else { S.planAtual.destinos[idx].alocacoes[chave]=n; }
   renderPainelReferencia();
+  renderResumoPedido();
 }
 function adicionarDestino(){
   S.planAtual.destinos.push({ nome:'', alocacoes:{} });
   renderDestinosPlanejamento();
   renderPainelReferencia();
+  renderResumoPedido();
 }
 function removerDestino(idx){
   S.planAtual.destinos.splice(idx,1);
   renderDestinosPlanejamento();
   renderPainelReferencia();
+  renderResumoPedido();
 }
 function calcularRestantePlanejamento(){
   var restante={};
@@ -2469,6 +2482,50 @@ function salvarPlanejamentoAtual(){
     })
     .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); })
     .salvarPlanejamento(S.planAtual.id, S.planAtual.titulo, S.planAtual.destinos, S.movOperador?S.movOperador.nome:'Admin');
+}
+function calcularResumoPedido(){
+  var pecasPorCodigo={};
+  (S.planPecasTodas||S.pecas||[]).forEach(function(p){ pecasPorCodigo[p.Codigo]=p; });
+  var pesoTotalGeral=0, caixasTotalGeral=0, faltaDados=false;
+  var porTamanho={};
+  (S.planAtual.destinos||[]).forEach(function(dest){
+    Object.keys(dest.alocacoes||{}).forEach(function(chave){
+      var qtd=Number(dest.alocacoes[chave])||0;
+      if(qtd<=0) return;
+      var cod=chave.split('||')[0];
+      var p=pecasPorCodigo[cod];
+      var pesoCx=p&&p.PesoCaixaFechadaKg?p.PesoCaixaFechadaKg:null;
+      var cubCx=p&&p.CubagemM3PorCaixa?p.CubagemM3PorCaixa:null;
+      if(pesoCx) pesoTotalGeral+=pesoCx*qtd; else faltaDados=true;
+      caixasTotalGeral+=qtd;
+      if(p&&p.TamanhoCaixaNome){
+        if(!porTamanho[p.TamanhoCaixaNome]) porTamanho[p.TamanhoCaixaNome]={ qtd:0, cubagem:0 };
+        porTamanho[p.TamanhoCaixaNome].qtd+=qtd;
+        if(cubCx) porTamanho[p.TamanhoCaixaNome].cubagem+=cubCx*qtd;
+      } else if(qtd>0) faltaDados=true;
+    });
+  });
+  return { pesoTotalGeral:pesoTotalGeral, caixasTotalGeral:caixasTotalGeral, porTamanho:porTamanho, faltaDados:faltaDados };
+}
+function renderResumoPedido(){
+  var el=document.getElementById('plan-resumo-pedido');
+  if(!el) return;
+  var r=calcularResumoPedido();
+  if(!r.caixasTotalGeral){
+    el.innerHTML='<div class="plan-resumo-vazio">Preencha as quantidades dos destinos pra ver o resumo do pedido aqui.</div>';
+    return;
+  }
+  var tamanhosKeys=Object.keys(r.porTamanho).sort();
+  var html='<div class="kpi-grid" style="grid-template-columns:repeat('+(2+tamanhosKeys.length)+',1fr)">';
+  html+='<div class="kpi v"><div class="kl">Caixas no Pedido</div><div class="kv">'+r.caixasTotalGeral+'</div><div class="ks">unidades</div></div>';
+  html+='<div class="kpi"><div class="kl">Peso Total</div><div class="kv">'+r.pesoTotalGeral.toFixed(1)+'</div><div class="ks">kg</div></div>';
+  tamanhosKeys.forEach(function(nome){
+    var t=r.porTamanho[nome];
+    html+='<div class="kpi r"><div class="kl">Caixas '+esc(nome)+'</div><div class="kv">'+t.qtd+'</div><div class="ks">'+t.cubagem.toFixed(2)+' m³</div></div>';
+  });
+  html+='</div>';
+  if(r.faltaDados) html+='<div class="plan-resumo-aviso">⚠️ Algumas peças alocadas não têm peso unitário ou tamanho de caixa cadastrado — o peso/cubagem delas não entra nesse cálculo. Complete o cadastro em Admin → Peças.</div>';
+  el.innerHTML=html;
 }
 function gerarPDFPlanejamento(){
   if(!S.planAtual.destinos||!S.planAtual.destinos.length){ toast('Nada pra gerar ainda','aviso'); return; }
