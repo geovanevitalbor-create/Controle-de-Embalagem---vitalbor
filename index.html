@@ -2389,16 +2389,46 @@ function carregarEstoqueBasePlanejamento(){
     .withFailureHandler(function(){ toast('Erro ao carregar estoque atual','erro'); })
     .getEstoqueAtual();
 }
+var _planOrdenacao={ coluna:null, dir:1 };
+function planOrdenarPor(col){
+  if(_planOrdenacao.coluna===col){ _planOrdenacao.dir*=-1; } else { _planOrdenacao.coluna=col; _planOrdenacao.dir=1; }
+  renderPainelReferencia();
+  renderDestinosPlanejamento();
+}
+function planSetaOrdenacao(col){ return _planOrdenacao.coluna===col ? (_planOrdenacao.dir===1?' ▲':' ▼') : ''; }
+function planPecasOrdenadas(){
+  var pecas=(S.planPecasTodas||[]).slice();
+  var col=_planOrdenacao.coluna;
+  if(!col){ pecas.sort(function(a,b){ return a.Codigo.localeCompare(b.Codigo); }); return pecas; }
+  pecas.sort(function(a,b){
+    var va,vb;
+    if(col==='peca'){ va=a.Codigo; vb=b.Codigo; }
+    else { va=(S.planEstoqueBase[a.Codigo+'||'+col]||0); vb=(S.planEstoqueBase[b.Codigo+'||'+col]||0); }
+    if(va<vb) return -1*_planOrdenacao.dir;
+    if(va>vb) return 1*_planOrdenacao.dir;
+    return 0;
+  });
+  return pecas;
+}
+function planSelecionarLinha(codigo){
+  S.planLinhaSelecionada=(S.planLinhaSelecionada===codigo)?null:codigo;
+  renderPainelReferencia();
+  renderDestinosPlanejamento();
+}
+function planLinhaAttrs(codigo){
+  var sel=S.planLinhaSelecionada===codigo;
+  return sel?' style="background:#eaf3ff"':'';
+}
 function renderPainelReferencia(){
   var el=document.getElementById('plan-painel-referencia');
   if(!el) return;
   var grupos=S.planGrupos||[];
-  var pecas=S.planPecasTodas||[];
+  var pecas=planPecasOrdenadas();
   var restante=calcularRestantePlanejamento();
   if(!pecas.length){ el.innerHTML='<div class="dash-empty"><div class="dei">📭</div><div>Nenhuma peça com estoque no momento.</div></div>'; return; }
-  var thead='<tr><th style="text-align:left;font-size:12px;padding:10px 12px">PEÇA</th>'+grupos.map(function(g){
+  var thead='<tr><th style="text-align:left;font-size:12px;padding:10px 14px;width:170px;cursor:pointer" onclick="planOrdenarPor(\'peca\')">PEÇA'+planSetaOrdenacao('peca')+'</th>'+grupos.map(function(g){
     var pal=paletaDoMaterial(g.cor,g.nome);
-    return '<th style="background:'+pal.header+';color:#fff;font-size:12px;padding:10px 6px;text-align:center">'+g.nome.toUpperCase()+'</th>';
+    return '<th style="background:'+pal.header+';color:#fff;font-size:12px;padding:10px 8px;text-align:center;width:150px;cursor:pointer" onclick="planOrdenarPor(\''+esc(g.nome)+'\')">'+g.nome.toUpperCase()+planSetaOrdenacao(g.nome)+'</th>';
   }).join('')+'</tr>';
   var linhas=pecas.map(function(p){
     var celulas=grupos.map(function(g){
@@ -2410,17 +2440,17 @@ function renderPainelReferencia(){
       var corRest=rest<0?'#c0392b':pal.texto;
       var html='<div style="font-weight:800;font-size:15px;color:'+(atual===0?'#b7bcc4':pal.texto)+'">'+atual+'</div>';
       if(mudou) html+='<div style="font-size:11px;font-weight:800;color:'+corRest+';margin-top:2px">→ '+rest+'</div>';
-      return '<td style="background:'+(rest<0?'#f8e6e5':pal.bg)+';padding:10px 6px;text-align:center;vertical-align:middle">'+html+'</td>';
+      return '<td style="background:'+(rest<0?'#f8e6e5':pal.bg)+';padding:10px 8px;text-align:center;vertical-align:middle">'+html+'</td>';
     }).join('');
-    return '<tr><td style="text-align:left;font-weight:800;white-space:nowrap;font-size:13px;padding:10px 12px">'+p.Codigo+'</td>'+celulas+'</tr>';
+    return '<tr'+planLinhaAttrs(p.Codigo)+'><td style="text-align:left;font-weight:800;white-space:nowrap;font-size:13px;padding:10px 14px;cursor:pointer" onclick="planSelecionarLinha(\''+esc(p.Codigo)+'\')">'+p.Codigo+'</td>'+celulas+'</tr>';
   }).join('');
-  el.innerHTML='<table class="plan-card-tabela" style="width:100%">'+
+  el.innerHTML='<table class="plan-card-tabela" style="table-layout:fixed;width:100%">'+
     '<thead>'+thead+'</thead><tbody>'+linhas+'</tbody></table>';
 }
 function renderDestinosPlanejamento(){
   var el=document.getElementById('plan-destinos-lista');
   var grupos=S.planGrupos||[];
-  var pecas=S.planPecasTodas||[];
+  var pecas=planPecasOrdenadas();
   el.innerHTML='<div class="plan-destinos-stack">'+S.planAtual.destinos.map(function(dest,idx){
     var linhas=pecas.map(function(p){
       var celulas=grupos.map(function(g){
@@ -2435,11 +2465,11 @@ function renderDestinosPlanejamento(){
           '<div id="plan-cx-'+idx+'-'+esc(chave)+'" style="text-align:center;font-size:10px;font-weight:700;color:'+pal.texto+';opacity:.75;margin-top:-2px">'+(pecasEq?'= '+pecasEq+' pç':'')+'</div>'+
         '</td>';
       }).join('');
-      return '<tr><td style="text-align:left;font-weight:800;white-space:nowrap;font-size:13px;padding:10px 12px">'+p.Codigo+'<div style="font-size:10px;font-weight:600;color:var(--texto2)">'+(p.QtdPadrao?p.QtdPadrao+' pç/cx':'')+'</div></td>'+celulas+'</tr>';
+      return '<tr'+planLinhaAttrs(p.Codigo)+'><td style="text-align:left;font-weight:800;white-space:nowrap;font-size:13px;padding:10px 14px;cursor:pointer" onclick="planSelecionarLinha(\''+esc(p.Codigo)+'\')">'+p.Codigo+'<div style="font-size:10px;font-weight:600;color:var(--texto2)">'+(p.QtdPadrao?p.QtdPadrao+' pç/cx':'')+'</div></td>'+celulas+'</tr>';
     }).join('');
-    var thead='<tr><th style="text-align:left;font-size:12px;width:150px;padding:10px 12px">PEÇA <span style="font-weight:500;opacity:.7">(em caixas)</span></th>'+grupos.map(function(g){
+    var thead='<tr><th style="text-align:left;font-size:12px;width:170px;padding:10px 14px;cursor:pointer" onclick="planOrdenarPor(\'peca\')">PEÇA'+planSetaOrdenacao('peca')+' <span style="font-weight:500;opacity:.7">(em caixas)</span></th>'+grupos.map(function(g){
       var pal=paletaDoMaterial(g.cor,g.nome);
-      return '<th style="background:'+pal.header+';color:#fff;font-size:12px;padding:10px 6px;width:130px">'+g.nome.toUpperCase()+'</th>';
+      return '<th style="background:'+pal.header+';color:#fff;font-size:12px;padding:10px 8px;width:150px;cursor:pointer" onclick="planOrdenarPor(\''+esc(g.nome)+'\')">'+g.nome.toUpperCase()+planSetaOrdenacao(g.nome)+'</th>';
     }).join('')+'</tr>';
     return '<div class="plan-card plan-card-largo">'+
       '<div class="plan-card-hd">'+
@@ -2554,58 +2584,36 @@ function renderResumoPedido(){
 function gerarPDFPlanejamento(){
   if(!S.planAtual.destinos||!S.planAtual.destinos.length){ toast('Nada pra gerar ainda','aviso'); return; }
   var pecasPorCodigo={};
-  S.pecas.forEach(function(p){ pecasPorCodigo[p.Codigo]=p; });
-  var html='<div style="font-family:Arial,sans-serif;padding:10mm;color:#000">';
-  html+='<h1 style="font-size:20px;margin-bottom:2mm">'+(S.planAtual.titulo||'Planejamento de Pedido')+'</h1>';
-  html+='<div style="font-size:11px;color:#555;margin-bottom:6mm">Gerado em '+fmtDI(new Date()).split('-').reverse().join('/')+'</div>';
+  (S.planPecasTodas||S.pecas||[]).forEach(function(p){ pecasPorCodigo[p.Codigo]=p; });
 
-  var pesoTotalGeral=0, caixasTotalGeral=0;
-  var porTamanho={}; // nomeTamanho -> {qtd, cubagem}
+  var resumo=calcularResumoPedido();
+  var tamanhosKeys=Object.keys(resumo.porTamanho).sort();
+
+  var html='<style>@page{size:A4 portrait;margin:14mm}</style>';
+  html+='<div style="font-family:Arial,sans-serif;color:#000">';
+  html+='<h1 style="font-size:19px;margin-bottom:1mm">'+esc(S.planAtual.titulo||'Planejamento de Pedido')+'</h1>';
+  html+='<div style="font-size:10px;color:#555;margin-bottom:5mm">Gerado em '+fmtDI(new Date()).split('-').reverse().join('/')+'</div>';
+
+  html+='<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8mm"><tr>'+
+    '<td style="border:1px solid #ccc;padding:6px;text-align:center"><div style="font-size:10px;color:#666">CAIXAS NO PEDIDO</div><div style="font-size:18px;font-weight:900">'+resumo.caixasTotalGeral+'</div></td>'+
+    '<td style="border:1px solid #ccc;padding:6px;text-align:center"><div style="font-size:10px;color:#666">PESO TOTAL</div><div style="font-size:18px;font-weight:900">'+resumo.pesoTotalGeral.toFixed(1)+' kg</div></td>'+
+    tamanhosKeys.map(function(nome){
+      var t=resumo.porTamanho[nome];
+      return '<td style="border:1px solid #ccc;padding:6px;text-align:center"><div style="font-size:10px;color:#666">CAIXAS '+esc(nome.toUpperCase())+'</div><div style="font-size:18px;font-weight:900">'+t.qtd+'</div><div style="font-size:10px;color:#666">'+t.cubagem.toFixed(2)+' m³</div></td>';
+    }).join('')+
+  '</tr></table>';
 
   S.planAtual.destinos.forEach(function(dest){
     var chaves=Object.keys(dest.alocacoes||{}).filter(function(k){ return Number(dest.alocacoes[k])>0; });
     if(!chaves.length) return;
-    html+='<h2 style="font-size:15px;border-bottom:1.5px solid #000;padding-bottom:2mm;margin-top:8mm">'+esc(dest.nome)+'</h2>';
-    html+='<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:3mm"><thead><tr style="background:#222;color:#fff">'+
-      '<th style="padding:4px;text-align:left">Peça</th><th style="padding:4px">Material</th><th style="padding:4px">Caixas</th><th style="padding:4px">Peças (NF)</th><th style="padding:4px">Peso (kg)</th><th style="padding:4px">Cubagem (m³)</th></tr></thead><tbody>';
-    var pesoDestino=0, caixasDestino=0, cubagemDestino=0;
+    html+='<div style="font-size:14px;font-weight:900;border-bottom:1.5px solid #000;padding-bottom:1.5mm;margin-top:6mm;margin-bottom:2mm;text-transform:uppercase">'+esc(dest.nome)+'</div>';
     chaves.sort().forEach(function(chave){
       var partes=chave.split('||'); var cod=partes[0], grupo=partes[1];
       var qtd=Number(dest.alocacoes[chave]);
-      var p=pecasPorCodigo[cod];
-      var pecasQtd=planPecasEquivalentes(qtd,cod);
-      var pesoCx=p&&p.PesoCaixaFechadaKg?p.PesoCaixaFechadaKg:null;
-      var cubCx=p&&p.CubagemM3PorCaixa?p.CubagemM3PorCaixa:null;
-      var pesoSub=pesoCx?pesoCx*qtd:null;
-      var cubSub=cubCx?cubCx*qtd:null;
-      if(pesoSub) pesoDestino+=pesoSub;
-      if(cubSub) cubagemDestino+=cubSub;
-      caixasDestino+=qtd;
-      if(p&&p.TamanhoCaixaNome){
-        if(!porTamanho[p.TamanhoCaixaNome]) porTamanho[p.TamanhoCaixaNome]={qtd:0,cubagem:0};
-        porTamanho[p.TamanhoCaixaNome].qtd+=qtd;
-        if(cubSub) porTamanho[p.TamanhoCaixaNome].cubagem+=cubSub;
-      }
-      html+='<tr style="border-bottom:1px solid #ccc"><td style="padding:4px">'+cod+' — '+(p?p.Nome:'')+'</td><td style="padding:4px;text-align:center">'+grupo+'</td><td style="padding:4px;text-align:center">'+qtd+'</td><td style="padding:4px;text-align:center">'+pecasQtd+'</td><td style="padding:4px;text-align:center">'+(pesoSub?pesoSub.toFixed(1):'—')+'</td><td style="padding:4px;text-align:center">'+(cubSub?cubSub.toFixed(3):'—')+'</td></tr>';
+      html+='<div style="font-size:13px;padding:1.5mm 0;border-bottom:1px dotted #ccc"><b>'+qtd+' cx</b> &nbsp; '+esc(cod)+' &nbsp; '+esc(grupo)+'</div>';
     });
-    html+='</tbody></table>';
-    html+='<div style="font-size:12px;font-weight:700;text-align:right">Subtotal deste destino: '+caixasDestino+' caixas • '+pesoDestino.toFixed(1)+' kg • '+cubagemDestino.toFixed(3)+' m³</div>';
-    pesoTotalGeral+=pesoDestino; caixasTotalGeral+=caixasDestino;
   });
 
-  html+='<h2 style="font-size:15px;border-bottom:1.5px solid #000;padding-bottom:2mm;margin-top:10mm">Resumo Geral</h2>';
-  html+='<table style="width:60%;border-collapse:collapse;font-size:13px;margin-bottom:4mm">'+
-    '<tr><td style="padding:5px;font-weight:700">Quantidade Total de Caixas</td><td style="padding:5px;text-align:right">'+caixasTotalGeral+'</td></tr>'+
-    '<tr><td style="padding:5px;font-weight:700">Peso Total do Pedido (kg)</td><td style="padding:5px;text-align:right">'+pesoTotalGeral.toFixed(1)+'</td></tr>'+
-    '</table>';
-  var tamanhosKeys=Object.keys(porTamanho);
-  if(tamanhosKeys.length){
-    html+='<table style="width:60%;border-collapse:collapse;font-size:13px"><thead><tr style="background:#222;color:#fff"><th style="padding:4px;text-align:left">Tamanho de Caixa</th><th style="padding:4px">Quantidade</th><th style="padding:4px">Cubagem Total (m³)</th></tr></thead><tbody>';
-    tamanhosKeys.forEach(function(nome){
-      html+='<tr style="border-bottom:1px solid #ccc"><td style="padding:4px">'+nome+'</td><td style="padding:4px;text-align:center">'+porTamanho[nome].qtd+'</td><td style="padding:4px;text-align:center">'+porTamanho[nome].cubagem.toFixed(3)+'</td></tr>';
-    });
-    html+='</tbody></table>';
-  }
   html+='</div>';
 
   var pa=document.getElementById('print-area');
