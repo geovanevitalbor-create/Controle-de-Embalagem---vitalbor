@@ -855,15 +855,12 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-fa
 .mi-btn-rel{background:linear-gradient(155deg,#2c5f8a 0%,#1d4666 100%);color:#fff}
 .mi-btn-rel:hover{background:linear-gradient(155deg,#37749f 0%,#1d4666 100%)}
 .mi-planejamento-wrap{width:100%;max-width:760px;padding:0 20px;margin-top:14px}
-#pag-planejamento .mov-body{overflow:hidden}
-.plan-colunas{display:flex;gap:20px;align-items:stretch;overflow:hidden}
-.plan-col-esquerda{flex:1;min-width:0;overflow-y:auto;padding-right:4px;height:100%}
-.plan-col-direita{flex:0 0 440px;overflow-y:auto;height:100%}
+.plan-colunas{display:flex;gap:20px;align-items:flex-start}
+.plan-col-esquerda{flex:1;min-width:0}
+.plan-col-direita{flex:0 0 440px;position:sticky;top:16px;max-height:calc(100vh - 32px);overflow-y:auto}
 @media (max-width:900px){
-  #pag-planejamento .mov-body{overflow-y:auto}
-  .plan-colunas{flex-direction:column;height:auto!important}
-  .plan-col-esquerda,.plan-col-direita{overflow:visible;height:auto}
-  .plan-col-direita{width:100%;flex:1 1 auto}
+  .plan-colunas{flex-direction:column}
+  .plan-col-direita{width:100%;flex:1 1 auto;position:static;max-height:none}
 }
 #plan-painel-referencia-wrap{background:#fff;border-radius:var(--radius);box-shadow:0 2px 10px rgba(0,0,0,.1);padding:14px}
 .plan-ref-hd{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px}
@@ -2275,15 +2272,7 @@ function entrarComoPlanejamento(){
   mostrarPag('planejamento');
   voltarListaPlanejamentos();
 }
-function ajustarAlturaColunasPlanejamento(){
-  var el=document.getElementById('plan-colunas-wrap');
-  if(!el||el.offsetParent===null) return;
-  if(window.innerWidth<=900){ el.style.height=''; return; }
-  var topo=el.getBoundingClientRect().top;
-  var altura=window.innerHeight-topo-16;
-  el.style.height=Math.max(280,altura)+'px';
-}
-window.addEventListener('resize', ajustarAlturaColunasPlanejamento);
+
 function voltarListaPlanejamentos(){
   document.getElementById('plan-edit-view').style.display='none';
   document.getElementById('plan-lista-view').style.display='block';
@@ -2392,7 +2381,6 @@ function carregarEstoqueBasePlanejamento(){
     renderPainelReferencia();
     renderResumoPedido();
     renderDestinosPlanejamento();
-    setTimeout(ajustarAlturaColunasPlanejamento,0);
   }
   google.script.run.withSuccessHandler(function(d){ pronto.mats=d||[]; tentarMontar(); }).withFailureHandler(function(){ pronto.mats=[]; tentarMontar(); }).getMateriais();
   google.script.run.withSuccessHandler(function(d){ pronto.pecas=d||[]; tentarMontar(); }).withFailureHandler(function(){ pronto.pecas=[]; tentarMontar(); }).getPecas();
@@ -2610,7 +2598,6 @@ function renderResumoPedido(){
   var r=calcularResumoPedido();
   if(!r.caixasTotalGeral){
     el.innerHTML='<div class="plan-resumo-vazio">Preencha as quantidades dos destinos pra ver o resumo do pedido aqui.</div>';
-    setTimeout(ajustarAlturaColunasPlanejamento,0);
     return;
   }
   var tamanhosKeys=Object.keys(r.porTamanho).sort();
@@ -2624,7 +2611,6 @@ function renderResumoPedido(){
   html+='</div>';
   if(r.faltaDados) html+='<div class="plan-resumo-aviso">⚠️ Algumas peças alocadas não têm peso unitário ou tamanho de caixa cadastrado — o peso/cubagem delas não entra nesse cálculo. Complete o cadastro em Admin → Peças.</div>';
   el.innerHTML=html;
-  setTimeout(ajustarAlturaColunasPlanejamento,0);
 }
 function gerarPDFPlanejamento(){
   if(!S.planAtual.destinos||!S.planAtual.destinos.length){ toast('Nada pra gerar ainda','aviso'); return; }
