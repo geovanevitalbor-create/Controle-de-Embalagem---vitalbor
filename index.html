@@ -855,6 +855,11 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-fa
 .mi-btn-rel{background:linear-gradient(155deg,#2c5f8a 0%,#1d4666 100%);color:#fff}
 .mi-btn-rel:hover{background:linear-gradient(155deg,#37749f 0%,#1d4666 100%)}
 .mi-planejamento-wrap{width:100%;max-width:760px;padding:0 20px;margin-top:14px}
+#plan-painel-referencia-wrap{position:sticky;top:0;z-index:20;background:var(--cinza);padding-bottom:10px;margin-bottom:6px;box-shadow:0 6px 10px -6px rgba(0,0,0,.15)}
+.plan-ref-hd{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.plan-ref-titulo{font-size:13px;font-weight:800;color:var(--azul)}
+.plan-ref-toggle{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--texto2);cursor:pointer}
+#plan-painel-referencia{background:#fff;border-radius:var(--radius-sm);box-shadow:0 1px 4px rgba(0,0,0,.08);overflow-x:auto;overflow-y:auto;max-height:38vh}
 .plan-cards-wrap{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:14px}
 .plan-card{background:#fff;border-radius:var(--radius-sm);box-shadow:0 1px 4px rgba(0,0,0,.08);overflow:hidden;flex:0 0 auto}
 .plan-card-hd{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--cinza);border-bottom:1px solid var(--cinza2)}
@@ -1823,12 +1828,17 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
         <div class="fg"><label>Título do Planejamento</label><input type="text" id="plan-titulo" placeholder="Ex: Pedido semana 39" oninput="S.planAtual.titulo=this.value"/></div>
         <div id="plan-setup-destinos"></div>
       </div>
-      <div id="plan-estoque-atual-card"></div>
+      <div id="plan-painel-referencia-wrap">
+        <div class="plan-ref-hd">
+          <div class="plan-ref-titulo">📊 Estoque — atual e restante após esse pedido</div>
+          <label class="plan-ref-toggle"><input type="checkbox" id="plan-toggle-todas" onchange="S.planMostrarTodasPecas=this.checked;renderPainelReferencia();renderDestinosPlanejamento();"/> Mostrar peças sem estoque</label>
+        </div>
+        <div id="plan-painel-referencia"></div>
+      </div>
+
+      <div class="hist-titulo" style="margin-top:18px">🏭 Destinos deste pedido</div>
       <div id="plan-destinos-lista"></div>
       <button type="button" onclick="adicionarDestino()" style="background:none;border:2px dashed var(--cinza3);color:var(--texto2);padding:10px;border-radius:var(--radius-sm);width:100%;cursor:pointer;font-weight:800;font-size:13px;margin-bottom:14px">+ Adicionar outro destino</button>
-
-      <div class="hist-titulo">📊 Estoque Restante (depois de descontar todos os destinos)</div>
-      <div id="plan-restante-tabela"></div>
 
       <div style="display:flex;gap:10px;margin-top:14px">
         <button class="btn-filtrar" style="background:var(--verde)" onclick="salvarPlanejamentoAtual()">💾 Salvar Planejamento</button>
@@ -2279,7 +2289,7 @@ function gerarDestinosIniciais(){
   for(var i=0;i<qtd;i++) S.planAtual.destinos.push({ nome:'', alocacoes:{} });
   document.getElementById('plan-setup-destinos').innerHTML='';
   renderDestinosPlanejamento();
-  renderPainelRestante();
+  renderPainelReferencia();
 }
 function abrirPlanejamento(id){
   document.getElementById('plan-lista-view').style.display='none';
@@ -2319,41 +2329,50 @@ function carregarEstoqueBasePlanejamento(){
       });
       S.planGrupos=grupos;
       S.planEstoqueBase=saldoPecaGrupo;
-      renderCardEstoqueAtual();
+      S.planPecasRelevantes=S.pecas.filter(function(p){
+        return grupos.some(function(g){ return (saldoPecaGrupo[p.Codigo+'||'+g.nome]||0)>0; });
+      });
+      S.planMostrarTodasPecas=false;
+      renderPainelReferencia();
       renderDestinosPlanejamento();
-      renderPainelRestante();
     })
     .withFailureHandler(function(){ toast('Erro ao carregar estoque atual','erro'); })
     .getEstoqueAtual();
 }
-function renderCardEstoqueAtual(){
-  var el=document.getElementById('plan-estoque-atual-card');
+function renderPainelReferencia(){
+  var el=document.getElementById('plan-painel-referencia');
   if(!el) return;
   var grupos=S.planGrupos||[];
-  var base=S.planEstoqueBase||{};
-  var linhas=S.pecas.map(function(p){
+  var pecas=(S.planMostrarTodasPecas?S.pecas:S.planPecasRelevantes)||[];
+  var restante=calcularRestantePlanejamento();
+  if(!pecas.length){ el.innerHTML='<div class="dash-empty"><div class="dei">📭</div><div>Nenhuma peça com estoque no momento.</div></div>'; return; }
+  var thead='<tr><th style="text-align:left;font-size:11px">PEÇA</th>'+grupos.map(function(g){
+    var pal=paletaDoMaterial(g.cor,g.nome);
+    return '<th style="background:'+pal.header+';color:#fff;font-size:11px;padding:6px 4px">'+g.nome.toUpperCase()+'</th>';
+  }).join('')+'</tr>';
+  var linhas=pecas.map(function(p){
     var celulas=grupos.map(function(g){
       var pal=paletaDoMaterial(g.cor,g.nome);
-      var v=base[p.Codigo+'||'+g.nome]||0;
-      var corTexto=v===0?'#8a8f99':pal.texto;
-      return '<td style="background:'+pal.bg+';color:'+corTexto+';font-weight:800;font-size:12px;padding:4px">'+v+'</td>';
+      var chave=p.Codigo+'||'+g.nome;
+      var atual=S.planEstoqueBase[chave]||0;
+      var rest=restante[chave]!=null?restante[chave]:atual;
+      var mudou=rest!==atual;
+      var corRest=rest<0?'#c0392b':pal.texto;
+      var html='<div style="font-weight:800;color:'+(atual===0?'#b7bcc4':pal.texto)+'">'+atual+'</div>';
+      if(mudou) html+='<div style="font-size:10px;font-weight:800;color:'+corRest+'">→ '+rest+'</div>';
+      return '<td style="background:'+(rest<0?'#f8e6e5':pal.bg)+';padding:4px;vertical-align:middle">'+html+'</td>';
     }).join('');
     return '<tr><td style="text-align:left;font-weight:800;white-space:nowrap;font-size:12px;padding:4px 8px">'+p.Codigo+'</td>'+celulas+'</tr>';
   }).join('');
-  var thead='<tr><th style="text-align:left;font-size:11px">PEÇA</th>'+grupos.map(function(g){
-    var pal=paletaDoMaterial(g.cor,g.nome);
-    return '<th style="background:'+pal.header+';color:#fff;font-size:11px;padding:5px 4px">'+g.nome.toUpperCase()+'</th>';
-  }).join('')+'</tr>';
-  el.innerHTML='<div class="plan-cards-wrap"><div class="plan-card">'+
-    '<div class="plan-card-hd" style="justify-content:center"><b>ESTOQUE ATUAL</b></div>'+
-    '<table class="plan-card-tabela"><thead>'+thead+'</thead><tbody>'+linhas+'</tbody></table>'+
-  '</div></div>';
+  el.innerHTML='<table class="plan-card-tabela" style="width:100%">'+
+    '<thead>'+thead+'</thead><tbody>'+linhas+'</tbody></table>';
 }
 function renderDestinosPlanejamento(){
   var el=document.getElementById('plan-destinos-lista');
   var grupos=S.planGrupos||[];
+  var pecas=(S.planMostrarTodasPecas?S.pecas:S.planPecasRelevantes)||[];
   el.innerHTML='<div class="plan-cards-wrap">'+S.planAtual.destinos.map(function(dest,idx){
-    var linhas=S.pecas.map(function(p){
+    var linhas=pecas.map(function(p){
       var celulas=grupos.map(function(g){
         var pal=paletaDoMaterial(g.cor,g.nome);
         var chave=p.Codigo+'||'+g.nome;
@@ -2381,17 +2400,17 @@ function onAlocacaoChange(idx,chave,valor){
   var n=Number(valor)||0;
   if(n<=0){ delete S.planAtual.destinos[idx].alocacoes[chave]; }
   else { S.planAtual.destinos[idx].alocacoes[chave]=n; }
-  renderPainelRestante();
+  renderPainelReferencia();
 }
 function adicionarDestino(){
   S.planAtual.destinos.push({ nome:'', alocacoes:{} });
   renderDestinosPlanejamento();
-  renderPainelRestante();
+  renderPainelReferencia();
 }
 function removerDestino(idx){
   S.planAtual.destinos.splice(idx,1);
   renderDestinosPlanejamento();
-  renderPainelRestante();
+  renderPainelReferencia();
 }
 function calcularRestantePlanejamento(){
   var restante={};
@@ -2403,30 +2422,7 @@ function calcularRestantePlanejamento(){
   });
   return restante;
 }
-function renderPainelRestante(){
-  var el=document.getElementById('plan-restante-tabela');
-  var grupos=S.planGrupos||[];
-  var restante=calcularRestantePlanejamento();
-  var linhas=S.pecas.map(function(p){
-    var celulas=grupos.map(function(g){
-      var pal=paletaDoMaterial(g.cor,g.nome);
-      var chave=p.Codigo+'||'+g.nome;
-      var v=restante[chave]||0;
-      var bg=v<0?'#f8e6e5':pal.bg;
-      var cor=v<0?'#8a221c':pal.texto;
-      return '<td style="background:'+bg+';color:'+cor+';font-weight:800;font-size:12px;padding:4px">'+v+'</td>';
-    }).join('');
-    return '<tr><td style="text-align:left;font-weight:800;white-space:nowrap;font-size:12px;padding:4px 8px">'+p.Codigo+'</td>'+celulas+'</tr>';
-  }).join('');
-  var thead='<tr><th style="text-align:left;font-size:11px">PEÇA</th>'+grupos.map(function(g){
-    var pal=paletaDoMaterial(g.cor,g.nome);
-    return '<th style="background:'+pal.header+';color:#fff;font-size:11px;padding:5px 4px">'+g.nome.toUpperCase()+'</th>';
-  }).join('')+'</tr>';
-  el.innerHTML='<div class="plan-cards-wrap"><div class="plan-card">'+
-    '<div class="plan-card-hd" style="justify-content:center"><b>ESTOQUE RESTANTE</b></div>'+
-    '<table class="plan-card-tabela"><thead>'+thead+'</thead><tbody>'+linhas+'</tbody></table>'+
-  '</div></div>';
-}
+
 function salvarPlanejamentoAtual(){
   if(!S.planAtual.destinos||!S.planAtual.destinos.length){ toast('Gere pelo menos um destino antes de salvar','aviso'); return; }
   var destinosVazios=S.planAtual.destinos.filter(function(d){ return !d.nome.trim(); });
