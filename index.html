@@ -813,7 +813,7 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-fa
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* ── MODAL INICIAL — OPERADOR OU ADMIN ── */
-#modal-inicio{position:fixed;inset:0;background:radial-gradient(circle at 30% 20%,#1f2138 0%,var(--azul) 55%,#0d0e1a 100%);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;z-index:500;gap:0;padding:24px 0;overflow-y:auto}
+#modal-inicio{position:fixed;inset:0;background:radial-gradient(circle at 30% 20%,#1f2138 0%,var(--azul) 55%,#0d0e1a 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:500;gap:0;padding:24px 0;overflow-y:auto}
 .mi-logo{color:#fff;font-size:42px;font-weight:900;letter-spacing:6px;margin-bottom:6px}
 .mi-sub{color:rgba(255,255,255,.4);font-size:12px;letter-spacing:4px;text-transform:uppercase;margin-bottom:26px;font-weight:700}
 .mi-titulo{color:rgba(255,255,255,.75);font-size:15px;font-weight:700;margin-bottom:24px;text-align:center;letter-spacing:.5px}
@@ -2427,17 +2427,17 @@ function renderDestinosPlanejamento(){
         var pal=paletaDoMaterial(g.cor,g.nome);
         var chave=p.Codigo+'||'+g.nome;
         var val=dest.alocacoes[chave]||'';
-        var caixasNec=val?planCaixasNecessarias(Number(val),p.Codigo):0;
+        var pecasEq=val?planPecasEquivalentes(Number(val),p.Codigo):0;
         return '<td style="background:'+pal.bg+';padding:6px">'+
           '<input type="number" min="0" value="'+val+'" id="plan-in-'+idx+'-'+esc(chave)+'" style="width:100%;text-align:center;padding:9px 4px;border:none;background:transparent;color:'+pal.texto+';font-weight:800;font-size:15px;border-radius:4px" '+
           'onfocus="this.style.background=\'rgba(255,255,255,.6)\'" onblur="this.style.background=\'transparent\'" '+
           'onchange="onAlocacaoChange('+idx+',\''+esc(chave)+'\',this.value)"/>'+
-          '<div id="plan-cx-'+idx+'-'+esc(chave)+'" style="text-align:center;font-size:10px;font-weight:700;color:'+pal.texto+';opacity:.75;margin-top:-2px">'+(caixasNec?'= '+caixasNec+' cx':'')+'</div>'+
+          '<div id="plan-cx-'+idx+'-'+esc(chave)+'" style="text-align:center;font-size:10px;font-weight:700;color:'+pal.texto+';opacity:.75;margin-top:-2px">'+(pecasEq?'= '+pecasEq+' pç':'')+'</div>'+
         '</td>';
       }).join('');
       return '<tr><td style="text-align:left;font-weight:800;white-space:nowrap;font-size:13px;padding:10px 12px">'+p.Codigo+'<div style="font-size:10px;font-weight:600;color:var(--texto2)">'+(p.QtdPadrao?p.QtdPadrao+' pç/cx':'')+'</div></td>'+celulas+'</tr>';
     }).join('');
-    var thead='<tr><th style="text-align:left;font-size:12px;width:150px;padding:10px 12px">PEÇA <span style="font-weight:500;opacity:.7">(em peças)</span></th>'+grupos.map(function(g){
+    var thead='<tr><th style="text-align:left;font-size:12px;width:150px;padding:10px 12px">PEÇA <span style="font-weight:500;opacity:.7">(em caixas)</span></th>'+grupos.map(function(g){
       var pal=paletaDoMaterial(g.cor,g.nome);
       return '<th style="background:'+pal.header+';color:#fff;font-size:12px;padding:10px 6px;width:130px">'+g.nome.toUpperCase()+'</th>';
     }).join('')+'</tr>';
@@ -2456,9 +2456,9 @@ function onAlocacaoChange(idx,chave,valor){
   if(n<=0){ delete S.planAtual.destinos[idx].alocacoes[chave]; }
   else { S.planAtual.destinos[idx].alocacoes[chave]=n; }
   var cod=chave.split('||')[0];
-  var caixasNec=n?planCaixasNecessarias(n,cod):0;
+  var pecasEq=n?planPecasEquivalentes(n,cod):0;
   var legenda=document.getElementById('plan-cx-'+idx+'-'+chave);
-  if(legenda) legenda.textContent=caixasNec?'= '+caixasNec+' cx':'';
+  if(legenda) legenda.textContent=pecasEq?'= '+pecasEq+' pç':'';
   renderPainelReferencia();
   renderResumoPedido();
 }
@@ -2478,20 +2478,17 @@ function planQtdPadraoPorCodigo(codigo){
   var p=(S.planPecasTodas||[]).find(function(x){ return x.Codigo===codigo; });
   return p&&p.QtdPadrao?Number(p.QtdPadrao):0;
 }
-function planCaixasNecessarias(pecasQtd, codigo){
+function planPecasEquivalentes(caixasQtd, codigo){
   var qtdPadrao=planQtdPadraoPorCodigo(codigo);
-  if(!qtdPadrao||qtdPadrao<=0||!pecasQtd) return 0;
-  return Math.ceil(pecasQtd/qtdPadrao);
+  if(!qtdPadrao||!caixasQtd) return 0;
+  return caixasQtd*qtdPadrao;
 }
 function calcularRestantePlanejamento(){
   var restante={};
   Object.keys(S.planEstoqueBase||{}).forEach(function(chave){ restante[chave]=S.planEstoqueBase[chave]; });
   (S.planAtual.destinos||[]).forEach(function(dest){
     Object.keys(dest.alocacoes||{}).forEach(function(chave){
-      var cod=chave.split('||')[0];
-      var pecasQtd=Number(dest.alocacoes[chave]||0);
-      var caixas=planCaixasNecessarias(pecasQtd,cod);
-      restante[chave]=(restante[chave]||0)-caixas;
+      restante[chave]=(restante[chave]||0)-Number(dest.alocacoes[chave]||0);
     });
   });
   return restante;
@@ -2517,11 +2514,9 @@ function calcularResumoPedido(){
   var porTamanho={};
   (S.planAtual.destinos||[]).forEach(function(dest){
     Object.keys(dest.alocacoes||{}).forEach(function(chave){
-      var pecasQtd=Number(dest.alocacoes[chave])||0;
-      if(pecasQtd<=0) return;
+      var qtd=Number(dest.alocacoes[chave])||0;
+      if(qtd<=0) return;
       var cod=chave.split('||')[0];
-      var qtd=planCaixasNecessarias(pecasQtd,cod); // caixas de verdade, não peças
-      if(!qtd) return;
       var p=pecasPorCodigo[cod];
       var pesoCx=p&&p.PesoCaixaFechadaKg?p.PesoCaixaFechadaKg:null;
       var cubCx=p&&p.CubagemM3PorCaixa?p.CubagemM3PorCaixa:null;
@@ -2572,13 +2567,13 @@ function gerarPDFPlanejamento(){
     if(!chaves.length) return;
     html+='<h2 style="font-size:15px;border-bottom:1.5px solid #000;padding-bottom:2mm;margin-top:8mm">'+esc(dest.nome)+'</h2>';
     html+='<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:3mm"><thead><tr style="background:#222;color:#fff">'+
-      '<th style="padding:4px;text-align:left">Peça</th><th style="padding:4px">Material</th><th style="padding:4px">Peças (NF)</th><th style="padding:4px">Caixas</th><th style="padding:4px">Peso (kg)</th><th style="padding:4px">Cubagem (m³)</th></tr></thead><tbody>';
+      '<th style="padding:4px;text-align:left">Peça</th><th style="padding:4px">Material</th><th style="padding:4px">Caixas</th><th style="padding:4px">Peças (NF)</th><th style="padding:4px">Peso (kg)</th><th style="padding:4px">Cubagem (m³)</th></tr></thead><tbody>';
     var pesoDestino=0, caixasDestino=0, cubagemDestino=0;
     chaves.sort().forEach(function(chave){
       var partes=chave.split('||'); var cod=partes[0], grupo=partes[1];
-      var pecasQtd=Number(dest.alocacoes[chave]);
+      var qtd=Number(dest.alocacoes[chave]);
       var p=pecasPorCodigo[cod];
-      var qtd=planCaixasNecessarias(pecasQtd,cod);
+      var pecasQtd=planPecasEquivalentes(qtd,cod);
       var pesoCx=p&&p.PesoCaixaFechadaKg?p.PesoCaixaFechadaKg:null;
       var cubCx=p&&p.CubagemM3PorCaixa?p.CubagemM3PorCaixa:null;
       var pesoSub=pesoCx?pesoCx*qtd:null;
@@ -2591,7 +2586,7 @@ function gerarPDFPlanejamento(){
         porTamanho[p.TamanhoCaixaNome].qtd+=qtd;
         if(cubSub) porTamanho[p.TamanhoCaixaNome].cubagem+=cubSub;
       }
-      html+='<tr style="border-bottom:1px solid #ccc"><td style="padding:4px">'+cod+' — '+(p?p.Nome:'')+'</td><td style="padding:4px;text-align:center">'+grupo+'</td><td style="padding:4px;text-align:center">'+pecasQtd+'</td><td style="padding:4px;text-align:center">'+qtd+'</td><td style="padding:4px;text-align:center">'+(pesoSub?pesoSub.toFixed(1):'—')+'</td><td style="padding:4px;text-align:center">'+(cubSub?cubSub.toFixed(3):'—')+'</td></tr>';
+      html+='<tr style="border-bottom:1px solid #ccc"><td style="padding:4px">'+cod+' — '+(p?p.Nome:'')+'</td><td style="padding:4px;text-align:center">'+grupo+'</td><td style="padding:4px;text-align:center">'+qtd+'</td><td style="padding:4px;text-align:center">'+pecasQtd+'</td><td style="padding:4px;text-align:center">'+(pesoSub?pesoSub.toFixed(1):'—')+'</td><td style="padding:4px;text-align:center">'+(cubSub?cubSub.toFixed(3):'—')+'</td></tr>';
     });
     html+='</tbody></table>';
     html+='<div style="font-size:12px;font-weight:700;text-align:right">Subtotal deste destino: '+caixasDestino+' caixas • '+pesoDestino.toFixed(1)+' kg • '+cubagemDestino.toFixed(3)+' m³</div>';
