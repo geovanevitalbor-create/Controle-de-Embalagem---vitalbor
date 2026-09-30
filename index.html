@@ -1718,7 +1718,11 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
         <div class="df-titulo">🔍 Filtrar movimentações</div>
         <div class="df-row">
           <div class="df-campo"><label>Peça</label><select id="estmov-f-peca"><option value="">Todas</option></select></div>
+          <div class="df-campo"><label>Matéria-Prima</label><select id="estmov-f-mat"><option value="">Todas</option></select></div>
+        </div>
+        <div class="df-row">
           <div class="df-campo"><label>Operador</label><select id="estmov-f-op"><option value="">Todos</option></select></div>
+          <div></div>
         </div>
         <div class="df-row">
           <div class="df-campo"><label>Data início</label><input type="date" id="estmov-f-ini"/></div>
@@ -1737,6 +1741,7 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
           <button class="btn-filtrar" style="flex:2" onclick="estMovFiltrar()">🔍 Aplicar Filtro</button>
         </div>
       </div>
+      <div id="estmov-resumo"></div>
       <div class="mov-tabela-wrap" style="margin-top:12px">
         <table class="mov-tabela" id="estmov-tabela"><thead><tr><th>Data/Hora</th></tr></thead><tbody><tr><td style="text-align:center;color:var(--texto2);padding:20px">Escolha um filtro e clique em Aplicar</td></tr></tbody></table>
       </div>
@@ -1941,7 +1946,7 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#c0392b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
       <div class="mb-t" style="margin:0;padding:0;border:none;color:#c0392b">Autorização necessária</div>
     </div>
-    <p style="font-size:13px;color:var(--texto);margin-bottom:12px;font-weight:700" id="col-nbr-msg">Peça da linha COL com material diferente de NBR — precisa de senha de admin.</p>
+    <p style="font-size:13px;color:var(--texto);margin-bottom:12px;font-weight:700" id="col-nbr-msg">Peça da linha COL com material diferente de NBR-50 — precisa de senha de admin.</p>
     <div class="fg"><label>Senha Admin</label><input type="password" id="inp-col-nbr-s" placeholder="••••••••" onkeydown="if(event.key==='Enter')autorizarColNBR()"/></div>
     <div style="color:#c0392b;font-size:12px;margin-bottom:6px;display:none;font-weight:700" id="col-nbr-err">Senha incorreta</div>
     <div class="mb-acts"><button class="mb-cancel" onclick="fecharModalColNBR()">Cancelar</button><button class="mb-auth" style="background:#c0392b" onclick="autorizarColNBR()">Autorizar</button></div>
@@ -2717,10 +2722,9 @@ function gerarEImprimirNF(){
   var partesPeca=pecaVal.split('|');
   var codigo=partesPeca[0], nomePeca=partesPeca[1];
 
-  // Linha COL só sai direto em material NBR — qualquer outro material exige senha de admin.
+  // Linha COL só sai direto em NBR-50 — qualquer outro material (inclusive outras variantes de NBR) exige senha de admin.
   var ehLinhaCol=semAcentoConsulta(codigo).indexOf('col')===0;
-  var ehNBR=semAcentoConsulta(material).indexOf('nbr')===0;
-  if(ehLinhaCol && !ehNBR){
+  if(ehLinhaCol && !ehNBR50(material)){
     abrirModalColNBR(material, function(){ executarImpressaoNF(cliente,destino,codigo,nomePeca,material,numero); });
     return;
   }
@@ -2869,10 +2873,16 @@ function estMovPopularFiltros(){
     so.innerHTML='<option value="">Todos</option>'+S.op.map(function(o){ return '<option value="'+esc(o.Nome)+'">'+(o.Matricula?o.Matricula+' — ':'')+o.Nome+'</option>'; }).join('');
     so.dataset.pop='1';
   }
+  var sm=document.getElementById('estmov-f-mat');
+  if(sm && !sm.dataset.pop){
+    sm.innerHTML='<option value="">Todas</option>'+S.mats.map(function(m){ return '<option value="'+esc(m.Nome)+'">'+m.Nome+'</option>'; }).join('');
+    sm.dataset.pop='1';
+  }
 }
 
 function estMovLimparFiltro(){
   document.getElementById('estmov-f-peca').value='';
+  document.getElementById('estmov-f-mat').value='';
   document.getElementById('estmov-f-op').value='';
   document.getElementById('estmov-f-ini').value='';
   document.getElementById('estmov-f-fim').value='';
@@ -2880,9 +2890,11 @@ function estMovLimparFiltro(){
   document.getElementById('estmov-f-origem').value='';
   document.getElementById('estmov-f-nf').value='';
   document.getElementById('estmov-tabela').innerHTML='<thead><tr><th>Data/Hora</th></tr></thead><tbody><tr><td style="text-align:center;color:var(--texto2);padding:20px">Escolha um filtro e clique em Aplicar</td></tr></tbody>';
+  document.getElementById('estmov-resumo').innerHTML='';
 }
 function estMovFiltrar(){
   var peca=document.getElementById('estmov-f-peca').value;
+  var material=document.getElementById('estmov-f-mat').value;
   var operador=document.getElementById('estmov-f-op').value;
   var ini=document.getElementById('estmov-f-ini').value;
   var fim=document.getElementById('estmov-f-fim').value;
@@ -2891,6 +2903,7 @@ function estMovFiltrar(){
   var nf=document.getElementById('estmov-f-nf').value.trim();
   var filtros={ limite:2000 };
   if(peca) filtros.peca=peca;
+  if(material) filtros.material=material;
   if(operador) filtros.operador=operador;
   if(ini) filtros.dataInicioISO=ini+'T03:00:00.000Z'; // 00:00 America/Sao_Paulo (UTC-3, sem horário de verão)
   if(fim){
@@ -2902,9 +2915,11 @@ function estMovFiltrar(){
   if(nf) filtros.notaFiscal=nf;
   var tabela=document.getElementById('estmov-tabela');
   tabela.innerHTML='<thead><tr><th>Data/Hora</th></tr></thead><tbody><tr><td>Carregando...</td></tr></tbody>';
+  document.getElementById('estmov-resumo').innerHTML='';
   google.script.run
     .withSuccessHandler(function(regs){
       regs=regs||[];
+      renderResumoMovimentacoesEstoque(regs);
       if(!regs.length){ tabela.innerHTML='<thead><tr><th>Data/Hora</th></tr></thead><tbody><tr><td style="text-align:center;color:var(--texto2);padding:20px">Nenhuma movimentação encontrada com esse filtro.</td></tr></tbody>'; return; }
       google.script.run
         .withSuccessHandler(function(statusMap){
@@ -2931,6 +2946,37 @@ function estMovFiltrar(){
     })
     .withFailureHandler(function(){ tabela.innerHTML='<thead><tr><th>Data/Hora</th></tr></thead><tbody><tr><td>Erro ao carregar.</td></tr></tbody>'; })
     .getMovimentacoes(filtros);
+}
+function renderResumoMovimentacoesEstoque(regs){
+  var el=document.getElementById('estmov-resumo');
+  if(!el) return;
+  if(!regs||!regs.length){ el.innerHTML=''; return; }
+  var pecasPorCodigo={};
+  S.pecas.forEach(function(p){ pecasPorCodigo[p.Codigo]=p; });
+  var pesoTotal=0, caixasTotal=0, porTamanho={}, faltaDados=false;
+  regs.forEach(function(r){
+    var qtd=Number(r.QtdCaixas)||0;
+    if(!qtd) return;
+    caixasTotal+=qtd;
+    var p=pecasPorCodigo[r.CodigoPeca];
+    if(p&&p.PesoCaixaFechadaKg) pesoTotal+=p.PesoCaixaFechadaKg*qtd; else faltaDados=true;
+    if(p&&p.TamanhoCaixaNome){
+      if(!porTamanho[p.TamanhoCaixaNome]) porTamanho[p.TamanhoCaixaNome]={ qtd:0, cubagem:0 };
+      porTamanho[p.TamanhoCaixaNome].qtd+=qtd;
+      if(p.CubagemM3PorCaixa) porTamanho[p.TamanhoCaixaNome].cubagem+=p.CubagemM3PorCaixa*qtd;
+    } else faltaDados=true;
+  });
+  var tamanhosKeys=Object.keys(porTamanho).sort();
+  var html='<div class="kpi-grid" style="grid-template-columns:repeat('+(2+tamanhosKeys.length)+',1fr);margin-top:12px">';
+  html+='<div class="kpi v"><div class="kl">Total de Caixas</div><div class="kv">'+caixasTotal+'</div><div class="ks">unidades</div></div>';
+  html+='<div class="kpi"><div class="kl">Peso Total</div><div class="kv">'+pesoTotal.toFixed(1)+'</div><div class="ks">kg</div></div>';
+  tamanhosKeys.forEach(function(nome){
+    var t=porTamanho[nome];
+    html+='<div class="kpi r"><div class="kl">Caixas '+esc(nome)+'</div><div class="kv">'+t.qtd+'</div><div class="ks">'+t.cubagem.toFixed(2)+' m³</div></div>';
+  });
+  html+='</div>';
+  if(faltaDados) html+='<div class="plan-resumo-aviso" style="margin-top:8px">⚠️ Algumas movimentações são de peças sem peso unitário ou tamanho de caixa cadastrado — não entram no peso/cubagem acima.</div>';
+  el.innerHTML=html;
 }
 function movStatusCaixaHtml(caixaId,statusMap){
   if(!caixaId) return '—';
@@ -4201,8 +4247,7 @@ function chkAdj(){ var q=Number(document.getElementById('inp-qtd').value)||0; do
 
 function confirmarProd(){
   var ehLinhaCol=semAcentoConsulta(S.sel.codPeca||'').indexOf('col')===0;
-  var ehNBR=semAcentoConsulta(S.sel.mat||'').indexOf('nbr')===0;
-  if(ehLinhaCol && !ehNBR && !S.adm){
+  if(ehLinhaCol && !ehNBR50(S.sel.mat) && !S.adm){
     abrirModalColNBR(S.sel.mat, confirmarProdContinuar);
     return;
   }
@@ -4223,8 +4268,11 @@ function confirmarProdContinuar(){
 }
 function fecharAdj(){ document.getElementById('mo-adj').classList.remove('aberto'); }
 var _colNbrCallback=null;
+function ehNBR50(material){
+  return semAcentoConsulta(material||'').replace(/\s+/g,'')==='nbr-50';
+}
 function abrirModalColNBR(material,callback){
-  document.getElementById('col-nbr-msg').textContent='Peça da linha COL com material diferente de NBR ('+material+') — precisa de senha de admin.';
+  document.getElementById('col-nbr-msg').textContent='Peça da linha COL com material diferente de NBR-50 ('+material+') — precisa de senha de admin.';
   document.getElementById('inp-col-nbr-s').value='';
   document.getElementById('col-nbr-err').style.display='none';
   _colNbrCallback=callback;
