@@ -4210,7 +4210,15 @@ function renderGridMat(){
   },'Nenhum material cadastrado.');
 }
 function pgMat(d){ S.pgMat=Math.max(0,S.pgMat+d); renderGridMat(); }
-function selMat(n){ S.sel.mat=n; updSidebar(); if(S.hasMaq){ renderGridMaq(); goStep(4); } else { S.sel.maq=''; goStep(5); } }
+function selMat(n){
+  var ehLinhaCol=semAcentoConsulta(S.sel.codPeca||'').indexOf('col')===0;
+  if(ehLinhaCol && !ehNBR50(n) && !S.adm){
+    abrirModalColNBR(n, function(){ selMatContinuar(n); });
+    return;
+  }
+  selMatContinuar(n);
+}
+function selMatContinuar(n){ S.sel.mat=n; updSidebar(); if(S.hasMaq){ renderGridMaq(); goStep(4); } else { S.sel.maq=''; goStep(5); } }
 
 function renderGridMaq(){
   var g=document.getElementById('g-maq'); if(!g) return;
