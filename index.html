@@ -34,6 +34,20 @@ async function sbGet(path) {
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
+// Busca TODAS as linhas paginando de 1000 em 1000. O Supabase corta qualquer GET em 1000 linhas
+// (max-rows), ignorando limit=100000 — sem isso, estoque e balanço passam a calcular só com as
+// 1000 movimentações mais antigas assim que a tabela passa desse tamanho.
+async function sbGetAll(path) {
+  var PAG = 1000, offset = 0, todas = [];
+  var sep = path.indexOf('?') >= 0 ? '&' : '?';
+  while (true) {
+    var lote = await sbGet(path + sep + 'limit=' + PAG + '&offset=' + offset);
+    todas = todas.concat(lote);
+    if (lote.length < PAG) break;
+    offset += PAG;
+  }
+  return todas;
+}
 async function sbPost(table, body, prefer) {
   var r = await fetch(SUPABASE_URL + '/rest/v1/' + table, {
     method: 'POST',
@@ -60,6 +74,31 @@ async function sbDelete(table, filtro) {
   if (!r.ok) throw new Error(await r.text());
 }
 
+// ── Nº curto da caixa: sequencial global + 1 dígito verificador (algoritmo de Damm) ──
+// O dígito pega 100% dos erros de 1 dígito e das inversões de 2 dígitos vizinhos (4821 x 4812),
+// que é o erro mais comum ao digitar — sem ele, um erro de digitação cairia em OUTRA caixa real.
+var _DAMM = [[0,3,1,7,5,9,8,6,4,2],[7,0,9,2,1,5,4,8,6,3],[4,2,0,6,8,7,1,3,5,9],[1,7,5,0,9,8,3,4,2,6],[6,1,2,3,0,4,5,9,7,8],
+             [3,6,7,4,2,0,9,5,8,1],[5,8,6,9,7,2,0,1,3,4],[8,9,4,5,3,6,2,0,1,7],[9,4,3,8,6,1,7,2,0,5],[2,5,8,1,4,3,6,7,9,0]];
+function dammDigito(num) { var i = 0; String(num).split('').forEach(function (c) { i = _DAMM[i][Number(c)]; }); return i; }
+function formatarNumCaixa(seq) { return String(seq) + '-' + dammDigito(seq); }
+// Devolve { ok, seq } para nº curto, { ok, id } para código longo, ou { ok:false, erro }
+function interpretarCodigoDigitado(texto) {
+  var t = String(texto || '').trim();
+  try { var j = JSON.parse(t); if (j && j.id) return { ok: true, id: String(j.id) }; } catch (e) {}
+  t = t.toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1').replace(/[^A-Z0-9]/g, '');
+  if (!t) return { ok: false, erro: 'Digite o nº da etiqueta.' };
+  if (/^\d+$/.test(t) && t.length < 12) {
+    if (t.length < 2) return { ok: false, erro: 'Digite o nº completo, com o dígito depois do traço (ex. 4821-7).' };
+    var seq = t.slice(0, -1), dv = Number(t.slice(-1));
+    if (dammDigito(seq) !== dv) return { ok: false, erro: 'Nº ' + seq + '-' + dv + ' não confere. Confira o número na etiqueta (inclusive o dígito depois do traço).' };
+    return { ok: true, seq: Number(seq) };
+  }
+  if (t.length === 12) return { ok: true, id: t };
+  return { ok: false, erro: 'Código não reconhecido. Digite o nº da etiqueta (ex. 4821-7).' };
+}
+// Logo Vitalbor em preto puro (sem degradê) — impressora térmica não imprime cor e degradê vira chuvisco
+var LOGO_VITALBOR_PB = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAioAAAA+CAQAAACv4ficAAAEl0lEQVR42u1d25JbIQyrGP7/l9WXzna23SScc2zwRe5jN4BtSRhCAL9kMlkU48e/QHwnsODG3vFESyZcWobBKBgiC3TNJl1xwkC45Fam0LOHaKJyJrV069VKJvaKyrrPPAZ9bKexHxK5eRT09XumkhU6iUsuac1UrFf3/Ky0cXttzxV5mSkpxSSrS79FVZ5Mobh/J+qFs8LykYMjMcRpKIZdSC6LgkOaEzyM7yM5qZiyDxQhk+xuLFgoF3wlKpIVkU5R2OUni8WZr0Slu6xoASSx2BMRLiPy779UsjL/cYNJ04lE7Uu+4hvcyHrvhAiWPmuBUwPPUWgG8vx6D1vasv22yPOUB7dkhuGy/fxcDl0/vxaXezhb7nkUmkdzyKHqlCoVjD1GYTACz3PWi96PUrBnwpYrxRkNogc3FGHDCLZ4P55pUjFZQZBx5KUbmvgZeQQ8zb3xttjJCBHVFMpKTD8tf2EWmpljYR117YutqrOQzTkESCBUq7i3ePinptPRdaZPtex69F8dS2Dz/NA83mHFfYrkF2ABRUR1ipjydPkjk6lKzBeHo9IvUbGHheZyxWUH4sIKuURlHy26LH4gHLQUVEhUZFr8yFwEVaJiTREWJh4fRpDFaYWEudLyRyaTpBzsccl7icq1ZPF20FXZVYhP783mRe9nonChCfEqEKre+wRskOH7/uNnUcnnlrYHJZcx6pFz1xHYe44bI8erSiVr6uFEFS6GfSUFaEm0Hsf1650bf+z//PafTBoE1SwyCUoY/0eJIFHPaByav6yvucxEqM4IeXtrwShDJR7vqfLiR7L800TGpnn9kNlad9RSpEghG3XI2FFaPno8RKaAC4S+VaCmswIezxdEYGL4Y0MvEt61SoZJx31dVvthgmsbtTXmV82rqsE89hFw+8Jp9ELGfBuIvPUKjKBEEU+13jIr8lcrsJikx+UuVK30qoaeyWVFUYXR9ehZUHj51cK50KDeV5bZA1r5ySSjl6qzsdRkzgc6aBLOc5+W5VomxKphca61adgw0yTeuhKquxjSprfscs05N5PYF6RwaZOBRlMajE0XEOU8mNuHptlcnkkmLMQ1bHZ085vkU6JVzytsbZMSFatgah6XSVxVqciCQZ1tooPSkfs2minuPFw/s+HiB6kJEHHpYbtpjQM8UKWisnUrZLW/9DkKrIO8uXWw9cBVt06x/TXTvTt/NZ3c6R2uDF7I47xX4ARIxV4oQtuyMmcUrcpreCTOtPTRgx1VZuJstcqTOuG5rMR9f+hr9HVufvO+2E+i9SwKVeLHgyhmAElZ6KHazW+5idd1x+BOrcLNOaFRP1i6Re7/lpgHebPYHoJeAZJcPpct768reHwMrlEeJQEkSmWqU/qJrs8hekTxchSdlzSbq86J7B+KxpafREWyItuFBraLDpJk5oaNXMM9DFNkS28weletVe4tPWzuUzxxJ+OHW2tHYSCoWlG2ogqKDb+CXvI6F93W5dc9ZuJ+b9eczzVuiCqOe//mNM284ETiL7m2BLMjIXzjZxdthI/burSgIrwoCslkspOEYwMfZTLZH/sNass8zmeOUQEAAAAASUVORK5CYII=';
+function logoEtiquetaHTML() { return '<img src="' + LOGO_VITALBOR_PB + '" alt="VITALBOR" style="height:2.6mm;width:auto;display:block"/>'; }
 function gerarID() { return crypto.randomUUID().replace(/-/g, '').substring(0, 12).toUpperCase(); }
 
 function fmtDataHoraBR(iso) {
@@ -444,13 +483,13 @@ var backend = {
       var ids = [];
       for (var i = 0; i < caixas; i++) {
         var id = gerarID(); var numCx = baseNum + i;
-        await sbPost('producao', {
+        var criada = await sbPost('producao', {
           id: id, matricula: dados.Matricula || '', operador: dados.Operador, peca: dados.Peca, codigo_peca: dados.CodigoPeca,
           material: dados.Material, maquina: dados.Maquina || '', lote: dados.Lote, trimestre: dados.Trimestre, ano: dados.Ano,
           numero_caixa: numCx, qtd_pecas: qtdPecas, qtd_padrao: qtdPadrao,
           ajuste_manual: temAjuste ? 'SIM' : 'NAO', ajustado_por: temAjuste ? (dados.Matricula || dados.Operador) : ''
-        }, 'return=minimal');
-        ids.push({ id: id, numCaixa: numCx });
+        });
+        ids.push({ id: id, numCaixa: numCx, seq: (criada && criada[0] && criada[0].seq) || null });
       }
       if (temAjuste) await inserirLog('AJUSTE', dados.Matricula || dados.Operador, 'Ajuste: ' + dados.Peca, 'Padrão:' + qtdPadrao + '→' + qtdPecas);
       await inserirLog('PRODUCAO', dados.Matricula || dados.Operador, caixas + 'x ' + dados.Peca, 'Lote:' + dados.Lote);
@@ -465,7 +504,7 @@ var backend = {
         return {
           ID: r.id, DataHora: fmtDataHoraBR(r.data_hora), Matricula: r.matricula || '', Operador: r.operador,
           Peca: r.peca, CodigoPeca: r.codigo_peca, Material: r.material, Maquina: r.maquina || '', Lote: r.lote,
-          Trimestre: r.trimestre, Ano: r.ano, NumeroCaixa: r.numero_caixa, QtdPecas: r.qtd_pecas, QtdPadrao: r.qtd_padrao,
+          Trimestre: r.trimestre, Ano: r.ano, NumeroCaixa: r.numero_caixa, QtdPecas: r.qtd_pecas, QtdPadrao: r.qtd_padrao, Seq: r.seq || null,
           AjusteManual: r.ajuste_manual, AjustadoPor: r.ajustado_por || ''
         };
       });
@@ -561,7 +600,7 @@ var backend = {
 
   async getEstoqueAtual() {
     try {
-      var rows = await sbGet('movimentacoes?select=peca,codigo_peca,material,tipo,qtd_caixas&order=data_hora.asc&limit=100000');
+      var rows = await sbGetAll('movimentacoes?select=peca,codigo_peca,material,tipo,qtd_caixas&order=data_hora.asc,id.asc');
       var mapa = {};
       rows.forEach(function (r) {
         var peca = r.peca, mat = r.material;
@@ -624,7 +663,7 @@ var backend = {
 
   async getStatusTodasCaixas() {
     try {
-      var rows = await sbGet('movimentacoes?select=caixa_id,tipo,data_hora&caixa_id=not.is.null&order=data_hora.asc&limit=100000');
+      var rows = await sbGetAll('movimentacoes?select=caixa_id,tipo,data_hora&caixa_id=not.is.null&order=data_hora.asc,id.asc');
       var mapa = {};
       rows.forEach(function (r) { if (r.caixa_id) mapa[r.caixa_id] = r.tipo; }); // sobrescreve — o último (mais recente) vence
       return mapa;
@@ -675,14 +714,18 @@ var backend = {
   },
   async getCaixasEmEstoque(codigoPeca) {
     try {
-      var movs = await sbGet('movimentacoes?select=caixa_id,tipo,data_hora&caixa_id=not.is.null&order=data_hora.asc&limit=100000');
+      var movs = await sbGetAll('movimentacoes?select=caixa_id,tipo,data_hora&caixa_id=not.is.null&order=data_hora.asc,id.asc');
       var ultimoTipo = {};
       movs.forEach(function (m) { if (m.caixa_id) ultimoTipo[m.caixa_id] = m.tipo; });
       var idsEmEstoque = Object.keys(ultimoTipo).filter(function (id) { return ultimoTipo[id] === 'ENTRADA'; });
       if (!idsEmEstoque.length) return [];
-      var filtro = 'id=in.(' + idsEmEstoque.join(',') + ')';
-      if (codigoPeca) filtro += '&codigo_peca=eq.' + encodeURIComponent(codigoPeca);
-      var prod = await sbGet('producao?' + filtro + '&select=id,codigo_peca,peca,material,lote,numero_caixa');
+      // em blocos de 150 IDs pra URL não estourar o limite de tamanho
+      var prod = [];
+      for (var b = 0; b < idsEmEstoque.length; b += 150) {
+        var filtro = 'id=in.(' + idsEmEstoque.slice(b, b + 150).join(',') + ')';
+        if (codigoPeca) filtro += '&codigo_peca=eq.' + encodeURIComponent(codigoPeca);
+        prod = prod.concat(await sbGet('producao?' + filtro + '&select=id,codigo_peca,peca,material,lote,numero_caixa'));
+      }
       return prod.map(function (p) { return { ID: p.id, CodigoPeca: p.codigo_peca, Peca: p.peca, Material: p.material, Lote: p.lote, NumeroCaixa: p.numero_caixa }; });
     } catch (e) { return []; }
   },
@@ -692,9 +735,9 @@ var backend = {
         var c = correcoes[i];
         var idMov = gerarID();
         await sbPost('movimentacoes', {
-          id: idMov, tipo: c.tipo, caixa_id: c.caixaId, peca: c.peca, codigo_peca: c.codigoPeca, material: c.material,
-          lote: c.lote || '', qtd_caixas: 1, origem: 'MANUAL', usuario: usuario || 'Admin',
-          motivo: 'Balanço de estoque #' + id, tipo_saida: c.tipo === 'SAIDA' ? 'CORRECAO' : ''
+          id: idMov, tipo: c.tipo, caixa_id: c.caixaId || null, peca: c.peca, codigo_peca: c.codigoPeca, material: c.material,
+          lote: c.lote || '', qtd_caixas: c.qtd || 1, origem: 'MANUAL', usuario: usuario || 'Admin',
+          motivo: 'Balanço de estoque #' + id + (c.caixaId ? '' : ' — ajuste de saldo'), tipo_saida: c.tipo === 'SAIDA' ? (c.caixaId ? 'BALANCO_NAO_ENCONTRADA' : 'CORRECAO') : ''
         }, 'return=minimal');
       }
       await sbPatch('balancos', 'id=eq.' + id, { status: 'CONCLUIDO', data_conclusao: new Date().toISOString(), resultado: resultado });
@@ -724,6 +767,18 @@ var backend = {
     } catch (e) { return null; }
   },
 
+  // Aceita o que a pessoa digitar: nº curto da etiqueta (ex. 4821-7) ou o código longo antigo (ex. A6C6-76D6-BF41)
+  async resolverCodigoCaixa(texto) {
+    try {
+      var r = interpretarCodigoDigitado(texto);
+      if (!r.ok) return r;
+      if (r.id) return r;
+      var rows = await sbGet('producao?seq=eq.' + r.seq + '&select=id');
+      if (!rows.length) return { ok: false, erro: 'Nenhuma caixa com o nº ' + formatarNumCaixa(r.seq) + '.' };
+      return { ok: true, id: rows[0].id };
+    } catch (e) { return { ok: false, erro: e.message }; }
+  },
+
   async getCaixaPorId(id) {
     try {
       var rows = await sbGet('producao?id=eq.' + id);
@@ -738,7 +793,7 @@ var backend = {
         ID: r.id, DataHora: fmtDataHoraBR(r.data_hora), Matricula: r.matricula || '', Operador: r.operador,
         Peca: r.peca, CodigoPeca: r.codigo_peca, Material: r.material, Maquina: r.maquina || '', Lote: r.lote,
         Trimestre: r.trimestre, Ano: r.ano, NumeroCaixa: r.numero_caixa, QtdPecas: r.qtd_pecas, QtdPadrao: r.qtd_padrao,
-        StatusAtual: statusAtual
+        Seq: r.seq || null, StatusAtual: statusAtual
       };
     } catch (e) { return null; }
   },
@@ -1636,6 +1691,10 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
       </div>
 
       <canvas id="mov-cam-canvas" style="display:none"></canvas>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <input type="text" id="mov-input-digitado" inputmode="numeric" autocomplete="off" placeholder="Câmera não lê? Digite o nº da etiqueta (ex. 4821-7)" style="flex:1;min-width:0;padding:12px;border:2px solid var(--cinza3);border-radius:var(--radius-sm);font-size:14px;font-weight:700" onkeydown="if(event.key==='Enter')movDigitarCodigo()"/>
+        <button onclick="movDigitarCodigo()" style="background:var(--azul3);color:#fff;border:none;padding:12px 18px;border-radius:var(--radius-sm);font-size:14px;font-weight:800;cursor:pointer;min-height:44px">OK</button>
+      </div>
       <div class="mov-fallback"><button onclick="movAbrirManual()">Etiqueta rasgada ou ilegível? Movimentar manualmente →</button></div>
     </div>
 
@@ -2823,8 +2882,7 @@ function verifLoopCamera(){
 function verifBuscarManual(){
   var v=document.getElementById('verif-input-manual').value.trim();
   if(!v){ toast('Digite o código da caixa','aviso'); return; }
-  var caixaId=v.replace(/[^A-Za-z0-9]/g,'').toUpperCase();
-  verifBuscarHistorico(caixaId);
+  resolverDigitado(v,function(id){ verifBuscarHistorico(id); });
 }
 function verifBuscarHistorico(caixaId){
   document.getElementById('verif-resultado').innerHTML='<div class="dash-empty"><div class="spinner" style="border-top-color:var(--azul3);margin:0 auto"></div></div>';
@@ -3347,7 +3405,7 @@ var _mdlTab = 'PECA';
 var _mdlPadrao = null; // cache dos modelos padrão (pra "Restaurar")
 
 var DADOS_EXEMPLO_PECA = {
-  EMPRESA:'VITALBOR', TRIMESTRE:'2° TRIMESTRE 2026', CODIGO:'PBA-75',
+  EMPRESA:logoEtiquetaHTML(), TRIMESTRE:'2° TRIMESTRE 2026', CODIGO:'PBA-75',
   DESCRICAO:'ANEL DE BORRACHA PBA 70/80 MM', MATERIAL:'NBR-60', COR:'VERDE',
   NORMA:'NBR 7676', QUANTIDADE:'640', DATA:'06/07/2026', LOTE:'999', OP:'1',
   REFERENCIA:'A6C6-76D6-BF41', QR_CODE:'<div style="width:22mm;height:22mm;background:repeating-linear-gradient(45deg,#000,#000 2px,#fff 2px,#fff 4px)"></div>'
@@ -3422,7 +3480,7 @@ function carregarListaBalancos(){
 function cancelarBalancoConfirm(id){
   if(!confirm('Cancelar este balanço? Nada será aplicado no estoque.')) return;
   google.script.run
-    .withSuccessHandler(function(r){ if(r&&r.ok){ toast('Balanço cancelado','aviso'); renderBalancoAdmin(); verificarBalancoAtivo(); } else toast('Erro','erro'); })
+    .withSuccessHandler(function(r){ if(r&&r.ok){ balLimparProgresso(id); toast('Balanço cancelado','aviso'); renderBalancoAdmin(); verificarBalancoAtivo(); } else toast('Erro','erro'); })
     .withFailureHandler(function(){ toast('Erro','erro'); })
     .cancelarBalanco(id);
 }
@@ -3431,7 +3489,9 @@ function cancelarBalancoConfirm(id){
 var _balCamStream=null, _balCamRAF=null, _balCamPausado=false, _balCamCooldownAte=0;
 function iniciarContagemBalanco(id,escopoCodigo,escopoNome){
   S.balancoAtivoExec={ id:id, escopoCodigo:escopoCodigo||null, escopoNome:escopoNome };
-  S.balancoBipadas=[];
+  S.balancoBipadas=[]; S.balancoInfo={}; S._balEmConsulta={};
+  var salvo=balCarregarProgresso(id);
+  if(salvo){ S.balancoBipadas=salvo.ids||[]; S.balancoInfo=salvo.info||{}; }
   google.script.run.withSuccessHandler(function(){}).withFailureHandler(function(){}).iniciarBalanco(id);
   var inner=document.getElementById('adm-balanco-inner');
   inner.innerHTML=
@@ -3448,12 +3508,18 @@ function iniciarContagemBalanco(id,escopoCodigo,escopoNome){
         '<button onclick="balFecharCamera()" style="width:100%;margin-top:10px;background:var(--cinza2);color:var(--texto2);border:none;padding:12px;border-radius:var(--radius-sm);font-size:13px;font-weight:800;cursor:pointer;min-height:44px">✕ Fechar câmera</button>'+
       '</div>'+
       '<canvas id="bal-cam-canvas" style="display:none"></canvas>'+
+      '<div style="display:flex;gap:8px;margin-top:12px">'+
+        '<input type="text" id="bal-input-digitado" inputmode="numeric" autocomplete="off" placeholder="Câmera não lê? Digite o nº da etiqueta" style="flex:1;min-width:0;padding:12px;border:2px solid var(--cinza3);border-radius:var(--radius-sm);font-size:14px;font-weight:700" onkeydown="if(event.key===\'Enter\')balDigitarCodigo()"/>'+
+        '<button onclick="balDigitarCodigo()" style="background:var(--azul3);color:#fff;border:none;padding:12px 18px;border-radius:var(--radius-sm);font-size:14px;font-weight:800;cursor:pointer;min-height:44px">OK</button>'+
+      '</div>'+
     '</div>'+
     '<div class="mov-ultima vis"><div class="mov-ultima-hd">Caixas bipadas nesta contagem</div>'+
       '<div style="font-size:32px;font-weight:900;color:var(--azul)" id="bal-contador">0</div>'+
-      '<div id="bal-lista-bipadas" style="max-height:200px;overflow-y:auto;font-size:12px;color:var(--texto2)"></div>'+
+      '<div id="bal-lista-bipadas" style="max-height:45vh;overflow-y:auto;font-size:12px;color:var(--texto2)"></div>'+
     '</div>'+
     '<button class="btn-filtrar" style="margin-top:10px" onclick="balFinalizarContagem()">✅ Finalizar Contagem e Ver Diferenças</button>';
+  balRenderLista();
+  if(S.balancoBipadas.length) toast('Contagem retomada: '+S.balancoBipadas.length+' caixa(s) já bipada(s) neste aparelho','aviso');
 }
 function balAbrirCamera(){
   document.getElementById('bal-cam-fechada').style.display='none';
@@ -3500,14 +3566,70 @@ function balLoopCamera(){
   }
   _balCamRAF=requestAnimationFrame(tick);
 }
+// Progresso da contagem fica salvo NO APARELHO — se a página recarregar ou o tablet desligar
+// no meio de um balanço grande, não perde o que já foi bipado.
+function balChaveProgresso(id){ return 'vitalbor_balanco_'+id; }
+function balSalvarProgresso(){
+  var exec=S.balancoAtivoExec; if(!exec) return;
+  try{ localStorage.setItem(balChaveProgresso(exec.id),JSON.stringify({ ids:S.balancoBipadas||[], info:S.balancoInfo||{} })); }catch(e){}
+}
+function balCarregarProgresso(id){
+  try{ var t=localStorage.getItem(balChaveProgresso(id)); return t?JSON.parse(t):null; }catch(e){ return null; }
+}
+function balLimparProgresso(id){ try{ localStorage.removeItem(balChaveProgresso(id)); }catch(e){} }
+
 function balRegistrarBipagem(caixaId){
-  S.balancoBipadas=S.balancoBipadas||[];
-  if(S.balancoBipadas.indexOf(caixaId)>=0){ return; } // já contada, ignora silenciosamente (comum bipar 2x sem querer)
-  tocarBeep();
-  S.balancoBipadas.push(caixaId);
-  document.getElementById('bal-contador').textContent=S.balancoBipadas.length;
-  var lista=document.getElementById('bal-lista-bipadas');
-  lista.innerHTML=formatarReferencia(caixaId)+'<br>'+lista.innerHTML;
+  var exec=S.balancoAtivoExec; if(!exec) return;
+  S.balancoBipadas=S.balancoBipadas||[]; S.balancoInfo=S.balancoInfo||{}; S._balEmConsulta=S._balEmConsulta||{};
+  if(S.balancoBipadas.indexOf(caixaId)>=0){ mostrarErroScan('Essa caixa já foi contada'); return; }
+  if(S._balEmConsulta[caixaId]) return;
+  S._balEmConsulta[caixaId]=true;
+  google.script.run
+    .withSuccessHandler(function(d){
+      delete S._balEmConsulta[caixaId];
+      if(!d){ mostrarErroScan('Caixa não encontrada no sistema. Confira o número.'); return; }
+      if(exec.escopoCodigo && d.CodigoPeca!==exec.escopoCodigo){
+        mostrarErroScan('Essa caixa é '+d.CodigoPeca+' — fora do escopo deste balanço ('+exec.escopoNome+'). Não foi contada.');
+        return;
+      }
+      if(S.balancoBipadas.indexOf(caixaId)>=0) return;
+      tocarBeep();
+      S.balancoBipadas.push(caixaId);
+      S.balancoInfo[caixaId]={ cod:d.CodigoPeca, peca:d.Peca, mat:d.Material, lote:d.Lote, seq:d.Seq||null, num:d.NumeroCaixa };
+      balSalvarProgresso();
+      balRenderLista();
+    })
+    .withFailureHandler(function(e){ delete S._balEmConsulta[caixaId]; mostrarErroScan('Erro: '+(e?e.message:'')); })
+    .getCaixaPorId(caixaId);
+}
+function balRemoverBipagem(caixaId){
+  var info=(S.balancoInfo||{})[caixaId]||{};
+  if(!confirm('Tirar da contagem a caixa '+(info.cod||'')+' '+(info.seq?formatarNumCaixa(info.seq):formatarReferencia(caixaId))+'?')) return;
+  S.balancoBipadas=(S.balancoBipadas||[]).filter(function(x){ return x!==caixaId; });
+  delete S.balancoInfo[caixaId];
+  balSalvarProgresso();
+  balRenderLista();
+}
+function balRenderLista(){
+  var cont=document.getElementById('bal-contador'), lista=document.getElementById('bal-lista-bipadas');
+  if(!cont||!lista) return;
+  var ids=S.balancoBipadas||[], info=S.balancoInfo||{};
+  cont.textContent=ids.length;
+  // resumo por peça × material
+  var resumo={};
+  ids.forEach(function(id){ var i=info[id]||{}; var k=(i.cod||'?')+' · '+(i.mat||'?'); resumo[k]=(resumo[k]||0)+1; });
+  var htmlResumo=Object.keys(resumo).sort().map(function(k){
+    return '<span style="display:inline-block;background:var(--cinza);border-radius:6px;padding:4px 8px;margin:0 4px 4px 0;font-weight:800;color:var(--texto)">'+k+': '+resumo[k]+'</span>';
+  }).join('');
+  var htmlLista=ids.slice().reverse().map(function(id){
+    var i=info[id]||{};
+    var ref=i.seq?formatarNumCaixa(i.seq):formatarReferencia(id);
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--cinza2)">'+
+      '<div style="flex:1;min-width:0"><b style="color:var(--texto)">'+(i.cod||'?')+'</b> · '+(i.mat||'?')+' · Lote '+(i.lote||'—')+'<br><span style="font-family:monospace">Ref '+ref+'</span></div>'+
+      '<button onclick="balRemoverBipagem(\''+id+'\')" title="Tirar da contagem" style="background:none;border:1px solid var(--cinza3);border-radius:6px;padding:6px 10px;cursor:pointer;color:#c0392b;font-weight:900">✕</button>'+
+    '</div>';
+  }).join('');
+  lista.innerHTML=(htmlResumo?'<div style="margin:6px 0 8px">'+htmlResumo+'</div>':'')+htmlLista;
 }
 function balFinalizarContagem(){
   balFecharCamera();
@@ -3519,25 +3641,65 @@ function balFinalizarContagem(){
     .withSuccessHandler(function(esperadas){
       var esperadasIds=esperadas.map(function(e){ return e.ID; });
       var bipadas=S.balancoBipadas||[];
-      var confirmadas=bipadas.filter(function(id){ return esperadasIds.indexOf(id)>=0; });
-      var faltandoIds=esperadasIds.filter(function(id){ return bipadas.indexOf(id)<0; });
+      var confirmadas=esperadas.filter(function(e){ return bipadas.indexOf(e.ID)>=0; });
+      var faltando=esperadas.filter(function(e){ return bipadas.indexOf(e.ID)<0; });
       var sobrandoIds=bipadas.filter(function(id){ return esperadasIds.indexOf(id)<0; });
-      var faltando=esperadas.filter(function(e){ return faltandoIds.indexOf(e.ID)>=0; });
-      if(!sobrandoIds.length){ renderBalancoReconciliacao(exec,confirmadas.length,faltando,[]); return; }
+      var sobrandoInfo=[];
+      function seguir(){
+        // saldo AGREGADO (o mesmo que o Quadro de Estoque mostra) — é ele que o balanço precisa acertar
+        google.script.run
+          .withSuccessHandler(function(saldos){ balMontarReconciliacao(exec,confirmadas,faltando,sobrandoInfo,saldos||[]); })
+          .withFailureHandler(function(e){ toast('Erro ao ler saldo: '+(e?e.message:''),'erro'); })
+          .getEstoqueAtual();
+      }
+      if(!sobrandoIds.length){ seguir(); return; }
       // busca dados das caixas "sobrando" uma a uma (não estavam na lista de esperadas)
-      var sobrandoInfo=[]; var pend=sobrandoIds.length;
+      var pend=sobrandoIds.length;
       sobrandoIds.forEach(function(id){
         google.script.run
-          .withSuccessHandler(function(d){ if(d) sobrandoInfo.push(d); pend--; if(pend===0) renderBalancoReconciliacao(exec,confirmadas.length,faltando,sobrandoInfo); })
-          .withFailureHandler(function(){ pend--; if(pend===0) renderBalancoReconciliacao(exec,confirmadas.length,faltando,sobrandoInfo); })
+          .withSuccessHandler(function(d){ if(d) sobrandoInfo.push(d); pend--; if(pend===0) seguir(); })
+          .withFailureHandler(function(){ pend--; if(pend===0) seguir(); })
           .getCaixaPorId(id);
       });
     })
     .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); })
     .getCaixasEmEstoque(exec.escopoCodigo);
 }
-function renderBalancoReconciliacao(exec,totalConfirmadas,faltando,sobrando){
-  S._balFaltando=faltando; S._balSobrando=sobrando;
+function balChave(codigo,peca,material){ return (codigo||peca)+'||'+material; }
+// Calcula as correções em DOIS níveis:
+//  1) por caixa — SAÍDA nas faltando, ENTRADA nas sobrando (mantém o status de cada caixa certo)
+//  2) por peça×material — um ajuste de saldo que faz o Quadro terminar EXATAMENTE igual ao contado.
+// Sem o nível 2, saídas manuais (sem caixa) já tinham baixado o saldo mas deixavam as caixas
+// "abertas"; o balanço dava baixa nelas de novo e o saldo furava (ex.: COL-100 em -8).
+function balMontarReconciliacao(exec,confirmadas,faltando,sobrandoTodas,saldos){
+  var escopo=exec.escopoCodigo||null;
+  var sobrando=sobrandoTodas.filter(function(s){ return !escopo || s.CodigoPeca===escopo; });
+  var foraEscopo=sobrandoTodas.length-sobrando.length;
+  var itens={};
+  function item(codigo,peca,material){
+    var k=balChave(codigo,peca,material);
+    if(!itens[k]) itens[k]={ codigoPeca:codigo, peca:peca, material:material, saldo:0, contado:0, deltaCaixas:0 };
+    return itens[k];
+  }
+  saldos.forEach(function(s){
+    if(escopo && s.CodigoPeca!==escopo) return;
+    item(s.CodigoPeca,s.Peca,s.Material).saldo=Number(s.Saldo)||0;
+  });
+  confirmadas.forEach(function(c){ item(c.CodigoPeca,c.Peca,c.Material).contado++; });
+  sobrando.forEach(function(s){ var it=item(s.CodigoPeca,s.Peca,s.Material); it.contado++; it.deltaCaixas++; });
+  faltando.forEach(function(f){ item(f.CodigoPeca,f.Peca,f.Material).deltaCaixas--; });
+  var ajustes=[];
+  Object.keys(itens).forEach(function(k){
+    var it=itens[k];
+    it.ajuste=it.contado-(it.saldo+it.deltaCaixas); // quanto falta pra fechar no contado depois das correções por caixa
+    if(it.saldo!==it.contado || it.ajuste!==0) ajustes.push(it);
+  });
+  ajustes.sort(function(a,b){ return (a.codigoPeca||a.peca).localeCompare(b.codigoPeca||b.peca); });
+  S._balFaltando=faltando; S._balSobrando=sobrando; S._balAjustes=ajustes; S._balAplicando=false;
+  renderBalancoReconciliacao(exec,confirmadas.length,faltando,sobrando,ajustes,foraEscopo);
+}
+function renderBalancoReconciliacao(exec,totalConfirmadas,faltando,sobrando,ajustes,foraEscopo){
+  ajustes=ajustes||[];
   var inner=document.getElementById('adm-balanco-inner');
   var html='<div class="mov-estoque-hd"><div class="mov-estoque-titulo">📋 Resultado da Contagem: '+exec.escopoNome+'</div></div>';
   html+='<div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:14px">'+
@@ -3545,36 +3707,62 @@ function renderBalancoReconciliacao(exec,totalConfirmadas,faltando,sobrando){
     '<div class="kpi r"><div class="kl">Faltando</div><div class="kv">'+faltando.length+'</div><div class="ks">sistema dizia em estoque, não foi achada</div></div>'+
     '<div class="kpi o"><div class="kl">Sobrando</div><div class="kv">'+sobrando.length+'</div><div class="ks">achada, sistema não sabia</div></div>'+
   '</div>';
+  if(foraEscopo){
+    html+='<div style="font-size:12px;color:var(--texto2);margin-bottom:10px">ℹ️ '+foraEscopo+' caixa(s) bipada(s) de outras peças foram ignoradas (fora do escopo deste balanço).</div>';
+  }
+  if(ajustes.length){
+    html+='<div class="hist-titulo" style="margin-bottom:6px">📊 Saldo do Quadro × Contado (é assim que o Quadro vai ficar)</div>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px">'+
+      '<tr style="text-align:left;border-bottom:2px solid var(--cinza3)"><th style="padding:6px">Peça</th><th>Material</th><th style="text-align:center">Quadro hoje</th><th style="text-align:center">Contado</th><th style="text-align:center">Diferença</th></tr>'+
+      ajustes.map(function(a){
+        var dif=a.contado-a.saldo;
+        var cor=dif<0?'#c0392b':(dif>0?'#1e7e4f':'var(--texto2)');
+        return '<tr style="border-bottom:1px solid var(--cinza2)"><td style="padding:6px;font-weight:800">'+(a.codigoPeca||a.peca)+'</td><td>'+a.material+'</td>'+
+          '<td style="text-align:center">'+a.saldo+'</td><td style="text-align:center;font-weight:800">'+a.contado+'</td>'+
+          '<td style="text-align:center;font-weight:900;color:'+cor+'">'+(dif>0?'+':'')+dif+'</td></tr>';
+      }).join('')+'</table>';
+  }
   if(faltando.length){
-    html+='<div class="hist-titulo" style="margin-bottom:6px">🔴 Faltando (vai gerar SAÍDA de correção)</div>';
+    html+='<div class="hist-titulo" style="margin-bottom:6px">🔴 Caixas NÃO bipadas — vão sair do estoque (baixa por balanço)</div>';
     html+=faltando.map(function(f){ return '<div class="caixa-row"><span>'+f.CodigoPeca+' — '+f.Peca+' ('+f.Material+') Lote '+(f.Lote||'—')+' — '+formatarReferencia(f.ID)+'</span></div>'; }).join('');
   }
   if(sobrando.length){
-    html+='<div class="hist-titulo" style="margin:12px 0 6px">🟢 Sobrando (vai gerar ENTRADA de correção)</div>';
+    html+='<div class="hist-titulo" style="margin:12px 0 6px">🟢 Caixas bipadas que o sistema achava fora do estoque — vão voltar pro estoque</div>';
     html+=sobrando.map(function(s){ return '<div class="caixa-row"><span>'+s.CodigoPeca+' — '+s.Peca+' ('+s.Material+') Lote '+(s.Lote||'—')+' — '+formatarReferencia(s.ID)+'</span></div>'; }).join('');
   }
-  if(!faltando.length && !sobrando.length){
+  if(!faltando.length && !sobrando.length && !ajustes.length){
     html+='<div class="dash-empty"><div class="dei">✅</div><div>Tudo bateu certinho — nenhuma correção necessária.</div></div>';
   }
-  html+='<button class="btn-filtrar" style="margin-top:14px" onclick="balAplicarCorrecoes()">✅ Aplicar Correções e Concluir Balanço</button>';
+  html+='<button class="btn-filtrar" id="bal-btn-aplicar" style="margin-top:14px" onclick="balAplicarCorrecoes()">✅ Aplicar Correções e Concluir Balanço</button>';
   inner.innerHTML=html;
 }
 function balAplicarCorrecoes(){
   var exec=S.balancoAtivoExec;
   if(!exec) return;
-  var faltando=S._balFaltando||[], sobrando=S._balSobrando||[];
-  var correcoes=faltando.map(function(f){ return { tipo:'SAIDA', caixaId:f.ID, peca:f.Peca, codigoPeca:f.CodigoPeca, material:f.Material, lote:f.Lote }; })
-    .concat(sobrando.map(function(s){ return { tipo:'ENTRADA', caixaId:s.ID, peca:s.Peca, codigoPeca:s.CodigoPeca, material:s.Material, lote:s.Lote }; }));
-  var resultado={ confirmadas: (S.balancoBipadas||[]).length - sobrando.length, faltando: faltando.length, sobrando: sobrando.length };
+  if(S._balAplicando) return; // evita aplicar 2x com clique duplo
+  var nFalt=(S._balFaltando||[]).length;
+  if(!confirm('Confirmar balanço?\n\n• '+(S.balancoBipadas||[]).length+' caixa(s) contada(s) ficam no estoque\n• '+nFalt+' caixa(s) não bipada(s) vão SAIR do estoque\n\nIsso não pode ser desfeito pelo app.')) return;
+  S._balAplicando=true;
+  var btn=document.getElementById('bal-btn-aplicar');
+  if(btn){ btn.disabled=true; btn.textContent='Aplicando...'; }
+  var faltando=S._balFaltando||[], sobrando=S._balSobrando||[], ajustes=S._balAjustes||[];
+  var correcoes=faltando.map(function(f){ return { tipo:'SAIDA', caixaId:f.ID, peca:f.Peca, codigoPeca:f.CodigoPeca, material:f.Material, lote:f.Lote, qtd:1 }; })
+    .concat(sobrando.map(function(s){ return { tipo:'ENTRADA', caixaId:s.ID, peca:s.Peca, codigoPeca:s.CodigoPeca, material:s.Material, lote:s.Lote, qtd:1 }; }))
+    .concat(ajustes.filter(function(a){ return a.ajuste!==0; }).map(function(a){
+      return { tipo:a.ajuste>0?'ENTRADA':'SAIDA', caixaId:null, peca:a.peca, codigoPeca:a.codigoPeca, material:a.material, lote:'', qtd:Math.abs(a.ajuste) };
+    }));
+  var resultado={ confirmadas: (S.balancoBipadas||[]).length - sobrando.length, faltando: faltando.length, sobrando: sobrando.length,
+    ajustesSaldo: ajustes.map(function(a){ return { peca:a.codigoPeca||a.peca, material:a.material, quadro:a.saldo, contado:a.contado }; }) };
   google.script.run
     .withSuccessHandler(function(r){
-      if(!r||!r.ok){ toast(r&&r.erro?r.erro:'Erro ao concluir','erro'); return; }
+      if(!r||!r.ok){ S._balAplicando=false; if(btn){ btn.disabled=false; btn.textContent='✅ Aplicar Correções e Concluir Balanço'; } toast(r&&r.erro?r.erro:'Erro ao concluir','erro'); return; }
       toast('Balanço concluído! '+correcoes.length+' correção(ões) aplicada(s).','sucesso');
-      S.balancoAtivoExec=null; S.balancoBipadas=[];
+      balLimparProgresso(exec.id);
+      S.balancoAtivoExec=null; S.balancoBipadas=[]; S._balAplicando=false;
       renderBalancoAdmin();
       verificarBalancoAtivo();
     })
-    .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); })
+    .withFailureHandler(function(e){ S._balAplicando=false; if(btn){ btn.disabled=false; } toast('Erro: '+(e?e.message:''),'erro'); })
     .concluirBalanco(exec.id, resultado, correcoes, S.movOperador?S.movOperador.nome:'Admin');
 }
 
@@ -4379,10 +4567,10 @@ function gerarEtiquetas(dados,caixas){
     var qrData=JSON.stringify({id:cx.id,peca:dados.Peca,cod:dados.CodigoPeca,lote:dados.Lote,cx:cx.numCaixa,qtd:dados.QtdPecas,op:dados.Matricula||dados.Operador,trim:dados.Trimestre+'/'+dados.Ano,mat:dados.Material});
     var qrId='qr-'+cx.id;
     var valores={
-      EMPRESA:'VITALBOR', TRIMESTRE:trimFmt, CODIGO:dados.CodigoPeca, DESCRICAO:dados.Peca,
+      EMPRESA:logoEtiquetaHTML(), TRIMESTRE:trimFmt, CODIGO:dados.CodigoPeca, DESCRICAO:dados.Peca,
       MATERIAL:dados.Material, COR:cor?cor.toUpperCase():'', NORMA:norma||'',
       QUANTIDADE:String(dados.QtdPecas), DATA:new Date().toLocaleDateString('pt-BR'),
-      LOTE:dados.Lote, OP:(dados.Matricula||dados.Operador), REFERENCIA:formatarReferencia(cx.id),
+      LOTE:dados.Lote, OP:(dados.Matricula||dados.Operador), REFERENCIA:(cx.seq?formatarNumCaixa(cx.seq):formatarReferencia(cx.id)),
       QR_CODE:'<div id="'+qrId+'" style="width:'+qrSizeMm+'mm;height:'+qrSizeMm+'mm;overflow:hidden;display:flex;align-items:center;justify-content:center"></div>'
     };
     var el=document.createElement('div'); el.className='etiq-fisica';
@@ -4642,6 +4830,23 @@ function movLoopCamera(){
   _movCamRAF=requestAnimationFrame(tick);
 }
 
+// Resolve o que foi digitado (nº curto ou código longo) e devolve o id da caixa pro callback
+function resolverDigitado(texto,cb){
+  google.script.run
+    .withSuccessHandler(function(r){ if(!r||!r.ok){ mostrarErroScan(r&&r.erro?r.erro:'Código não reconhecido'); return; } cb(r.id); })
+    .withFailureHandler(function(e){ mostrarErroScan('Erro: '+(e?e.message:'')); })
+    .resolverCodigoCaixa(texto);
+}
+function movDigitarCodigo(){
+  var inp=document.getElementById('mov-input-digitado');
+  var v=inp.value.trim(); if(!v) return;
+  resolverDigitado(v,function(id){ inp.value=''; movProcessarCodigo(id); });
+}
+function balDigitarCodigo(){
+  var inp=document.getElementById('bal-input-digitado');
+  var v=inp.value.trim(); if(!v) return;
+  resolverDigitado(v,function(id){ inp.value=''; balRegistrarBipagem(id); });
+}
 function movProcessarCodigo(raw){
   raw=String(raw||'').trim();
   if(!raw) return;
@@ -4671,7 +4876,7 @@ function movProcessarCodigoSaida(caixaId){
       var info=document.getElementById('mov-saida-conferir-info');
       info.innerHTML='<div style="font-weight:900;color:var(--azul);font-size:14px">'+d.CodigoPeca+' — '+d.Peca+'</div>'+
         '<div style="font-size:12px;color:var(--texto2);margin-top:4px">Material: <b>'+d.Material+'</b></div>'+
-        '<div style="font-size:12px;color:var(--texto2)">Lote: <b>'+(d.Lote||'—')+'</b> • Caixa Nº '+(d.NumeroCaixa||'—')+' • '+d.QtdPecas+' pç</div>';
+        '<div style="font-size:12px;color:var(--texto2)">Lote: <b>'+(d.Lote||'—')+'</b> • Caixa Nº '+(d.NumeroCaixa||'—')+' • '+d.QtdPecas+' pç'+(d.Seq?' • Ref <b>'+formatarNumCaixa(d.Seq)+'</b>':'')+'</div>';
       document.getElementById('mov-saida-conferir-popup').style.display='block';
       // câmera fica travada até clicar em "Conferido" — evita bipar a próxima sem revisar a atual.
     })
@@ -4785,7 +4990,7 @@ function movProcessarCodigoEntrada(caixaId){
       var info=document.getElementById('mov-entrada-conferir-info');
       info.innerHTML='<div style="font-weight:900;color:var(--azul);font-size:14px">'+d.CodigoPeca+' — '+d.Peca+'</div>'+
         '<div style="font-size:12px;color:var(--texto2);margin-top:4px">Material: <b>'+d.Material+'</b></div>'+
-        '<div style="font-size:12px;color:var(--texto2)">Lote: <b>'+(d.Lote||'—')+'</b> • Caixa Nº '+(d.NumeroCaixa||'—')+' • '+d.QtdPecas+' pç</div>';
+        '<div style="font-size:12px;color:var(--texto2)">Lote: <b>'+(d.Lote||'—')+'</b> • Caixa Nº '+(d.NumeroCaixa||'—')+' • '+d.QtdPecas+' pç'+(d.Seq?' • Ref <b>'+formatarNumCaixa(d.Seq)+'</b>':'')+'</div>';
       renderGridConferente2Item();
       document.getElementById('mov-entrada-conferir-popup').style.display='block';
       // câmera fica travada até escolher o Conferente 2 desta etiqueta — obrigatório sempre, etiqueta por etiqueta.
@@ -5237,7 +5442,7 @@ function reimprimirCaixa(id){
     Peca:d.Peca, CodigoPeca:d.CodigoPeca, Material:d.Material, Lote:d.Lote,
     Trimestre:d.Trimestre, Ano:d.Ano, Matricula:d.Matricula, Operador:d.Operador, QtdPecas:d.QtdPecas
   };
-  gerarEtiquetas(dadosImpressao,[{id:d.ID,numCaixa:d.NumeroCaixa}]);
+  gerarEtiquetas(dadosImpressao,[{id:d.ID,numCaixa:d.NumeroCaixa,seq:d.Seq||null}]);
   setTimeout(function(){
     var pa=document.getElementById('print-area');
     pa.innerHTML=document.getElementById('lista-etiq').innerHTML+document.getElementById('lista-conf').innerHTML;
