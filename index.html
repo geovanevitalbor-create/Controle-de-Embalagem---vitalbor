@@ -1393,7 +1393,7 @@ select.inp-pos option{color:#000;background:#fff}
 .lt-b:active{transform:scale(.95)}
 .lt-b.lt-x{width:54px;padding:0}
 .lt-luz.on{background:#ffd54a;color:var(--azul)}
-.lt-luz.indisp{opacity:.5}
+.lt-luz.busca{opacity:.6;pointer-events:none}
 .lt-zoom span{font-variant-numeric:tabular-nums;font-size:16px}
 .lt-cont{position:absolute;top:12px;left:12px;z-index:2;display:flex;align-items:baseline;gap:8px;padding:6px 16px 9px;border-radius:14px;background:rgba(18,20,32,.74);color:#fff;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 .lt-cont b{font-size:44px;line-height:1;font-weight:900;font-variant-numeric:tabular-nums;letter-spacing:-1px}
@@ -4904,7 +4904,8 @@ var Leitor=(function(){
         btLuz=q('.lt-luz'), btZoom=q('.lt-zoom'), ret=q('.lt-ret'), contEl=q('.lt-cont b'), pendEl=q('.lt-pend');
     var canvas=document.createElement('canvas'), c2d=canvas.getContext('2d',{willReadFrequently:true});
     var aberto=false, geracao=0, stream=null, track=null, timer=null, ocupado=false, pausado=false, detector=null,
-        ultimo={txt:'',t:0}, temLuz=false, luz=false, zooms=[], zi=0, wake=null, reabrir=false, timerRet=null, destruido=false;
+        ultimo={txt:'',t:0}, temLuz=false, luz=false, zooms=[], zi=0, wake=null, reabrir=false, timerRet=null, destruido=false,
+        camId='', trocando=false, CHAVE_CAM_LUZ='vitalbor_cam_lanterna_v1';
 
     function msg(t){ msgEl.textContent=t||''; msgEl.hidden=!t; }
     function ajustarMira(){
@@ -4989,7 +4990,7 @@ var Leitor=(function(){
     }
     // Lê zoom/foco e descobre se a câmera tem lanterna. Muitos aparelhos só informam a lanterna
     // alguns segundos depois de ligar (ou só depois de consultar o ImageCapture): insiste por até ~5 s.
-    async function recursos(g){
+    async function recursos(g,voltas){
       if(!track) return;
       var caps=lerCaps();
       if(caps.zoom&&typeof caps.zoom.max==='number'&&caps.zoom.max>caps.zoom.min){
@@ -4999,7 +5000,7 @@ var Leitor=(function(){
       }
       aplicar().catch(function(){});
       var t=track;
-      for(var i=0;i<10;i++){
+      for(var i=0;i<(voltas||10);i++){
         if(g!==geracao||!aberto||track!==t) return;
         if(lerCaps().torch){ temLuz=true; break; }
         if(i===0&&window.ImageCapture){ try{ await new window.ImageCapture(t).getPhotoCapabilities(); }catch(e){} continue; }
@@ -5008,14 +5009,21 @@ var Leitor=(function(){
     }
     function marcarLuz(){ btLuz.setAttribute('aria-pressed',String(!!luz)); btLuz.classList.toggle('on',!!luz); }
     // Tenta acender na câmera atual e confere se acendeu de verdade.
-    async function acenderAqui(){
-      if(!track) return false;
-      luz=true;
+    // Se o aparelho ainda não informou a lanterna (tocou logo ao abrir), insiste por ~2,5 s.
+    async function acenderAqui(voltas){
+      var t=track; if(!t) return false;
+      for(var i=0;i<(voltas||5);i++){
+        if(track!==t||!aberto) return false;
+        luz=true;
+        try{ await aplicar(); }catch(e){}
+        await esperar(200);
+        var st={}; try{ st=t.getSettings?t.getSettings():{}; }catch(e){}
+        if(st.torch===true||(st.torch===undefined&&lerCaps().torch)){ temLuz=true; marcarLuz(); return true; }
+        luz=false;
+        if(i===0&&window.ImageCapture){ try{ await new window.ImageCapture(t).getPhotoCapabilities(); }catch(e){} }
+        await esperar(300);
+      }
       try{ await aplicar(); }catch(e){}
-      await esperar(200);
-      var st={}; try{ st=track.getSettings?track.getSettings():{}; }catch(e){}
-      if(st.torch===true||(st.torch===undefined&&lerCaps().torch)){ temLuz=true; marcarLuz(); return true; }
-      luz=false; try{ await aplicar(); }catch(e){}
       return false;
     }
     // A câmera aberta não tem lanterna: testa as outras traseiras e fica com a primeira que acender.
@@ -5034,10 +5042,13 @@ var Leitor=(function(){
           testadas++;
           if(!(await ligarCamera(g,outras[i].deviceId))) continue;
           zooms=[]; zi=0; btZoom.hidden=true; temLuz=false;
-          await recursos(g);
-          if(await acenderAqui()){ achou=true; salvarCam(camId); }
+          await recursos(g,3);
+          if(await acenderAqui(2)){ achou=true; salvarCam(camId); }
         }
-        if(!achou&&g===geracao&&aberto){ desligarStream(); zooms=[]; zi=0; btZoom.hidden=true; if(await ligarCamera(g,original)) recursos(g); }
+        if(!achou&&g===geracao&&aberto){
+          desligarStream(); zooms=[]; zi=0; btZoom.hidden=true;
+          if((await ligarCamera(g,original))||(await ligarCamera(g,''))) recursos(g);
+        }
       }finally{ trocando=false; if(g===geracao&&aberto) msg(''); }
       return {ok:achou,testadas:testadas};
     }
@@ -5136,8 +5147,8 @@ var Leitor=(function(){
       aberto=false; geracao++;
       clearTimeout(timer); timer=null;
       if(stream){ try{ stream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){} }
-      stream=null; track=null; luz=false; temLuz=false; zooms=[]; zi=0;
-      btLuz.setAttribute('aria-pressed','false'); btLuz.classList.remove('on'); btZoom.hidden=true;
+      stream=null; track=null; luz=false; temLuz=false; zooms=[]; zi=0; camId=''; trocando=false;
+      btLuz.setAttribute('aria-pressed','false'); btLuz.classList.remove('on','busca'); btZoom.hidden=true;
       try{ video.srcObject=null; }catch(e){}
       soltarTela();
       tela.hidden=true; fechadoEl.hidden=false;
@@ -5154,18 +5165,25 @@ var Leitor=(function(){
 
     q('.lt-abrir').onclick=abrir;
     q('.lt-x').onclick=fechar;
-    btLuz.onclick=function(){
-      if(!track) return;
-      if(!temLuz){ retorno('aviso','Lanterna indisponível','Este aparelho ou navegador não deixa a página ligar a lanterna. No Android, use o Chrome.',{semSom:true}); return; }
-      var novo=!luz;
-      track.applyConstraints({advanced:[{torch:novo}]}).then(function(){
-        luz=novo; btLuz.setAttribute('aria-pressed',String(novo)); btLuz.classList.toggle('on',novo);
-      }).catch(function(){ retorno('erro','A lanterna não ligou','O aparelho recusou o comando. Feche e abra a câmera de novo.',{semSom:true}); });
+    var mexendoLuz=false;
+    btLuz.onclick=async function(){
+      if(!track||trocando||mexendoLuz) return;
+      var g=geracao; mexendoLuz=true; btLuz.classList.add('busca');
+      try{
+        if(luz){ luz=false; marcarLuz(); try{ await aplicar(); }catch(e){} return; }
+        if(await acenderAqui()) return;
+        // esta câmera não acendeu: o aparelho pode ter outra traseira com flash
+        var r=await procurarCameraComLuz(g);
+        if(g!==geracao||!aberto) return;
+        if(!r.ok) retorno('aviso','Lanterna indisponível',
+          (r.testadas>1?'Testei as '+r.testadas+' câmeras deste aparelho e nenhuma deixou ligar a lanterna. ':'O aparelho não deixou ligar a lanterna pelo leitor. ')+
+          'Acenda uma luz no local ou aproxime a etiqueta da câmera.',{semSom:true});
+      }finally{ mexendoLuz=false; btLuz.classList.remove('busca'); }
     };
     btZoom.onclick=function(){
-      if(!track||zooms.length<2) return;
+      if(!track||zooms.length<2||trocando) return;
       zi=(zi+1)%zooms.length;
-      track.applyConstraints({advanced:[{zoom:zooms[zi]}]}).catch(function(){});
+      aplicar().catch(function(){}); // vai junto com a lanterna, para não apagá-la
       btZoom.querySelector('span').textContent=(zooms[zi]/zooms[0])+'×';
     };
 
