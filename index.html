@@ -94,7 +94,8 @@ function interpretarCodigoDigitado(texto) {
     return { ok: true, seq: Number(seq) };
   }
   if (t.length === 12) return { ok: true, id: t };
-  return { ok: false, erro: 'Código não reconhecido. Digite o nº da etiqueta (ex. 4821-7).' };
+  if (/[A-Z]/.test(t) || t.length > 12) return { ok: false, erro: 'O código antigo tem 12 letras e números (ex.: A6C6-76D6-BF41). Você digitou ' + t.length + '. Confira na etiqueta.' };
+  return { ok: false, erro: 'Código não reconhecido. Digite o número curto (ex.: 4821-7) ou o código antigo completo (ex.: A6C6-76D6-BF41).' };
 }
 // Logo Vitalbor em preto puro (sem degradê) — impressora térmica não imprime cor e degradê vira chuvisco
 var LOGO_VITALBOR_PB = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAioAAAA+CAQAAACv4ficAAAEl0lEQVR42u1d25JbIQyrGP7/l9WXzna23SScc2zwRe5jN4BtSRhCAL9kMlkU48e/QHwnsODG3vFESyZcWobBKBgiC3TNJl1xwkC45Fam0LOHaKJyJrV069VKJvaKyrrPPAZ9bKexHxK5eRT09XumkhU6iUsuac1UrFf3/Ky0cXttzxV5mSkpxSSrS79FVZ5Mobh/J+qFs8LykYMjMcRpKIZdSC6LgkOaEzyM7yM5qZiyDxQhk+xuLFgoF3wlKpIVkU5R2OUni8WZr0Slu6xoASSx2BMRLiPy779UsjL/cYNJ04lE7Uu+4hvcyHrvhAiWPmuBUwPPUWgG8vx6D1vasv22yPOUB7dkhuGy/fxcDl0/vxaXezhb7nkUmkdzyKHqlCoVjD1GYTACz3PWi96PUrBnwpYrxRkNogc3FGHDCLZ4P55pUjFZQZBx5KUbmvgZeQQ8zb3xttjJCBHVFMpKTD8tf2EWmpljYR117YutqrOQzTkESCBUq7i3ePinptPRdaZPtex69F8dS2Dz/NA83mHFfYrkF2ABRUR1ipjydPkjk6lKzBeHo9IvUbGHheZyxWUH4sIKuURlHy26LH4gHLQUVEhUZFr8yFwEVaJiTREWJh4fRpDFaYWEudLyRyaTpBzsccl7icq1ZPF20FXZVYhP783mRe9nonChCfEqEKre+wRskOH7/uNnUcnnlrYHJZcx6pFz1xHYe44bI8erSiVr6uFEFS6GfSUFaEm0Hsf1650bf+z//PafTBoE1SwyCUoY/0eJIFHPaByav6yvucxEqM4IeXtrwShDJR7vqfLiR7L800TGpnn9kNlad9RSpEghG3XI2FFaPno8RKaAC4S+VaCmswIezxdEYGL4Y0MvEt61SoZJx31dVvthgmsbtTXmV82rqsE89hFw+8Jp9ELGfBuIvPUKjKBEEU+13jIr8lcrsJikx+UuVK30qoaeyWVFUYXR9ehZUHj51cK50KDeV5bZA1r5ySSjl6qzsdRkzgc6aBLOc5+W5VomxKphca61adgw0yTeuhKquxjSprfscs05N5PYF6RwaZOBRlMajE0XEOU8mNuHptlcnkkmLMQ1bHZ085vkU6JVzytsbZMSFatgah6XSVxVqciCQZ1tooPSkfs2minuPFw/s+HiB6kJEHHpYbtpjQM8UKWisnUrZLW/9DkKrIO8uXWw9cBVt06x/TXTvTt/NZ3c6R2uDF7I47xX4ARIxV4oQtuyMmcUrcpreCTOtPTRgx1VZuJstcqTOuG5rMR9f+hr9HVufvO+2E+i9SwKVeLHgyhmAElZ6KHazW+5idd1x+BOrcLNOaFRP1i6Re7/lpgHebPYHoJeAZJcPpct768reHwMrlEeJQEkSmWqU/qJrs8hekTxchSdlzSbq86J7B+KxpafREWyItuFBraLDpJk5oaNXMM9DFNkS28weletVe4tPWzuUzxxJ+OHW2tHYSCoWlG2ogqKDb+CXvI6F93W5dc9ZuJ+b9eczzVuiCqOe//mNM284ETiL7m2BLMjIXzjZxdthI/burSgIrwoCslkspOEYwMfZTLZH/sNass8zmeOUQEAAAAASUVORK5CYII=';
@@ -569,14 +570,29 @@ var backend = {
       } else {
         if (!peca || !material) return { ok: false, erro: 'Selecione a peça e o material.' };
         autorizadoPor = 'Admin';
+        if (tipo === 'SAIDA' && !dados.Forcar) {
+          // não deixa o estoque "furar" (ficar negativo) por saída manual
+          var movsPeca = await sbGetAll('movimentacoes?select=tipo,qtd_caixas&codigo_peca=eq.' + encodeURIComponent(codPeca) + '&material=eq.' + encodeURIComponent(material) + '&order=data_hora.asc,id.asc');
+          var saldo = 0;
+          movsPeca.forEach(function (m) { var q = Number(m.qtd_caixas) || 1; if (m.tipo === 'ENTRADA') saldo += q; else if (m.tipo === 'SAIDA') saldo -= q; });
+          if (qtd > saldo) return { ok: false, erro: 'No sistema, ' + codPeca + ' ' + material + ' tem ' + saldo + ' caixa(s). Não dá para tirar ' + qtd + '. Se o físico não bate, faça um balanço dessa peça.' };
+        }
       }
 
-      var id = gerarID();
-      await sbPost('movimentacoes', {
-        id: id, tipo: tipo, caixa_id: caixaId, peca: peca, codigo_peca: codPeca, material: material, lote: lote, qtd_caixas: qtd,
-        origem: origem, usuario: String(dados.Usuario || ''), motivo: String(dados.Motivo || ''), autorizado_por: autorizadoPor,
-        conferente2: String(dados.Conferente2 || ''), tipo_saida: String(dados.TipoSaida || ''), nota_fiscal: String(dados.NotaFiscal || '')
-      }, 'return=minimal');
+      // IdMov vem da tela: se o mesmo lançamento chegar 2x (clique duplo / internet caiu), o banco recusa a cópia
+      var id = dados.IdMov ? String(dados.IdMov).replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 40) : gerarID();
+      try {
+        await sbPost('movimentacoes', {
+          id: id, tipo: tipo, caixa_id: caixaId, peca: peca, codigo_peca: codPeca, material: material, lote: lote, qtd_caixas: qtd,
+          origem: origem, usuario: String(dados.Usuario || ''), motivo: String(dados.Motivo || ''), autorizado_por: autorizadoPor,
+          conferente2: String(dados.Conferente2 || ''), tipo_saida: String(dados.TipoSaida || ''), nota_fiscal: String(dados.NotaFiscal || '')
+        }, 'return=minimal');
+      } catch (eIns) {
+        if (dados.IdMov && /23505|duplicate key/i.test(String(eIns && eIns.message))) {
+          return { ok: true, jaRegistrado: true, id: id, tipo: tipo, peca: peca, material: material, qtd: qtd, caixaId: caixaId, codPeca: codPeca, lote: lote };
+        }
+        throw eIns;
+      }
 
       await inserirLog(tipo === 'ENTRADA' ? 'ESTOQUE_ENTRADA' : 'ESTOQUE_SAIDA', String(dados.Usuario || ''),
         (tipo === 'ENTRADA' ? 'Entrada' : 'Saída') + ' de estoque: ' + peca + ' (' + material + ')',
@@ -818,6 +834,45 @@ var backend = {
       await inserirLog('MODELO_ETIQUETA', 'Admin', 'Modelo de etiqueta atualizado: ' + tipo, '');
       return { ok: true };
     } catch (e) { return { ok: false, erro: e.message }; }
+  },
+
+  // Consulta a caixa para a bipagem. Diferente de getCaixaPorId: se a internet falhar, DÁ ERRO
+  // (em vez de responder "não encontrada"), para a tela dizer a verdade ao operador.
+  async consultarCaixa(id) {
+    id = String(id || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    if (!id) return null;
+    var rows = await sbGet('producao?id=eq.' + id);
+    if (!rows.length) return null;
+    var r = rows[0];
+    var movs = await sbGet('movimentacoes?caixa_id=eq.' + id + '&select=tipo&order=data_hora.desc,id.desc&limit=1');
+    return {
+      ID: r.id, Peca: r.peca, CodigoPeca: r.codigo_peca, Material: r.material, Lote: r.lote, NumeroCaixa: r.numero_caixa,
+      QtdPecas: r.qtd_pecas, Matricula: r.matricula || '', Operador: r.operador || '', Seq: r.seq || null,
+      StatusAtual: movs.length ? movs[0].tipo : null
+    };
+  },
+
+  // Registra a leva INTEIRA numa chamada só (função registrar_lote_movimentacao no banco).
+  // situacao: 'ok' | 'recusado' (banco respondeu, nada gravado) | 'erro' (idem) | 'incerto' (sem resposta: tentar de novo é seguro)
+  async registrarLote(p) {
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var limite = setTimeout(function () { if (ctrl) ctrl.abort(); }, 45000);
+    try {
+      var resp = await fetch(SUPABASE_URL + '/rest/v1/rpc/registrar_lote_movimentacao', {
+        method: 'POST', headers: sbHeaders(), cache: 'no-store', signal: ctrl ? ctrl.signal : undefined,
+        body: JSON.stringify({
+          p_lote_id: p.loteId, p_tipo: p.tipo, p_caixas: p.caixas, p_usuario: p.usuario || '',
+          p_conferente2: p.conferente2 || '', p_tipo_saida: p.tipoSaida || '', p_nota_fiscal: p.notaFiscal || '', p_motivo: p.motivo || ''
+        })
+      });
+      var texto = await resp.text(), corpo = null;
+      try { corpo = JSON.parse(texto); } catch (e) {}
+      if (resp.ok && corpo && typeof corpo === 'object') { corpo.situacao = corpo.ok ? 'ok' : 'recusado'; return corpo; }
+      if (resp.status >= 400 && resp.status < 500 && corpo && corpo.code) return { situacao: 'erro', ok: false, codigo: corpo.code, erro: corpo.message || ('Erro ' + resp.status) };
+      return { situacao: 'incerto', ok: false, erro: 'O servidor respondeu com erro ' + resp.status + '.' };
+    } catch (e) {
+      return { situacao: 'incerto', ok: false, erro: (e && e.name === 'AbortError') ? 'O servidor demorou demais para responder.' : 'Sem conexão com o servidor.' };
+    } finally { clearTimeout(limite); }
   },
 
   async verificarSenhaAdmin(senha) { return String(senha) === ADMIN_PASSWORD; }
@@ -1298,6 +1353,162 @@ select.inp-pos option{color:#000;background:#fff}
 .op-sel-btn .mat{font-size:11px;font-weight:800;color:#fff;background:var(--azul3);padding:3px 10px;border-radius:6px}
 
 /* ══════════════════════════════
+   LEITOR DE QR (câmera) — movimentação e balanço
+══════════════════════════════ */
+.lt [hidden],.lv-col-leva [hidden],.mvm[hidden]{display:none!important}
+.lt{position:relative}
+.lt-fechado{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:280px;padding:28px 20px;border-radius:16px;background:var(--azul);color:#fff;text-align:center}
+.lt-f-ico{color:#8fa3c7;display:flex}
+.lt-f-tit{font-size:18px;font-weight:800}
+.lt-f-sub{font-size:13px;color:#b8c2d6;max-width:300px;line-height:1.45}
+.lt-abrir{margin-top:8px;background:#fff;color:var(--azul);border:none;border-radius:999px;padding:0 36px;min-height:58px;font-size:17px;font-weight:900;cursor:pointer}
+.lt-abrir:active{transform:scale(.97)}
+.lt-tela{position:relative;height:min(60vh,560px);min-height:300px;border-radius:16px;overflow:hidden;background:#000;isolation:isolate}
+.lt-tela video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.lt-mira{position:absolute;left:50%;top:50%;width:240px;height:240px;transform:translate(-50%,-50%);border-radius:18px;box-shadow:0 0 0 100vmax rgba(0,0,0,.36);pointer-events:none}
+.lt-mira i{position:absolute;width:46px;height:46px;border:6px solid #fff}
+.lt-mira i:nth-child(1){top:-3px;left:-3px;border-right:0;border-bottom:0;border-radius:18px 0 0 0}
+.lt-mira i:nth-child(2){top:-3px;right:-3px;border-left:0;border-bottom:0;border-radius:0 18px 0 0}
+.lt-mira i:nth-child(3){bottom:-3px;left:-3px;border-right:0;border-top:0;border-radius:0 0 0 18px}
+.lt-mira i:nth-child(4){bottom:-3px;right:-3px;border-left:0;border-top:0;border-radius:0 0 18px 0}
+.lt-tela.pisca-ok .lt-mira i{animation:ltCorOk 1.3s ease forwards}
+.lt-tela.pisca-aviso .lt-mira i{animation:ltCorAviso 1.3s ease forwards}
+.lt-tela.pisca-erro .lt-mira i{animation:ltCorErro 1.3s ease forwards}
+.lt-tela.pisca-ok .lt-mira{animation:ltPulo .4s ease}
+.lt-tela.pisca-erro .lt-mira{animation:ltTreme .4s ease}
+@keyframes ltCorOk{0%,55%{border-color:#34d27b}100%{border-color:#fff}}
+@keyframes ltCorAviso{0%,55%{border-color:#f5b041}100%{border-color:#fff}}
+@keyframes ltCorErro{0%,55%{border-color:#ff5a5f}100%{border-color:#fff}}
+@keyframes ltPulo{0%,100%{transform:translate(-50%,-50%) scale(1)}40%{transform:translate(-50%,-50%) scale(1.06)}}
+@keyframes ltTreme{0%,100%{transform:translate(-50%,-50%)}25%{transform:translate(calc(-50% - 10px),-50%)}75%{transform:translate(calc(-50% + 10px),-50%)}}
+.lt-ctrl{position:absolute;top:12px;right:12px;z-index:4;display:flex;gap:8px}
+.lt-b{display:flex;align-items:center;justify-content:center;gap:8px;height:54px;min-width:54px;padding:0 16px;border:none;border-radius:999px;background:rgba(18,20,32,.74);color:#fff;font-size:15px;font-weight:800;cursor:pointer;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.lt-b:active{transform:scale(.95)}
+.lt-b.lt-x{width:54px;padding:0}
+.lt-luz.on{background:#ffd54a;color:var(--azul)}
+.lt-luz.indisp{opacity:.5}
+.lt-zoom span{font-variant-numeric:tabular-nums;font-size:16px}
+.lt-cont{position:absolute;top:12px;left:12px;z-index:2;display:flex;align-items:baseline;gap:8px;padding:6px 16px 9px;border-radius:14px;background:rgba(18,20,32,.74);color:#fff;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.lt-cont b{font-size:44px;line-height:1;font-weight:900;font-variant-numeric:tabular-nums;letter-spacing:-1px}
+.lt-cont span{font-size:13px;font-weight:700;color:#c9d2e3}
+.lt-pend{position:absolute;top:80px;left:12px;z-index:2;padding:7px 13px;border-radius:999px;background:rgba(255,255,255,.94);color:var(--azul);font-size:13px;font-weight:800}
+.lt-ret{position:absolute;left:12px;right:12px;bottom:12px;z-index:2;padding:12px 16px 13px;border-radius:14px;background:#fff;color:var(--azul);border-left:10px solid #34d27b;box-shadow:0 10px 30px rgba(0,0,0,.35);transition:opacity .5s}
+.lt-ret[data-tipo="aviso"]{border-left-color:#f5b041;background:#fff8ea}
+.lt-ret[data-tipo="erro"]{border-left-color:#e5484d;background:#fff0f0}
+.lt-ret.apagado{opacity:.6}
+.lt-ret-tit{font-size:21px;font-weight:900;line-height:1.15;white-space:pre-wrap}
+.lt-ret-det{font-size:14px;font-weight:600;color:#4a5168;margin-top:3px;white-space:pre-wrap;line-height:1.35}
+.lt-msg{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;background:rgba(12,14,24,.86);color:#fff;font-size:16px;font-weight:700;line-height:1.5}
+
+/* ══════════════════════════════
+   LEVA (bipa várias caixas, registra tudo de uma vez)
+══════════════════════════════ */
+.lv-grade{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,1fr);gap:16px;align-items:start;max-width:1400px;margin:0 auto}
+.lv-col-leitor{min-width:0}
+.lv-col-leva{position:sticky;top:0;display:flex;flex-direction:column;min-height:320px;max-height:calc(100vh - 190px);background:#fff;border-radius:16px;box-shadow:0 1px 3px rgba(26,26,46,.08),0 8px 28px rgba(26,26,46,.07);overflow:hidden}
+.lv-cab{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 18px 0}
+.lv-cab-t1{font-size:15px;font-weight:800;color:var(--azul)}
+.lv-cab-t2{font-size:14px;color:var(--texto2);margin-top:2px}
+.lv-desc{flex-shrink:0;background:#fff;border:1px solid var(--cinza3);color:var(--texto2);border-radius:999px;padding:0 16px;min-height:42px;font-size:13px;font-weight:700;cursor:pointer}
+.lv-num{display:flex;align-items:baseline;gap:10px;padding:4px 18px 12px;border-bottom:1px solid var(--cinza2)}
+.lv-num b{font-size:60px;line-height:1;font-weight:900;color:var(--azul);font-variant-numeric:tabular-nums;letter-spacing:-2px}
+.lv-num span{font-size:17px;font-weight:700;color:var(--texto2)}
+.lv-itens{flex:1;min-height:0;overflow-y:auto}
+.lv-item{display:grid;grid-template-columns:minmax(0,1fr) auto 62px;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid #f0f1f4}
+.lv-item-id b{display:block;font-size:17px;font-weight:900;color:var(--azul)}
+.lv-item-id span{font-size:13px;color:var(--texto2);font-weight:600}
+.lv-item-pc{font-size:13px;color:var(--texto2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.lv-item-n{font-size:28px;font-weight:900;text-align:right;color:var(--azul);font-variant-numeric:tabular-nums}
+.lv-item-novo{animation:lvNovo 1.4s ease}
+@keyframes lvNovo{0%,30%{background:#d7f5e4}100%{background:transparent}}
+.lv-vazio{flex:1;display:flex;align-items:center;justify-content:center;padding:28px 22px;text-align:center;color:var(--texto2);font-size:15px;line-height:1.55}
+.lv-banner{margin:12px 16px 4px;padding:12px 14px;border-radius:12px;background:#fff6e5;color:#6b4300;font-size:14px;line-height:1.45}
+.lv-banner.envio{background:#eef1f7;color:var(--azul)}
+.lv-lista{border-top:1px solid var(--cinza2)}
+.lv-lista summary{padding:13px 18px;font-size:14px;font-weight:800;color:var(--azul3);cursor:pointer;min-height:44px}
+.lv-lista ol{list-style:none;max-height:260px;overflow-y:auto;padding:0 12px 8px 18px}
+.lv-lista li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 6px;border-bottom:1px solid #f0f1f4;font-size:14px;color:var(--azul)}
+.lv-lista li small{display:block;color:var(--texto2);font-size:12px;white-space:pre-wrap;margin-top:1px}
+.lv-lista li.lv-inv{background:#fff0f0;border-radius:8px}
+.lv-lista li.lv-inv small{color:#a32626;font-weight:700}
+.lv-x{width:44px;height:44px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border:1px solid var(--cinza3);border-radius:12px;background:#fff;color:#c0392b;cursor:pointer}
+.lv-rodape{padding:14px 16px 16px;border-top:1px solid var(--cinza2);background:#fff}
+.lv-registrar{width:100%;min-height:62px;border:none;border-radius:14px;background:var(--verde);color:#fff;font-size:18px;font-weight:900;cursor:pointer}
+.lv-registrar.saida{background:var(--laranja)}
+.lv-registrar.incerto{background:#c77700}
+.lv-registrar:disabled{background:var(--cinza2);color:#98a0b3;cursor:not-allowed}
+.lv-registrar:not(:disabled):active{transform:scale(.98)}
+.lv-digitar{margin-top:12px;padding:12px 14px;background:#fff;border-radius:14px;box-shadow:0 1px 3px rgba(26,26,46,.08)}
+.lv-digitar label{display:block;margin-bottom:8px;font-size:13px;font-weight:700;color:var(--texto2)}
+.lv-digitar-linha{display:flex;gap:8px}
+.lv-digitar input{flex:1;min-width:0;height:54px;padding:0 14px;border:2px solid var(--cinza3);border-radius:12px;font-size:20px;font-weight:800;color:var(--azul);font-variant-numeric:tabular-nums;background:#fff;text-transform:uppercase;letter-spacing:.5px;user-select:text}
+.lv-digitar input::placeholder{text-transform:none;letter-spacing:0;font-weight:700;color:#9aa1b2}
+.lv-digitar input:focus{outline:none;border-color:var(--azul3)}
+.lv-digitar-ret{margin-top:10px;padding:10px 12px;border-radius:10px;border-left:6px solid #34d27b;background:#eaf7ef;color:#155c3a;font-size:15px;line-height:1.35}
+.lv-digitar-ret[data-tipo="aviso"]{border-left-color:#f5b041;background:#fff6e5;color:#6b4300}
+.lv-digitar-ret[data-tipo="erro"]{border-left-color:#e5484d;background:#fff0f0;color:#8f1d1d}
+.lv-digitar-ret b{display:block;font-weight:900;white-space:pre-wrap}
+.lv-digitar-ret small{display:block;margin-top:2px;font-size:13px;font-weight:600;white-space:pre-wrap;opacity:.9}
+.lv-digitar button{height:54px;padding:0 22px;border:none;border-radius:12px;background:var(--azul);color:#fff;font-size:15px;font-weight:800;cursor:pointer}
+@media (max-width:900px){
+  .lv-grade{grid-template-columns:1fr}
+  .lv-col-leva{position:static;max-height:none}
+  .lv-itens{max-height:none}
+  .lt-tela{height:46vh}
+  .lv-rodape{position:sticky;bottom:0;box-shadow:0 -6px 18px rgba(26,26,46,.08)}
+  .lv-num b{font-size:48px}
+}
+
+/* ── janela de confirmação / comprovante (só fecha pelos botões) ── */
+.mvm{position:fixed;inset:0;z-index:2000;display:flex;align-items:center;justify-content:center;padding:16px}
+.mvm-fundo{position:absolute;inset:0;background:rgba(15,17,28,.64)}
+.mvm-caixa{position:relative;display:flex;flex-direction:column;width:100%;max-width:580px;max-height:calc(100vh - 32px);background:#fff;border-radius:20px;box-shadow:0 30px 80px rgba(0,0,0,.45);overflow:hidden;animation:mvmEntra .18s ease-out;outline:none}
+.mvm-caixa.tremer{animation:mvmTreme .35s ease}
+@keyframes mvmEntra{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes mvmTreme{0%,100%{transform:none}25%{transform:translateX(-9px)}75%{transform:translateX(9px)}}
+#mvm-conteudo{display:flex;flex-direction:column;flex:1;min-height:0}
+.mvm-cab{padding:22px 24px 14px;border-top:6px solid var(--azul);border-bottom:1px solid var(--cinza2)}
+.mvm-cab h2{font-size:23px;font-weight:900;color:var(--azul);line-height:1.2}
+.mvm-cab p{margin-top:4px;font-size:15px;color:var(--texto2)}
+.mvm-cab.saida{border-top-color:var(--laranja)}
+.mvm-cab.entrada{border-top-color:var(--verde)}
+.mvm-cab.ok{border-top-color:var(--verde);background:#effaf4}
+.mvm-cab.ok svg{display:block;margin-bottom:6px;color:var(--verde)}
+.mvm-cab.erro{border-top-color:#e5484d;background:#fff2f2}
+.mvm-cab.aviso{border-top-color:#f5a524;background:#fff8ea}
+.mvm-corpo{flex:1;min-height:0;overflow-y:auto;padding:14px 24px}
+.mvm-centro{display:flex;justify-content:center;padding:44px 24px}
+.mvm-gira{width:48px;height:48px;border:5px solid var(--cinza2);border-top-color:var(--azul);border-radius:50%;animation:mvmGira .8s linear infinite}
+@keyframes mvmGira{to{transform:rotate(360deg)}}
+.mvm-tab{width:100%;border-collapse:collapse;font-size:15px;color:var(--azul)}
+.mvm-tab th{padding:6px;border-bottom:2px solid var(--cinza2);text-align:left;font-size:12px;font-weight:700;color:var(--texto2)}
+.mvm-tab td{padding:9px 6px;border-bottom:1px solid #f0f1f4}
+.mvm-tab .n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mvm-tab td.cx{font-size:19px;font-weight:900}
+.mvm-tab tfoot td{padding-top:11px;border-top:2px solid var(--azul);border-bottom:0;font-size:15px;font-weight:900}
+.mvm-tab tfoot td.cx{font-size:24px}
+.mvm-txt{margin-top:12px;font-size:15px;line-height:1.5;color:#3d4459}
+.mvm-nota{margin-top:12px;padding:10px 12px;border-radius:10px;background:#eef6ff;color:#1d4f8a;font-size:14px;line-height:1.45}
+.mvm-alerta{margin-top:12px;padding:10px 12px;border-radius:10px;background:#fff6e5;color:#6b4300;font-size:14px;font-weight:600;line-height:1.45}
+.mvm-rodinha{margin-top:12px;font-size:13px;color:var(--texto2);line-height:1.45}
+.mvm-campo{display:block;margin-top:14px;font-size:14px;font-weight:700;color:#3d4459}
+.mvm-campo textarea{display:block;width:100%;margin-top:6px;padding:10px 12px;border:2px solid var(--cinza3);border-radius:12px;font:inherit;font-size:16px;font-weight:600;color:var(--azul);resize:vertical;user-select:text}
+.mvm-campo textarea:focus{outline:none;border-color:var(--azul3)}
+.mvm-inv{list-style:none;margin-top:8px}
+.mvm-inv li{margin-bottom:6px;padding:9px 12px;border-radius:10px;background:#fff2f2;font-size:15px;color:var(--azul)}
+.mvm-inv li span{margin-left:6px;font-size:13px;color:var(--texto2)}
+.mvm-inv li small{display:block;margin-top:2px;font-size:13px;font-weight:700;color:#a32626}
+.mvm-acoes{display:flex;gap:10px;padding:14px 24px 20px;border-top:1px solid var(--cinza2)}
+.mvm-acoes button{flex:1;min-height:58px;border:none;border-radius:14px;font-size:16px;font-weight:900;cursor:pointer}
+.mvm-sec{background:var(--cinza2);color:var(--azul)}
+.mvm-pri{background:var(--azul);color:#fff}
+.mvm-pri.saida{background:var(--laranja)}
+.mvm-pri.entrada{background:var(--verde)}
+.mvm-acoes button:active{transform:scale(.98)}
+@media (max-width:520px){.mvm{padding:0;align-items:flex-end}.mvm-caixa{max-height:94vh;border-radius:20px 20px 0 0}.mvm-acoes{flex-direction:column-reverse}}
+@media (prefers-reduced-motion:reduce){.lt-tela *,.lv-item-novo,.mvm-caixa{animation:none!important}}
+
+/* ══════════════════════════════
    CONSULTA — busca de peças
 ══════════════════════════════ */
 .cq-search-wrap{position:relative;margin-bottom:14px}
@@ -1628,108 +1839,53 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
       </div>
     </div>
 
+    <div id="mov-sel-conf2" style="display:none;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 160px);gap:16px;padding:0 12px">
+      <div style="font-size:19px;font-weight:900;color:var(--azul);text-align:center">Quem confere esta entrada?</div>
+      <div style="font-size:14px;color:var(--texto2);text-align:center;max-width:440px;line-height:1.5">O conferente 2 vale para todas as caixas desta leva. Caixa produzida por ele mesmo é recusada na hora: essa precisa ser conferida por outra pessoa.</div>
+      <div class="op-sel-grid" id="mov-g-conf2"></div>
+    </div>
+
     <div id="mov-conteudo" style="display:none">
+      <div class="lv-grade">
+        <section class="lv-col-leitor">
+          <div id="mov-leitor"></div>
+          <form class="lv-digitar" onsubmit="movDigitarCodigo();return false" autocomplete="off">
+            <label for="mov-input-digitado">A câmera não leu? Digite o número curto ou o código antigo da etiqueta</label>
+            <div class="lv-digitar-linha">
+              <input type="text" id="mov-input-digitado" inputmode="text" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="Ex.: 4821-7 ou A6C6-76D6-BF41"/>
+              <button type="submit">Adicionar</button>
+            </div>
+            <div class="lv-digitar-ret" id="mov-digitar-ret" hidden></div>
+          </form>
+          <div class="mov-fallback"><button type="button" onclick="movAbrirManual()">Etiqueta rasgada ou ilegível? Movimentar manualmente</button></div>
 
-    <div class="mov-ultima" id="mov-ultima">
-      <div class="mov-ultima-hd">Última bipagem</div>
-      <div class="mov-ultima-corpo">
-        <div class="mov-ultima-ico" id="mov-ultima-ico">✅</div>
-        <div class="mov-ultima-txt">
-          <div class="mov-ultima-peca" id="mov-ultima-peca">—</div>
-          <div class="mov-ultima-det" id="mov-ultima-det">—</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="mov-popup" id="mov-entrada-conferir-popup" style="display:none">
-      <div style="font-size:11px;font-weight:800;color:var(--texto2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📥 Etiqueta lida — quem é o Conferente Nº 2?</div>
-      <div id="mov-entrada-conferir-info" style="background:var(--cinza);border-radius:8px;padding:12px;margin-bottom:12px"></div>
-      <div id="mov-entrada-conferir-grid"></div>
-    </div>
-
-
-    <div class="mov-popup" id="mov-saida-conferir-popup" style="display:none;text-align:center">
-      <div style="font-size:11px;font-weight:800;color:var(--texto2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📤 Confira a etiqueta lida</div>
-      <div id="mov-saida-conferir-info" style="background:var(--cinza);border-radius:8px;padding:12px;margin-bottom:12px;text-align:left"></div>
-      <button class="mb-save" style="width:100%;padding:14px;border-radius:8px;border:none;font-size:15px;font-weight:800;cursor:pointer;min-height:48px" onclick="movConferirSaidaAtual()">✅ Conferido — Adicionar à Leva</button>
-    </div>
-
-
-    <div class="mov-popup" id="mov-saida-lista-box" style="display:none">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div class="mov-ultima-hd" style="margin:0">📋 Histórico desta saída (já registrada)</div>
-        <button onclick="document.getElementById('mov-saida-lista-box').style.display='none'" style="background:var(--cinza2);border:none;width:26px;height:26px;border-radius:50%;font-size:14px;cursor:pointer;color:var(--texto2);flex-shrink:0">✕</button>
-      </div>
-      <div id="mov-saida-lista" style="display:flex;flex-direction:column;gap:4px;max-height:35vh;overflow-y:auto"></div>
-    </div>
-
-    <div class="mov-scan-box">
-      <div class="mov-scan-lbl"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg> Leitura de QR Code</div>
-
-      <div id="mov-cam-fechada" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:var(--cinza);border-radius:var(--radius);padding:40px 20px;border:2px dashed var(--cinza3)">
-        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="var(--azul3)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
-        <div style="font-size:13px;color:var(--texto2);text-align:center;max-width:280px">A câmera fica desligada até você apertar — evita ler uma etiqueta sem querer.</div>
-        <button onclick="movAbrirCameraParaEscanear()" style="background:var(--azul3);color:#fff;border:none;padding:16px 28px;border-radius:var(--radius);font-size:16px;font-weight:900;cursor:pointer;min-height:48px;display:flex;align-items:center;gap:8px">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
-          Abrir Câmera pra Escanear
-        </button>
-      </div>
-
-      <div id="mov-cam-aberta" style="display:none">
-        <div class="mov-cam-wrap">
-          <video id="mov-cam-video" autoplay playsinline muted></video>
-          <div class="mov-cam-mira">
-            <span class="cam-corner tl"></span>
-            <span class="cam-corner tr"></span>
-            <span class="cam-corner bl"></span>
-            <span class="cam-corner br"></span>
-            <span class="cam-scanline"></span>
+          <div class="mov-manual-box" id="mov-manual-box">
+            <div class="mov-manual-aviso">⚠️ <span>Movimentação manual (sem leitura de etiqueta) exige senha de administrador, pois não há como o sistema confirmar sozinho a informação. Ela é gravada na hora, separada da leva.</span></div>
+            <div class="fg"><label>Peça</label><select id="mm-peca" class="inp-mm" onchange="movAtualizarMateriaisManual()"></select></div>
+            <div class="fg"><label>Material</label><select id="mm-mat" class="inp-mm"></select></div>
+            <div class="fg-row">
+              <div class="fg"><label>Lote (opcional)</label><input type="text" id="mm-lote" placeholder="Ex: 13590"/></div>
+              <div class="fg"><label>Qtd. de Caixas</label><input type="number" id="mm-qtd" value="1" min="1"/></div>
+            </div>
+            <div class="fg"><label>Motivo</label><input type="text" id="mm-motivo" placeholder="Ex: Etiqueta rasgada / Perda / Contagem física"/></div>
+            <div class="fg"><label>Senha Admin</label><input type="password" id="mm-senha" placeholder="••••••••"/></div>
+            <div class="mb-acts">
+              <button class="mb-cancel" type="button" onclick="movFecharManual()">Cancelar</button>
+              <button class="mb-save" type="button" id="mm-btn" onclick="movConfirmarManual()">💾 Registrar Manual</button>
+            </div>
           </div>
-          <div class="mov-cam-status" id="mov-cam-status">Iniciando câmera...</div>
-        </div>
-        <button onclick="movFecharCameraManual()" style="width:100%;margin-top:10px;background:var(--cinza2);color:var(--texto2);border:none;padding:12px;border-radius:var(--radius-sm);font-size:13px;font-weight:800;cursor:pointer;min-height:44px">✕ Fechar câmera</button>
-      </div>
-
-      <canvas id="mov-cam-canvas" style="display:none"></canvas>
-      <div style="display:flex;gap:8px;margin-top:12px">
-        <input type="text" id="mov-input-digitado" inputmode="numeric" autocomplete="off" placeholder="Câmera não lê? Digite o nº da etiqueta (ex. 4821-7)" style="flex:1;min-width:0;padding:12px;border:2px solid var(--cinza3);border-radius:var(--radius-sm);font-size:14px;font-weight:700" onkeydown="if(event.key==='Enter')movDigitarCodigo()"/>
-        <button onclick="movDigitarCodigo()" style="background:var(--azul3);color:#fff;border:none;padding:12px 18px;border-radius:var(--radius-sm);font-size:14px;font-weight:800;cursor:pointer;min-height:44px">OK</button>
-      </div>
-      <div class="mov-fallback"><button onclick="movAbrirManual()">Etiqueta rasgada ou ilegível? Movimentar manualmente →</button></div>
-    </div>
-
-    <div class="mov-manual-box" id="mov-manual-box">
-      <div class="mov-manual-aviso">⚠️ <span>Movimentação manual (sem leitura de etiqueta) exige senha de administrador, pois não há como o sistema confirmar sozinho a informação.</span></div>
-      <div class="fg"><label>Peça</label><select id="mm-peca" class="inp-mm" onchange="movAtualizarMateriaisManual()"></select></div>
-      <div class="fg"><label>Material</label><select id="mm-mat" class="inp-mm"></select></div>
-      <div class="fg-row">
-        <div class="fg"><label>Lote (opcional)</label><input type="text" id="mm-lote" placeholder="Ex: 13590"/></div>
-        <div class="fg"><label>Qtd. de Caixas</label><input type="number" id="mm-qtd" value="1" min="1"/></div>
-      </div>
-      <div class="fg"><label>Motivo</label><input type="text" id="mm-motivo" placeholder="Ex: Etiqueta rasgada / Perda / Contagem física"/></div>
-      <div class="fg"><label>Senha Admin</label><input type="password" id="mm-senha" placeholder="••••••••"/></div>
-      <div class="mb-acts">
-        <button class="mb-cancel" onclick="movFecharManual()">Cancelar</button>
-        <button class="mb-save" onclick="movConfirmarManual()">💾 Registrar Manual</button>
+        </section>
+        <aside class="lv-col-leva" id="mov-leva" aria-live="polite"></aside>
       </div>
     </div>
 
-    <div class="mov-estoque-hd">
-      <div class="mov-estoque-titulo">📦 Caixas bipadas nesta sessão</div>
-    </div>
-    <div class="mov-scan-box" style="margin-bottom:0">
-      <div id="mov-hist-entrada-wrap" style="display:none">
-        <div id="mov-entrada-lista" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px;max-height:40vh;overflow-y:auto"></div>
-        <button id="mov-entrada-confirmar-btn" class="mb-save" style="width:100%;padding:14px;border-radius:8px;border:none;font-size:15px;font-weight:800;cursor:pointer;min-height:48px" onclick="movConfirmarEntradas()" disabled>Escaneie ao menos uma caixa</button>
-      </div>
-      <div id="mov-hist-saida-wrap" style="display:none">
-        <div id="mov-saida-pendentes-lista" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px;max-height:40vh;overflow-y:auto"></div>
-        <button id="mov-saida-confirmar-btn" class="mb-save" style="width:100%;padding:14px;border-radius:8px;border:none;font-size:15px;font-weight:800;cursor:pointer;min-height:48px" onclick="movConfirmarSaidas()" disabled>Escaneie ao menos uma caixa</button>
-      </div>
-    </div>
-
-    </div>
   </div>
+</div>
+
+<!-- Janela de confirmação/comprovante da leva — NÃO fecha clicando fora, só pelos botões -->
+<div id="mvm" class="mvm" hidden>
+  <div class="mvm-fundo" onclick="mvmTremer()"></div>
+  <div class="mvm-caixa" role="dialog" aria-modal="true" tabindex="-1"><div id="mvm-conteudo"></div></div>
 </div>
 
 <!-- ════════ CONSULTA (pública) ════════ -->
@@ -3173,6 +3329,7 @@ function clicarAvisoBalanco(){
   });
 }
 function voltarInicio(){
+  if(typeof movPodeSair==='function'&&!movPodeSair()) return;
   S.modo=null; S.adm=false;
   movPararCamera();
   verifFecharCamera();
@@ -3486,86 +3643,42 @@ function cancelarBalancoConfirm(id){
 }
 
 // ── Execução da contagem (bipagem física + reconciliação) ──
-var _balCamStream=null, _balCamRAF=null, _balCamPausado=false, _balCamCooldownAte=0;
+var _balLeitor=null;
 function iniciarContagemBalanco(id,escopoCodigo,escopoNome){
   S.balancoAtivoExec={ id:id, escopoCodigo:escopoCodigo||null, escopoNome:escopoNome };
   S.balancoBipadas=[]; S.balancoInfo={}; S._balEmConsulta={};
   var salvo=balCarregarProgresso(id);
   if(salvo){ S.balancoBipadas=salvo.ids||[]; S.balancoInfo=salvo.info||{}; }
   google.script.run.withSuccessHandler(function(){}).withFailureHandler(function(){}).iniciarBalanco(id);
+  if(_balLeitor){ _balLeitor.destruir(); _balLeitor=null; }
   var inner=document.getElementById('adm-balanco-inner');
   inner.innerHTML=
     '<div class="mov-estoque-hd"><div class="mov-estoque-titulo">📋 Contagem: '+escopoNome+'</div></div>'+
     '<div class="mov-scan-box">'+
       '<div class="mov-scan-lbl">Bipe cada caixa que estiver fisicamente no chão de fábrica</div>'+
-      '<div id="bal-cam-fechada" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:var(--cinza);border-radius:var(--radius);padding:32px 20px;border:2px dashed var(--cinza3)">'+
-        '<button onclick="balAbrirCamera()" style="background:var(--azul3);color:#fff;border:none;padding:14px 24px;border-radius:var(--radius);font-size:15px;font-weight:900;cursor:pointer;min-height:48px">📷 Abrir Câmera</button>'+
-      '</div>'+
-      '<div id="bal-cam-aberta" style="display:none">'+
-        '<div class="mov-cam-wrap"><video id="bal-cam-video" autoplay playsinline muted></video>'+
-          '<div class="mov-cam-mira"><span class="cam-corner tl"></span><span class="cam-corner tr"></span><span class="cam-corner bl"></span><span class="cam-corner br"></span><span class="cam-scanline"></span></div>'+
-          '<div class="mov-cam-status" id="bal-cam-status">Iniciando câmera...</div></div>'+
-        '<button onclick="balFecharCamera()" style="width:100%;margin-top:10px;background:var(--cinza2);color:var(--texto2);border:none;padding:12px;border-radius:var(--radius-sm);font-size:13px;font-weight:800;cursor:pointer;min-height:44px">✕ Fechar câmera</button>'+
-      '</div>'+
-      '<canvas id="bal-cam-canvas" style="display:none"></canvas>'+
-      '<div style="display:flex;gap:8px;margin-top:12px">'+
-        '<input type="text" id="bal-input-digitado" inputmode="numeric" autocomplete="off" placeholder="Câmera não lê? Digite o nº da etiqueta" style="flex:1;min-width:0;padding:12px;border:2px solid var(--cinza3);border-radius:var(--radius-sm);font-size:14px;font-weight:700" onkeydown="if(event.key===\'Enter\')balDigitarCodigo()"/>'+
-        '<button onclick="balDigitarCodigo()" style="background:var(--azul3);color:#fff;border:none;padding:12px 18px;border-radius:var(--radius-sm);font-size:14px;font-weight:800;cursor:pointer;min-height:44px">OK</button>'+
-      '</div>'+
+      '<div id="bal-leitor"></div>'+
+      '<form class="lv-digitar" onsubmit="balDigitarCodigo();return false" autocomplete="off">'+
+        '<label for="bal-input-digitado">A câmera não leu? Digite o número curto ou o código antigo da etiqueta</label>'+
+        '<div class="lv-digitar-linha"><input type="text" id="bal-input-digitado" inputmode="text" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="Ex.: 4821-7 ou A6C6-76D6-BF41"/><button type="submit">Adicionar</button></div>'+
+      '</form>'+
     '</div>'+
     '<div class="mov-ultima vis"><div class="mov-ultima-hd">Caixas bipadas nesta contagem</div>'+
       '<div style="font-size:32px;font-weight:900;color:var(--azul)" id="bal-contador">0</div>'+
       '<div id="bal-lista-bipadas" style="max-height:45vh;overflow-y:auto;font-size:12px;color:var(--texto2)"></div>'+
     '</div>'+
     '<button class="btn-filtrar" style="margin-top:10px" onclick="balFinalizarContagem()">✅ Finalizar Contagem e Ver Diferenças</button>';
+  _balLeitor=Leitor.criar({ container:document.getElementById('bal-leitor'), rotulo:'caixas contadas',
+    onCodigo:function(txt){ balRegistrarBipagem(extrairIdCaixa(txt)); } });
   balRenderLista();
   if(S.balancoBipadas.length) toast('Contagem retomada: '+S.balancoBipadas.length+' caixa(s) já bipada(s) neste aparelho','aviso');
 }
-function balAbrirCamera(){
-  document.getElementById('bal-cam-fechada').style.display='none';
-  document.getElementById('bal-cam-aberta').style.display='block';
-  var status=document.getElementById('bal-cam-status');
-  if(typeof jsQR==='undefined'){ status.textContent='Erro: biblioteca de QR não carregou.'; return; }
-  navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal:'environment' } }, audio:false })
-    .then(function(stream){
-      _balCamStream=stream;
-      var video=document.getElementById('bal-cam-video');
-      video.srcObject=stream;
-      video.onloadedmetadata=function(){ video.play(); status.classList.add('oculto'); balLoopCamera(); };
-    })
-    .catch(function(e){ status.textContent='Não foi possível acessar a câmera ('+(e&&e.name?e.name:'erro')+').'; });
+function balFecharCamera(){ if(_balLeitor) _balLeitor.fechar(); }
+function balRetorno(tipo,titulo,detalhe){
+  if(_balLeitor&&_balLeitor.aberto()){ _balLeitor.retorno(tipo,titulo,detalhe); return; }
+  Leitor.som(tipo); Leitor.vibrar(tipo);
+  if(tipo!=='ok') toast(titulo+(detalhe?': '+detalhe:''),tipo==='aviso'?'aviso':'erro');
 }
-function balFecharCamera(){
-  if(_balCamRAF){ cancelAnimationFrame(_balCamRAF); _balCamRAF=null; }
-  if(_balCamStream){ _balCamStream.getTracks().forEach(function(t){ t.stop(); }); _balCamStream=null; }
-  var fechada=document.getElementById('bal-cam-fechada'); var aberta=document.getElementById('bal-cam-aberta');
-  if(aberta) aberta.style.display='none';
-  if(fechada) fechada.style.display='flex';
-}
-function balLoopCamera(){
-  var video=document.getElementById('bal-cam-video');
-  var canvas=document.getElementById('bal-cam-canvas');
-  var ctx=canvas.getContext('2d', { willReadFrequently:true });
-  function tick(){
-    if(!_balCamStream) return;
-    if(video.readyState===video.HAVE_ENOUGH_DATA && !_balCamPausado && Date.now()>=_balCamCooldownAte){
-      canvas.width=video.videoWidth; canvas.height=video.videoHeight;
-      ctx.drawImage(video,0,0,canvas.width,canvas.height);
-      try{
-        var img=ctx.getImageData(0,0,canvas.width,canvas.height);
-        var codigo=jsQR(img.data,img.width,img.height,{ inversionAttempts:'attemptBoth' });
-        if(codigo && codigo.data){
-          _balCamCooldownAte=Date.now()+1800;
-          var raw=String(codigo.data).trim(); var caixaId=raw;
-          try{ var j=JSON.parse(raw); if(j&&j.id) caixaId=j.id; }catch(e){}
-          balRegistrarBipagem(caixaId);
-        }
-      }catch(e){ console.error('Erro na leitura de QR:',e); }
-    }
-    _balCamRAF=requestAnimationFrame(tick);
-  }
-  _balCamRAF=requestAnimationFrame(tick);
-}
+function balAtualizarPendentes(){ if(_balLeitor) _balLeitor.pendentes(Object.keys(S._balEmConsulta||{}).length); }
 // Progresso da contagem fica salvo NO APARELHO — se a página recarregar ou o tablet desligar
 // no meio de um balanço grande, não perde o que já foi bipado.
 function balChaveProgresso(id){ return 'vitalbor_balanco_'+id; }
@@ -3580,27 +3693,27 @@ function balLimparProgresso(id){ try{ localStorage.removeItem(balChaveProgresso(
 
 function balRegistrarBipagem(caixaId){
   var exec=S.balancoAtivoExec; if(!exec) return;
+  caixaId=String(caixaId||'').replace(/[^A-Za-z0-9]/g,'').toUpperCase(); if(!caixaId) return;
   S.balancoBipadas=S.balancoBipadas||[]; S.balancoInfo=S.balancoInfo||{}; S._balEmConsulta=S._balEmConsulta||{};
-  if(S.balancoBipadas.indexOf(caixaId)>=0){ mostrarErroScan('Essa caixa já foi contada'); return; }
+  if(S.balancoBipadas.indexOf(caixaId)>=0){ var i0=S.balancoInfo[caixaId]||{}; balRetorno('aviso','Já foi contada',(i0.cod||'')+'  '+(i0.mat||'')); return; }
   if(S._balEmConsulta[caixaId]) return;
-  S._balEmConsulta[caixaId]=true;
-  google.script.run
-    .withSuccessHandler(function(d){
-      delete S._balEmConsulta[caixaId];
-      if(!d){ mostrarErroScan('Caixa não encontrada no sistema. Confira o número.'); return; }
-      if(exec.escopoCodigo && d.CodigoPeca!==exec.escopoCodigo){
-        mostrarErroScan('Essa caixa é '+d.CodigoPeca+' — fora do escopo deste balanço ('+exec.escopoNome+'). Não foi contada.');
-        return;
-      }
-      if(S.balancoBipadas.indexOf(caixaId)>=0) return;
-      tocarBeep();
-      S.balancoBipadas.push(caixaId);
-      S.balancoInfo[caixaId]={ cod:d.CodigoPeca, peca:d.Peca, mat:d.Material, lote:d.Lote, seq:d.Seq||null, num:d.NumeroCaixa };
-      balSalvarProgresso();
-      balRenderLista();
-    })
-    .withFailureHandler(function(e){ delete S._balEmConsulta[caixaId]; mostrarErroScan('Erro: '+(e?e.message:'')); })
-    .getCaixaPorId(caixaId);
+  S._balEmConsulta[caixaId]=true; balAtualizarPendentes();
+  backend.consultarCaixa(caixaId).then(function(d){
+    delete S._balEmConsulta[caixaId]; balAtualizarPendentes();
+    if(S.balancoAtivoExec!==exec) return;
+    if(!d){ balRetorno('erro','Caixa não encontrada','Esse código não existe no sistema. Confira o número.'); return; }
+    if(exec.escopoCodigo&&d.CodigoPeca!==exec.escopoCodigo){ balRetorno('erro','Fora do escopo','Essa caixa é '+d.CodigoPeca+'. Este balanço é de '+exec.escopoNome+'. Ela não foi contada.'); return; }
+    if(S.balancoBipadas.indexOf(caixaId)>=0) return;
+    S.balancoBipadas.push(caixaId);
+    S.balancoInfo[caixaId]={ cod:d.CodigoPeca, peca:d.Peca, mat:d.Material, lote:d.Lote, seq:d.Seq||null, num:d.NumeroCaixa };
+    balSalvarProgresso();
+    balRenderLista();
+    balRetorno('ok',d.CodigoPeca+'   '+d.Material,'Lote '+(d.Lote||'—')+'   Caixa '+(d.NumeroCaixa||'—'));
+  }).catch(function(){
+    delete S._balEmConsulta[caixaId]; balAtualizarPendentes();
+    if(_balLeitor) _balLeitor.esquecer();
+    balRetorno('erro','Sem conexão','A caixa não foi contada. Bipe de novo.');
+  });
 }
 function balRemoverBipagem(caixaId){
   var info=(S.balancoInfo||{})[caixaId]||{};
@@ -3615,6 +3728,7 @@ function balRenderLista(){
   if(!cont||!lista) return;
   var ids=S.balancoBipadas||[], info=S.balancoInfo||{};
   cont.textContent=ids.length;
+  if(_balLeitor) _balLeitor.contador(ids.length);
   // resumo por peça × material
   var resumo={};
   ids.forEach(function(id){ var i=info[id]||{}; var k=(i.cod||'?')+' · '+(i.mat||'?'); resumo[k]=(resumo[k]||0)+1; });
@@ -4610,13 +4724,332 @@ function imprimirTodas(){
 // ═══════════════════════════════════════
 // MOVIMENTAÇÃO DE ESTOQUE
 // ═══════════════════════════════════════
+// ═══════════════════════════════════════
+// LEITOR DE QR CODE (câmera) — usado na movimentação e no balanço
+// • leitura nativa do aparelho (BarcodeDetector) quando existe; senão jsQR
+// • só lê o que está DENTRO da moldura (não pega etiqueta da caixa do lado)
+// • a mesma etiqueta parada na frente da câmera não é lida de novo
+// • lanterna e zoom quando o aparelho deixa; tela não apaga com a câmera aberta
+// • solta a câmera sozinho quando a tela some (trocou de página, minimizou)
+// ═══════════════════════════════════════
+var Leitor=(function(){
+  var ctxAudio=null;
+  function audio(){
+    try{
+      if(!ctxAudio){ var C=window.AudioContext||window.webkitAudioContext; if(!C) return null; ctxAudio=new C(); }
+      if(ctxAudio.state==='suspended') ctxAudio.resume();
+    }catch(e){ ctxAudio=null; }
+    return ctxAudio;
+  }
+  function tom(freq,ini,dur,forma,vol){
+    var c=audio(); if(!c) return;
+    try{
+      var o=c.createOscillator(), g=c.createGain(), t=c.currentTime+(ini||0);
+      o.type=forma||'square'; o.frequency.value=freq; o.connect(g); g.connect(c.destination);
+      g.gain.setValueAtTime(vol||.5,t); g.gain.exponentialRampToValueAtTime(.001,t+dur);
+      o.start(t); o.stop(t+dur+.03);
+    }catch(e){}
+  }
+  function som(tipo){
+    if(tipo==='ok'){ tom(1250,0,.08,'square',.45); tom(1700,.09,.1,'square',.45); }
+    else if(tipo==='aviso'){ tom(760,0,.11,'triangle',.6); tom(760,.17,.11,'triangle',.6); }
+    else { tom(170,0,.45,'sawtooth',.6); }
+  }
+  function vibrar(tipo){ try{ if(navigator.vibrate) navigator.vibrate(tipo==='ok'?35:(tipo==='aviso'?[50,70,50]:[200,90,200])); }catch(e){} }
+
+  var ICO={
+    camera:'<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>',
+    luz:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2h8v4l-2 3v13h-4V9L8 6z"/><line x1="12" y1="12" x2="12" y2="14"/></svg>',
+    fechar:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>'
+  };
+
+  function criar(op){
+    op=op||{};
+    var el=op.container; if(!el) return null;
+    el.classList.add('lt');
+    el.innerHTML=
+      '<div class="lt-fechado">'+
+        '<div class="lt-f-ico">'+ICO.camera+'</div>'+
+        '<div class="lt-f-tit">Câmera desligada</div>'+
+        '<div class="lt-f-sub">Ela só liga quando você tocar no botão, para não ler etiqueta sem querer.</div>'+
+        '<button type="button" class="lt-abrir">Abrir câmera</button>'+
+      '</div>'+
+      '<div class="lt-tela" hidden>'+
+        '<video playsinline muted autoplay></video>'+
+        '<div class="lt-mira" aria-hidden="true"><i></i><i></i><i></i><i></i></div>'+
+        '<div class="lt-ctrl">'+
+          '<button type="button" class="lt-b lt-luz" aria-pressed="false" title="Lanterna">'+ICO.luz+'<span>Lanterna</span></button>'+
+          '<button type="button" class="lt-b lt-zoom" hidden title="Zoom"><span>1×</span></button>'+
+          '<button type="button" class="lt-b lt-x" title="Fechar câmera" aria-label="Fechar câmera">'+ICO.fechar+'</button>'+
+        '</div>'+
+        '<div class="lt-cont"><b>0</b><span>'+(op.rotulo||'caixas')+'</span></div>'+
+        '<div class="lt-pend" hidden></div>'+
+        '<div class="lt-ret" hidden><div class="lt-ret-tit"></div><div class="lt-ret-det"></div></div>'+
+        '<div class="lt-msg">Ligando a câmera…</div>'+
+      '</div>';
+    function q(s){ return el.querySelector(s); }
+    var fechadoEl=q('.lt-fechado'), tela=q('.lt-tela'), video=q('video'), mira=q('.lt-mira'), msgEl=q('.lt-msg'),
+        btLuz=q('.lt-luz'), btZoom=q('.lt-zoom'), ret=q('.lt-ret'), contEl=q('.lt-cont b'), pendEl=q('.lt-pend');
+    var canvas=document.createElement('canvas'), c2d=canvas.getContext('2d',{willReadFrequently:true});
+    var aberto=false, geracao=0, stream=null, track=null, timer=null, ocupado=false, pausado=false, detector=null,
+        ultimo={txt:'',t:0}, temLuz=false, luz=false, zooms=[], zi=0, wake=null, reabrir=false, timerRet=null, destruido=false;
+
+    function msg(t){ msgEl.textContent=t||''; msgEl.hidden=!t; }
+    function ajustarMira(){
+      var w=tela.clientWidth, h=tela.clientHeight; if(!w||!h) return;
+      var lado=Math.round(Math.min(w,h)*0.6);
+      mira.style.width=lado+'px'; mira.style.height=lado+'px';
+    }
+    function abrir(){
+      audio(); // libera o som (o navegador só deixa depois de um toque)
+      if(aberto||destruido) return;
+      aberto=true; geracao++;
+      fechadoEl.hidden=true; tela.hidden=false;
+      msg('Ligando a câmera…');
+      ajustarMira();
+      iniciar(geracao);
+    }
+    function textoErro(e){
+      var n=e&&e.name;
+      if(n==='NotAllowedError'||n==='SecurityError') return 'A câmera está bloqueada para este site. Toque no cadeado ao lado do endereço, libere a Câmera e abra de novo.';
+      if(n==='NotFoundError'||n==='OverconstrainedError') return 'Nenhuma câmera encontrada neste aparelho. Digite o número da etiqueta no campo abaixo.';
+      if(n==='NotReadableError'||n==='AbortError') return 'A câmera está ocupada por outro aplicativo. Feche o outro app e toque em Abrir câmera de novo.';
+      return 'Não foi possível ligar a câmera'+(n?' ('+n+')':'')+'. Digite o número da etiqueta no campo abaixo.';
+    }
+    async function iniciar(g){
+      if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ msg('Este navegador não deixa a página usar a câmera. Digite o número da etiqueta no campo abaixo.'); return; }
+      var pedidos=[
+        {audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}},
+        {audio:false,video:{facingMode:{ideal:'environment'}}},
+        {audio:false,video:true}
+      ];
+      var s=null, erro=null;
+      for(var i=0;i<pedidos.length&&!s;i++){
+        try{ s=await navigator.mediaDevices.getUserMedia(pedidos[i]); }
+        catch(e){ erro=e; if(e&&(e.name==='NotAllowedError'||e.name==='SecurityError')) break; }
+      }
+      if(g!==geracao||!aberto){ if(s) s.getTracks().forEach(function(t){ t.stop(); }); return; }
+      if(!s){ msg(textoErro(erro)); return; }
+      stream=s; track=s.getVideoTracks()[0]||null;
+      video.srcObject=s;
+      try{ await video.play(); }catch(e){}
+      if(video.readyState<2){
+        await new Promise(function(r){ var feito=false; function f(){ if(feito) return; feito=true; video.removeEventListener('loadeddata',f); r(); } video.addEventListener('loadeddata',f); setTimeout(f,3000); });
+      }
+      if(g!==geracao||!aberto) return;
+      msg('');
+      ajustarMira();
+      recursos();
+      setTimeout(function(){ if(g===geracao&&aberto&&!temLuz) recursos(); },1200); // alguns aparelhos só informam a lanterna depois
+      prepararDetector();
+      setTimeout(function(){ if(g===geracao&&aberto&&!detector&&typeof jsQR==='undefined') msg('O leitor de QR não carregou (sem internet?). Recarregue a página ou digite o número da etiqueta abaixo.'); },2000);
+      pedirTelaLigada();
+      agendar();
+    }
+    function recursos(){
+      if(!track) return;
+      var caps={}; try{ caps=track.getCapabilities?track.getCapabilities():{}; }catch(e){}
+      try{ if(caps.focusMode&&caps.focusMode.indexOf('continuous')>=0) track.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(function(){}); }catch(e){}
+      temLuz=!!caps.torch;
+      btLuz.classList.toggle('indisp',!temLuz);
+      if(caps.zoom&&typeof caps.zoom.max==='number'&&caps.zoom.max>caps.zoom.min){
+        var base=Math.max(1,caps.zoom.min||1);
+        zooms=[base,base*2,base*3].filter(function(z){ return z<=caps.zoom.max; });
+        if(zooms.length>1&&btZoom.hidden){ zi=0; btZoom.hidden=false; btZoom.querySelector('span').textContent='1×'; }
+      }
+    }
+    function prepararDetector(){
+      detector=null;
+      try{
+        if('BarcodeDetector' in window&&window.BarcodeDetector.getSupportedFormats){
+          window.BarcodeDetector.getSupportedFormats().then(function(f){
+            if(f&&f.indexOf('qr_code')>=0){ try{ detector=new window.BarcodeDetector({formats:['qr_code']}); }catch(e){ detector=null; } }
+          }).catch(function(){});
+        }
+      }catch(e){ detector=null; }
+    }
+    function agendar(){ clearTimeout(timer); if(aberto) timer=setTimeout(passo,detector?70:120); }
+    async function passo(){
+      if(!aberto) return;
+      if(!el.isConnected||el.getClientRects().length===0){ fechar(); return; } // a tela foi trocada: solta a câmera
+      if(!pausado&&!ocupado&&stream&&video.readyState>=2&&video.videoWidth){
+        ocupado=true;
+        try{ var txt=await ler(); if(txt&&aberto&&!pausado) entregar(txt); }catch(e){}
+        ocupado=false;
+      }
+      agendar();
+    }
+    // Alterna duas leituras: (1) só a moldura, em resolução maior — pega etiqueta longe/pequena;
+    // (2) a área visível inteira — pega etiqueta muito perto (maior que a moldura).
+    // Nas duas, só aceita o QR cujo CENTRO está dentro da moldura: etiqueta da caixa do lado é ignorada.
+    var alterna=false;
+    async function ler(){
+      var vw=video.videoWidth, vh=video.videoHeight, bw=tela.clientWidth, bh=tela.clientHeight;
+      if(!vw||!vh||!bw||!bh) return null;
+      var escala=Math.max(bw/vw,bh/vh);              // vídeo em object-fit: cover
+      var visW=Math.min(vw,bw/escala), visH=Math.min(vh,bh/escala);
+      var ladoMira=Math.min(bw,bh)*0.6/escala;        // moldura, em pixels do vídeo
+      var sx, sy, sw, sh;
+      alterna=!alterna;
+      if(alterna){ var l=Math.min(ladoMira*1.25,vw,vh); sx=(vw-l)/2; sy=(vh-l)/2; sw=l; sh=l; }
+      else { sx=(vw-visW)/2; sy=(vh-visH)/2; sw=visW; sh=visH; }
+      var k=Math.min(1,(detector?960:720)/Math.max(sw,sh));
+      var cw=Math.max(1,Math.round(sw*k)), ch=Math.max(1,Math.round(sh*k));
+      if(canvas.width!==cw||canvas.height!==ch){ canvas.width=cw; canvas.height=ch; }
+      c2d.drawImage(video,sx,sy,sw,sh,0,0,cw,ch);
+      var mx=(vw/2-sx)*k, my=(vh/2-sy)*k, meia=ladoMira*k/2*1.1;
+      function dentro(px,py){ return Math.abs(px-mx)<=meia&&Math.abs(py-my)<=meia; }
+      if(detector){
+        try{
+          var cods=await detector.detect(canvas), melhor=null, area=-1;
+          (cods||[]).forEach(function(c){
+            var b=c.boundingBox; if(!b) return;
+            if(!dentro(b.x+b.width/2,b.y+b.height/2)) return;
+            var a=b.width*b.height; if(a>area){ area=a; melhor=c; }
+          });
+          return melhor?(String(melhor.rawValue||'').trim()||null):null;
+        }catch(e){ detector=null; } // falhou: segue com o jsQR
+      }
+      if(typeof jsQR==='undefined') return null;
+      var img=c2d.getImageData(0,0,cw,ch);
+      var r=jsQR(img.data,cw,ch,{inversionAttempts:'dontInvert'});
+      if(!r||!r.data) return null;
+      var L=r.location;
+      if(L&&L.topLeftCorner){
+        var px=(L.topLeftCorner.x+L.topRightCorner.x+L.bottomLeftCorner.x+L.bottomRightCorner.x)/4;
+        var py=(L.topLeftCorner.y+L.topRightCorner.y+L.bottomLeftCorner.y+L.bottomRightCorner.y)/4;
+        if(!dentro(px,py)) return null;
+      }
+      return String(r.data).trim()||null;
+    }
+    function entregar(txt){
+      var agora=Date.now();
+      if(txt===ultimo.txt&&agora-ultimo.t<2500){ ultimo.t=agora; return; } // mesma etiqueta ainda na frente da câmera
+      ultimo={txt:txt,t:agora};
+      try{ if(op.onCodigo) op.onCodigo(txt); }catch(e){ console.error(e); }
+    }
+    function retorno(tipo,titulo,detalhe,o){
+      o=o||{};
+      ret.hidden=false; ret.setAttribute('data-tipo',tipo); ret.classList.remove('apagado');
+      ret.querySelector('.lt-ret-tit').textContent=titulo||'';
+      ret.querySelector('.lt-ret-det').textContent=detalhe||'';
+      tela.classList.remove('pisca-ok','pisca-aviso','pisca-erro'); void tela.offsetWidth; tela.classList.add('pisca-'+tipo);
+      clearTimeout(timerRet); timerRet=setTimeout(function(){ ret.classList.add('apagado'); },5000);
+      if(!o.semSom){ som(tipo); vibrar(tipo); }
+    }
+    function pedirTelaLigada(){ try{ if(navigator.wakeLock&&navigator.wakeLock.request) navigator.wakeLock.request('screen').then(function(w){ wake=w; }).catch(function(){}); }catch(e){} }
+    function soltarTela(){ try{ if(wake) wake.release(); }catch(e){} wake=null; }
+    function fechar(){
+      aberto=false; geracao++;
+      clearTimeout(timer); timer=null;
+      if(stream){ try{ stream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){} }
+      stream=null; track=null; luz=false; temLuz=false; zooms=[]; zi=0;
+      btLuz.setAttribute('aria-pressed','false'); btLuz.classList.remove('on'); btZoom.hidden=true;
+      try{ video.srcObject=null; }catch(e){}
+      soltarTela();
+      tela.hidden=true; fechadoEl.hidden=false;
+    }
+    function aoMudarVisibilidade(){
+      if(destruido) return;
+      if(!el.isConnected){ destruir(); return; }
+      if(document.hidden){ if(aberto){ reabrir=true; fechar(); } }
+      else if(reabrir){ reabrir=false; if(el.getClientRects().length) abrir(); }
+    }
+    function destruir(){ fechar(); destruido=true; document.removeEventListener('visibilitychange',aoMudarVisibilidade); window.removeEventListener('resize',ajustarMira); }
+    document.addEventListener('visibilitychange',aoMudarVisibilidade);
+    window.addEventListener('resize',ajustarMira);
+
+    q('.lt-abrir').onclick=abrir;
+    q('.lt-x').onclick=fechar;
+    btLuz.onclick=function(){
+      if(!track) return;
+      if(!temLuz){ retorno('aviso','Lanterna indisponível','Este aparelho ou navegador não deixa a página ligar a lanterna. No Android, use o Chrome.',{semSom:true}); return; }
+      var novo=!luz;
+      track.applyConstraints({advanced:[{torch:novo}]}).then(function(){
+        luz=novo; btLuz.setAttribute('aria-pressed',String(novo)); btLuz.classList.toggle('on',novo);
+      }).catch(function(){ retorno('erro','A lanterna não ligou','O aparelho recusou o comando. Feche e abra a câmera de novo.',{semSom:true}); });
+    };
+    btZoom.onclick=function(){
+      if(!track||zooms.length<2) return;
+      zi=(zi+1)%zooms.length;
+      track.applyConstraints({advanced:[{zoom:zooms[zi]}]}).catch(function(){});
+      btZoom.querySelector('span').textContent=(zooms[zi]/zooms[0])+'×';
+    };
+
+    return {
+      abrir:abrir, fechar:fechar, destruir:destruir, retorno:retorno,
+      pausar:function(v){ pausado=!!v; },
+      esquecer:function(){ ultimo={txt:'',t:0}; }, // deixa reler a mesma etiqueta na hora (após falha de rede)
+      aberto:function(){ return aberto; },
+      conectado:function(){ return !destruido&&el.isConnected; },
+      contador:function(n){ contEl.textContent=n; },
+      pendentes:function(n){ pendEl.hidden=!n; pendEl.textContent=n===1?'Conferindo 1 caixa…':'Conferindo '+n+' caixas…'; }
+    };
+  }
+  return { criar:criar, som:som, vibrar:vibrar, audio:audio };
+})();
+
+// QR traz JSON {id:...}; aceita também o código puro
+function extrairIdCaixa(txt){
+  var t=String(txt||'').trim(), id=t;
+  try{ var j=JSON.parse(t); if(j&&j.id) id=String(j.id); }catch(e){}
+  return id.replace(/[^A-Za-z0-9]/g,'').toUpperCase();
+}
+function movH(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function fmtNum(n){ return (Number(n)||0).toLocaleString('pt-BR'); }
+function movHora(iso){ try{ return new Date(iso||Date.now()).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'}); }catch(e){ return ''; } }
+var SVG_X='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>';
+var SVG_OK='<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="7 12.5 10.5 16 17 9"/></svg>';
+
+// ═══════════════════════════════════════
+// MOVIMENTAÇÃO DE ESTOQUE — LEVA
+// Bipa várias caixas (sem popup por caixa), confere na tela e registra TUDO
+// de uma vez, numa chamada só ao banco (função registrar_lote_movimentacao).
+// Blindagem contra gravar 2x:
+//  1) botão trava no primeiro toque;  2) cada leva tem um código único — se
+//  o mesmo código chegar 2x ao banco, ele NÃO grava de novo;  3) se a
+//  internet cair no meio, a leva fica travada e "Tentar de novo" é seguro.
+// A leva fica salva no tablet: recarregar a página não perde nada.
+// ═══════════════════════════════════════
+var MOV_LEVA_KEY='vitalbor_mov_leva_v1', MOV_RECIBO_KEY='vitalbor_mov_ultimo_recibo_v1';
+var _movLeitor=null, _movConsultando={}, _movEnviando=false;
+
+function movSalvarLeva(){ try{ if(S.leva) localStorage.setItem(MOV_LEVA_KEY,JSON.stringify(S.leva)); else localStorage.removeItem(MOV_LEVA_KEY); }catch(e){} }
+function movLevaSalva(){ try{ var t=localStorage.getItem(MOV_LEVA_KEY); var l=t?JSON.parse(t):null; return (l&&l.id&&Array.isArray(l.itens))?l:null; }catch(e){ return null; } }
+function movNovoIdLeva(){ try{ if(window.crypto&&crypto.randomUUID) return crypto.randomUUID(); }catch(e){} return 'L'+Date.now().toString(36)+Math.random().toString(36).slice(2,12); }
+function movLevaTemCaixas(){ return !!(S.leva&&S.leva.itens&&S.leva.itens.length); }
+function movLevaOcupada(){ return movLevaTemCaixas()||!!(S.leva&&S.leva.status!=='aberta'); }
+function movAcharItem(id){ var L=S.leva; if(!L) return null; for(var i=0;i<L.itens.length;i++) if(L.itens[i].caixaId===id) return L.itens[i]; return null; }
+function movRef(it){ return it.seq?formatarNumCaixa(it.seq):formatarReferencia(it.caixaId); }
+
+function movTela(qual){
+  var m={operador:'mov-sel-operador',acao:'mov-sel-acao',tiposaida:'mov-sel-tiposaida',conf2:'mov-sel-conf2',leva:'mov-conteudo'};
+  Object.keys(m).forEach(function(k){ var e=document.getElementById(m[k]); if(e) e.style.display=(k===qual)?(k==='leva'?'block':'flex'):'none'; });
+  document.getElementById('mov-tabs-tipo').style.display=(qual==='operador'||qual==='acao')?'none':'flex';
+  document.getElementById('mov-op-atual-bar').style.display=(qual==='operador')?'none':'flex';
+  if(qual!=='leva') movPararCamera();
+}
+function movAtualizarBarraTopo(){
+  var o=S.movOperador||{};
+  document.getElementById('mov-op-atual-txt').textContent='Operador: '+(o.matricula?o.matricula+' — ':'')+(o.nome||'—');
+  var txt=document.getElementById('mov-saida-atual-txt'), bt=document.getElementById('mov-saida-trocar-btn'), t='';
+  if(S.movTipo==='SAIDA'&&S.movTipoSaida) t=S.movTipoSaida==='PEDIDO'?'Saída: pedido NF '+S.movNotaFiscal:'Saída: correção de estoque';
+  if(S.movTipo==='ENTRADA'&&S.movConferente2) t='Entrada: conferente 2 '+S.movConferente2.rotulo;
+  txt.textContent=t; txt.style.display=t?'':'none';
+  bt.textContent=S.movTipo==='ENTRADA'?'Trocar conferente':'Trocar tipo de saída';
+  bt.style.display=t?'':'none';
+  document.getElementById('mtab-entrada').classList.toggle('ativo',S.movTipo==='ENTRADA');
+  document.getElementById('mtab-saida').classList.toggle('ativo',S.movTipo==='SAIDA');
+}
+
 function movInit(){
-  S.movOperador=null;
-  document.getElementById('mov-conteudo').style.display='none';
-  document.getElementById('mov-tabs-tipo').style.display='none';
-  document.getElementById('mov-op-atual-bar').style.display='none';
-  document.getElementById('mov-sel-operador').style.display='flex';
+  movPararCamera();
+  S.movOperador=null; S.movTipo=null; S.movTipoSaida=null; S.movNotaFiscal=''; S.movConferente2=null; S.leva=null;
+  movTela('operador');
   renderGridMovOperador();
+  var salva=movLevaSalva();
+  if(salva&&(salva.itens.length||salva.status==='incerto'||salva.status==='enviando')) movOferecerLevaSalva(salva);
+  else if(salva){ try{ localStorage.removeItem(MOV_LEVA_KEY); }catch(e){} }
 }
 function renderGridMovOperador(){
   var g=document.getElementById('mov-g-op');
@@ -4631,108 +5064,466 @@ function renderGridMovOperador(){
 }
 function movSelecionarOperador(nome,matricula){
   S.movOperador={ nome:nome, matricula:matricula };
-  S.movConferente2=null;
-  S.movTipoSaida=null;
-  S.movNotaFiscal='';
-  S.movCaixasSessao=[];
-  S.movEntradaPendentes=[];
-  S.movEntradaAguardando=null;
-  S.movSaidaPendentes=[];
-  S.movSaidaAguardando=null;
-  document.getElementById('mov-saida-atual-txt').style.display='none';
-  document.getElementById('mov-saida-trocar-btn').style.display='none';
-  document.getElementById('mov-sel-operador').style.display='none';
-  document.getElementById('mov-conteudo').style.display='none';
-  document.getElementById('mov-tabs-tipo').style.display='none';
-  document.getElementById('mov-sel-acao').style.display='flex';
-  document.getElementById('mov-op-atual-bar').style.display='flex';
-  document.getElementById('mov-op-atual-txt').textContent='Operador: '+(matricula?matricula+' — ':'')+nome;
-  document.getElementById('mov-ultima').classList.remove('vis');
+  S.movTipo=null; S.movTipoSaida=null; S.movNotaFiscal=''; S.movConferente2=null; S.leva=null;
+  movAtualizarBarraTopo();
+  movTela('acao');
   movMontarSelectManual();
-  movCarregarEstoque();
 }
-function movEscolherAcao(tipo){
-  document.getElementById('mov-sel-acao').style.display='none';
-  document.getElementById('mov-tabs-tipo').style.display='flex';
-  movSetTipo(tipo);
+function movEscolherAcao(tipo){ S.movTipo=tipo; movIrParaContexto(); }
+function movIrParaContexto(){
+  movAtualizarBarraTopo();
+  if(S.movTipo==='SAIDA'){ movTela('tiposaida'); return; }
+  renderGridConferente2();
+  movTela('conf2');
 }
 function movTrocarOperador(){
-  movPararCamera();
-  movFecharCameraManual();
-  S.movOperador=null;
-  S.movConferente2=null;
-  S.movTipoSaida=null;
-  S.movNotaFiscal='';
-  S.movCaixasSessao=[];
-  S.movEntradaPendentes=[];
-  S.movEntradaAguardando=null;
-  S.movSaidaPendentes=[];
-  S.movSaidaAguardando=null;
-  document.getElementById('mov-saida-atual-txt').style.display='none';
-  document.getElementById('mov-saida-trocar-btn').style.display='none';
-  document.getElementById('mov-conteudo').style.display='none';
-  document.getElementById('mov-sel-acao').style.display='none';
-  document.getElementById('mov-sel-tiposaida').style.display='none';
-  document.getElementById('mov-tabs-tipo').style.display='none';
-  document.getElementById('mov-op-atual-bar').style.display='none';
-  document.getElementById('mov-sel-operador').style.display='flex';
+  if(_movEnviando) return;
+  if(movLevaOcupada()){ toast('Registre ou descarte a leva antes de trocar de operador','aviso'); return; }
+  S.leva=null; movSalvarLeva();
+  S.movOperador=null; S.movTipo=null; S.movTipoSaida=null; S.movNotaFiscal=''; S.movConferente2=null;
+  movTela('operador');
   renderGridMovOperador();
 }
-function movUsuarioAtual(){ return S.movOperador ? S.movOperador.nome : 'Movimentação'; }
+function movUsuarioAtual(){ return S.movOperador?S.movOperador.nome:'Movimentação'; }
 function movSetTipo(tipo){
-  S.movTipo=tipo;
-  document.getElementById('mtab-entrada').classList.toggle('ativo',tipo==='ENTRADA');
-  document.getElementById('mtab-saida').classList.toggle('ativo',tipo==='SAIDA');
-  document.getElementById('mov-sel-acao').style.display='none';
-  if(tipo==='SAIDA' && !S.movTipoSaida){
-    _movCamPausado=true;
-    document.getElementById('mov-conteudo').style.display='none';
-    document.getElementById('mov-sel-tiposaida').style.display='flex';
+  if(_movEnviando) return;
+  if(S.movTipo===tipo&&S.leva) return;
+  if(movLevaOcupada()){ toast('Registre ou descarte a leva antes de trocar entre entrada e saída','aviso'); return; }
+  S.leva=null; movSalvarLeva();
+  S.movTipo=tipo; S.movTipoSaida=null; S.movNotaFiscal=''; S.movConferente2=null;
+  movIrParaContexto();
+}
+function movTrocarContexto(){
+  if(_movEnviando) return;
+  if(movLevaOcupada()){ toast('Registre ou descarte a leva antes de trocar','aviso'); return; }
+  S.leva=null; movSalvarLeva();
+  S.movTipoSaida=null; S.movNotaFiscal=''; S.movConferente2=null;
+  movIrParaContexto();
+}
+function movTrocarTipoSaida(){ movTrocarContexto(); }
+function movEscolherTipoSaida(tipo){
+  var nf='';
+  if(tipo==='PEDIDO'){
+    var r=prompt('Número da nota fiscal desta saída:');
+    if(r===null) return;
+    nf=String(r).replace(/\s+/g,'');
+    if(!nf){ toast('Informe o número da nota fiscal','aviso'); return; }
+  }
+  S.movTipo='SAIDA'; S.movTipoSaida=tipo; S.movNotaFiscal=nf;
+  movCriarLeva();
+}
+function renderGridConferente2(){
+  var g=document.getElementById('mov-g-conf2'); if(!g) return;
+  if(!S.op.length){ g.innerHTML='<p style="color:var(--texto2);padding:12px">Nenhum operador cadastrado. Acesse Admin.</p>'; return; }
+  g.innerHTML=S.op.map(function(o){
+    var m=o.Matricula||'';
+    return '<div class="op-sel-btn" onclick="movEscolherConferente2(\''+esc(o.Nome)+'\',\''+esc(m)+'\')">'+
+      (m?'<span class="mat">'+m+'</span>':'')+'<span class="nome">'+o.Nome+'</span></div>';
+  }).join('');
+}
+function movEscolherConferente2(nome,matricula){
+  S.movConferente2={ nome:nome, matricula:matricula, rotulo:(matricula?matricula+' — ':'')+nome };
+  S.movTipo='ENTRADA';
+  movCriarLeva();
+}
+function movCriarLeva(){
+  S.leva={ id:movNovoIdLeva(), tipo:S.movTipo,
+    tipoSaida:S.movTipo==='SAIDA'?S.movTipoSaida:'', notaFiscal:S.movTipo==='SAIDA'?S.movNotaFiscal:'',
+    conferente2:S.movTipo==='ENTRADA'?S.movConferente2:null, operador:S.movOperador, motivo:'',
+    itens:[], invalidas:[], status:'aberta', criadoEm:new Date().toISOString() };
+  var rd=document.getElementById('mov-digitar-ret'); if(rd) rd.hidden=true;
+  movSalvarLeva();
+  movAtualizarBarraTopo();
+  movAbrirLeva();
+}
+function movAbrirLeva(){
+  movTela('leva');
+  if(!_movLeitor||!_movLeitor.conectado()){
+    _movLeitor=Leitor.criar({ container:document.getElementById('mov-leitor'), rotulo:'caixas na leva',
+      onCodigo:function(txt){ movAdicionarCaixa(extrairIdCaixa(txt)); } });
+  }
+  _movLeitor.pausar(false);
+  movRenderLeva();
+}
+function movPararCamera(){ if(_movLeitor) _movLeitor.fechar(); }
+function movFecharCameraManual(){ movPararCamera(); }
+
+// leva que ficou salva no tablet (página recarregou, bateria acabou, alguém saiu)
+function movOferecerLevaSalva(l){
+  var cab=movCabecalhoLeva(l), quem=l.operador&&l.operador.nome?l.operador.nome:'—';
+  mvmAbrir(
+    '<div class="mvm-cab aviso"><h2>Tem uma leva não registrada neste tablet</h2><p>'+cab.t1+(cab.t2?': '+cab.t2:'')+'</p></div>'+
+    '<div class="mvm-corpo">'+
+      '<p class="mvm-txt" style="margin-top:0">'+l.itens.length+' caixa(s) bipada(s) por <b>'+movH(quem)+'</b>, começou às '+movHora(l.criadoEm)+'.</p>'+
+      ((l.status==='incerto'||l.status==='enviando')?'<p class="mvm-alerta">Ela estava sendo registrada quando a tela fechou. Continue e toque em Registrar: se já tiver sido gravada, o sistema só confirma, sem gravar de novo.</p>':'')+
+      (l.itens.length?movTabelaResumoHTML(movResumoItens(l.itens)):'')+
+    '</div>'+
+    '<div class="mvm-acoes"><button type="button" class="mvm-sec" onclick="movDescartarLevaSalva()">Descartar</button>'+
+    '<button type="button" class="mvm-pri" onclick="movContinuarLevaSalva()">Continuar esta leva</button></div>');
+}
+function movContinuarLevaSalva(){
+  var l=movLevaSalva(); if(!l){ mvmFechar(); return; }
+  if(l.status==='enviando') l.status='incerto'; // a tela fechou no meio do envio: não se sabe se gravou
+  if(l.status!=='incerto') l.status='aberta';
+  S.leva=l;
+  S.movOperador=l.operador||{nome:'',matricula:''};
+  S.movTipo=l.tipo; S.movTipoSaida=l.tipoSaida||null; S.movNotaFiscal=l.notaFiscal||''; S.movConferente2=l.conferente2||null;
+  movSalvarLeva();
+  mvmFechar();
+  movMontarSelectManual();
+  movAtualizarBarraTopo();
+  movAbrirLeva();
+}
+function movDescartarLevaSalva(){
+  var l=movLevaSalva();
+  var incerto=l&&(l.status==='incerto'||l.status==='enviando');
+  var txt=incerto
+    ?'Não dá para saber se essa leva foi gravada. Se você descartar e ela NÃO tiver sido gravada, essas caixas continuam como antes no estoque do sistema.\n\nDescartar mesmo assim?'
+    :'Descartar '+(l?l.itens.length:0)+' caixa(s) bipada(s)? Nada disso foi gravado no estoque.';
+  if(!confirm(txt)) return;
+  if(l&&l.tipo==='ENTRADA'&&l.itens.length&&!movSenhaAdmin('descartar a leva de entrada')) return;
+  try{ localStorage.removeItem(MOV_LEVA_KEY); }catch(e){}
+  mvmFechar();
+}
+function movSenhaAdmin(acao){
+  var s=prompt('Senha de administrador para '+acao+':');
+  if(!s) return false;
+  if(String(s)!==ADMIN_PASSWORD){ toast('Senha incorreta','erro'); return false; }
+  return true;
+}
+
+// ── bipagem ──
+function movRetorno(tipo,titulo,detalhe){
+  if(_movLeitor&&_movLeitor.aberto()){ _movLeitor.retorno(tipo,titulo,detalhe); return; }
+  Leitor.som(tipo); Leitor.vibrar(tipo);
+  var r=document.getElementById('mov-digitar-ret');
+  if(r&&r.parentNode&&r.parentNode.getClientRects().length){ // campo de digitar visível: mostra ali mesmo
+    r.hidden=false; r.setAttribute('data-tipo',tipo);
+    r.innerHTML='<b>'+movH(titulo)+'</b>'+(detalhe?'<small>'+movH(detalhe)+'</small>':'');
     return;
   }
-  document.getElementById('mov-sel-tiposaida').style.display='none';
-  document.getElementById('mov-conteudo').style.display='';
-  document.getElementById('mov-saida-lista-box').style.display='none';
-  document.getElementById('mov-saida-conferir-popup').style.display='none';
-  document.getElementById('mov-entrada-conferir-popup').style.display='none';
-  document.getElementById('mov-hist-entrada-wrap').style.display=(tipo==='ENTRADA')?'block':'none';
-  document.getElementById('mov-hist-saida-wrap').style.display=(tipo==='SAIDA')?'block':'none';
-  if(tipo==='ENTRADA') renderMovEntradaLista();
-  if(tipo==='SAIDA') renderMovSaidaPendentesLista();
-  _movCamPausado=false;
+  toast(titulo+(detalhe?': '+detalhe.replace(/\s{2,}/g,', '):''),tipo==='ok'?'sucesso':(tipo==='aviso'?'aviso':'erro'));
 }
-function movEscolherTipoSaida(tipo){
-  if(tipo==='PEDIDO'){
-    var nf=prompt('Número da Nota Fiscal:');
-    if(!nf||!nf.trim()){ toast('Informe o número da nota fiscal','aviso'); return; }
-    S.movNotaFiscal=nf.trim();
-  } else {
-    S.movNotaFiscal='';
+function movAtualizarPendentes(){ if(_movLeitor) _movLeitor.pendentes(Object.keys(_movConsultando).length); }
+function movProblemaCaixa(L,d){
+  if(L.tipo==='SAIDA'&&d.StatusAtual!=='ENTRADA'){
+    return { titulo:'Caixa fora do estoque', detalhe:d.StatusAtual==='SAIDA'?'Essa caixa já saiu. Se ela está aqui, faça a entrada dela antes.':'Essa caixa nunca teve entrada no estoque. Faça a entrada antes.' };
   }
-  S.movTipoSaida=tipo;
-  S.movCaixasSessao=[];
-  S.movSaidaPendentes=[];
-  S.movSaidaAguardando=null;
-  renderMovSaidaLista();
-  var txt=document.getElementById('mov-saida-atual-txt');
-  txt.style.display='';
-  txt.textContent = tipo==='PEDIDO' ? 'Saída: Pedido NF '+S.movNotaFiscal : 'Saída: Correção de Estoque';
-  document.getElementById('mov-saida-trocar-btn').style.display='';
-  movSetTipo('SAIDA');
+  if(L.tipo==='ENTRADA'){
+    if(d.StatusAtual==='ENTRADA') return { titulo:'Já está no estoque', detalhe:'Essa caixa já tem entrada. Não dá para entrar de novo.' };
+    var c=L.conferente2;
+    if(c){
+      var mesmo=(c.matricula&&d.Matricula)?String(c.matricula)===String(d.Matricula):(!!d.Operador&&d.Operador===c.nome);
+      if(mesmo) return { titulo:'Conferente 2 fez essa caixa', detalhe:'Ela foi produzida por '+(d.Operador||c.nome)+'. Outra pessoa precisa conferir: faça uma leva separada para ela.' };
+    }
+  }
+  return null;
 }
-function movTrocarTipoSaida(){
-  S.movTipoSaida=null;
-  S.movNotaFiscal='';
-  S.movCaixasSessao=[];
-  S.movSaidaPendentes=[];
-  S.movSaidaAguardando=null;
-  document.getElementById('mov-saida-conferir-popup').style.display='none';
-  document.getElementById('mov-hist-saida-wrap').style.display='none';
-  renderMovSaidaLista();
-  document.getElementById('mov-saida-atual-txt').style.display='none';
-  document.getElementById('mov-saida-trocar-btn').style.display='none';
-  movSetTipo('SAIDA');
+function movAdicionarCaixa(caixaId){
+  var id=String(caixaId||'').replace(/[^A-Za-z0-9]/g,'').toUpperCase();
+  if(!id) return;
+  var L=S.leva;
+  if(!L){ movRetorno('erro','Nenhuma leva aberta','Escolha entrada ou saída primeiro.'); return; }
+  if(L.status!=='aberta'){ movRetorno('erro','Leva travada','Termine o registro desta leva antes de bipar mais caixas.'); return; }
+  var ja=movAcharItem(id);
+  if(ja){ movRetorno('aviso','Já está na leva',ja.codPeca+'  '+ja.material+'   Lote '+(ja.lote||'—')+'   Ref '+movRef(ja)); return; }
+  if(_movConsultando[id]) return;
+  _movConsultando[id]=true; movAtualizarPendentes();
+  var levaId=L.id, acabou=false;
+  var limite=setTimeout(function(){
+    if(acabou) return; acabou=true;
+    delete _movConsultando[id]; movAtualizarPendentes();
+    if(_movLeitor) _movLeitor.esquecer();
+    movRetorno('erro','Sem resposta do servidor','A caixa não entrou na leva. Bipe de novo.');
+  },15000);
+  backend.consultarCaixa(id).then(function(d){
+    if(acabou) return; acabou=true; clearTimeout(limite);
+    delete _movConsultando[id]; movAtualizarPendentes();
+    var L2=S.leva;
+    if(!L2||L2.id!==levaId||L2.status!=='aberta') return; // a leva mudou enquanto consultava
+    if(movAcharItem(id)) return;
+    if(!d){ movRetorno('erro','Caixa não encontrada','Esse código não existe no sistema. Confira a etiqueta.'); return; }
+    var p=movProblemaCaixa(L2,d);
+    if(p){ movRetorno('erro',p.titulo,p.detalhe); return; }
+    var item={ caixaId:id, codPeca:d.CodigoPeca, peca:d.Peca, material:d.Material, lote:d.Lote, qtdPecas:Number(d.QtdPecas)||0, numeroCaixa:d.NumeroCaixa, seq:d.Seq||null, t:Date.now() };
+    L2.itens.push(item);
+    movSalvarLeva();
+    movRenderLeva(item);
+    movRetorno('ok',d.CodigoPeca+'   '+d.Material,'Lote '+(d.Lote||'—')+'   Caixa '+(d.NumeroCaixa||'—')+'   '+fmtNum(item.qtdPecas)+' peças');
+  }).catch(function(){
+    if(acabou) return; acabou=true; clearTimeout(limite);
+    delete _movConsultando[id]; movAtualizarPendentes();
+    if(_movLeitor) _movLeitor.esquecer();
+    movRetorno('erro','Sem conexão','A caixa não entrou na leva. Bipe de novo.');
+  });
 }
+// Resolve o que foi digitado (nº curto ou código longo) e devolve o id da caixa pro callback
+function resolverDigitado(texto,cb,aoFalhar){
+  google.script.run
+    .withSuccessHandler(function(r){ if(!r||!r.ok){ mostrarErroScan(r&&r.erro?r.erro:'Código não reconhecido'); if(aoFalhar) aoFalhar(); return; } cb(r.id); })
+    .withFailureHandler(function(e){ mostrarErroScan('Erro: '+(e?e.message:'')); if(aoFalhar) aoFalhar(); })
+    .resolverCodigoCaixa(texto);
+}
+function movDigitarCodigo(){
+  var inp=document.getElementById('mov-input-digitado');
+  var v=inp.value.trim(); if(!v) return;
+  inp.value='';
+  google.script.run
+    .withSuccessHandler(function(r){
+      if(!r||!r.ok){ movRetorno('erro','Código não aceito',(r&&r.erro)||'Código não reconhecido.'); if(!inp.value) inp.value=v; return; }
+      movAdicionarCaixa(r.id);
+    })
+    .withFailureHandler(function(){ movRetorno('erro','Sem conexão','Não deu para conferir o número. Tente de novo.'); if(!inp.value) inp.value=v; })
+    .resolverCodigoCaixa(v);
+}
+function balDigitarCodigo(){
+  var inp=document.getElementById('bal-input-digitado');
+  var v=inp.value.trim(); if(!v) return;
+  inp.value='';
+  resolverDigitado(v,function(id){ balRegistrarBipagem(id); },function(){ if(!inp.value) inp.value=v; });
+}
+function movRemoverCaixa(id){
+  var L=S.leva; if(!L||L.status!=='aberta') return;
+  var it=movAcharItem(id); if(!it) return;
+  var desc=it.codPeca+' '+it.material+' (Ref '+movRef(it)+')';
+  if(L.tipo==='ENTRADA'){
+    var motivo=prompt('Motivo para tirar esta caixa da leva ('+desc+'):');
+    if(motivo===null) return;
+    if(!motivo.trim()){ toast('É obrigatório informar o motivo','aviso'); return; }
+    if(!movSenhaAdmin('tirar a caixa da leva')) return;
+  } else if(!confirm('Tirar da leva a caixa '+desc+'?')) return;
+  L.itens=L.itens.filter(function(x){ return x.caixaId!==id; });
+  L.invalidas=(L.invalidas||[]).filter(function(x){ return x.caixaId!==id; });
+  movSalvarLeva(); movRenderLeva();
+}
+function movDescartarLeva(){
+  var L=S.leva; if(!L||_movEnviando) return;
+  var txt=L.status==='incerto'
+    ?'Não dá para saber se essa leva foi gravada. Se você descartar e ela NÃO tiver sido gravada, essas caixas continuam como antes no estoque do sistema.\n\nDescartar mesmo assim?'
+    :'Descartar a leva com '+L.itens.length+' caixa(s)? Nada disso foi gravado no estoque.';
+  if(!confirm(txt)) return;
+  if(L.tipo==='ENTRADA'&&L.itens.length&&!movSenhaAdmin('descartar a leva de entrada')) return;
+  movCriarLeva(); // nova leva vazia, mesmo tipo/NF/conferente
+}
+
+// ── painel da leva ──
+function movResumoItens(itens){
+  var m={};
+  (itens||[]).forEach(function(it){
+    var k=(it.codPeca||'?')+'||'+(it.material||'?');
+    if(!m[k]) m[k]={ codPeca:it.codPeca||'?', peca:it.peca||'', material:it.material||'?', caixas:0, pecas:0 };
+    m[k].caixas++; m[k].pecas+=Number(it.qtdPecas)||0;
+  });
+  return Object.keys(m).map(function(k){ return m[k]; }).sort(function(a,b){ return a.codPeca.localeCompare(b.codPeca,'pt-BR',{numeric:true})||a.material.localeCompare(b.material); });
+}
+function movCabecalhoLeva(L){
+  if(L.tipo==='SAIDA'){
+    if(L.tipoSaida==='PEDIDO') return { t1:'Saída de pedido', t2:'Nota fiscal '+movH(L.notaFiscal) };
+    return { t1:'Saída para correção de estoque', t2:'Sem nota fiscal' };
+  }
+  return { t1:'Entrada no estoque', t2:'Conferente 2: '+movH(L.conferente2?L.conferente2.rotulo:'—') };
+}
+function movTextoBotao(L){
+  var n=L.itens.length;
+  if(L.status==='enviando') return 'Registrando…';
+  if(L.status==='incerto') return 'Tentar registrar de novo';
+  if(!n) return 'Bipe ao menos uma caixa';
+  return 'Registrar '+(L.tipo==='SAIDA'?'saída':'entrada')+' de '+n+' caixa'+(n>1?'s':'');
+}
+function movRenderLeva(novo){
+  var box=document.getElementById('mov-leva'); if(!box) return;
+  var L=S.leva;
+  if(!L){ box.innerHTML=''; if(_movLeitor) _movLeitor.contador(0); return; }
+  var n=L.itens.length, trava=L.status!=='aberta', cab=movCabecalhoLeva(L);
+  var inval={}; (L.invalidas||[]).forEach(function(i){ inval[i.caixaId]=i.motivo||'Recusada pelo banco'; });
+  var html=
+    '<div class="lv-cab">'+
+      '<div><div class="lv-cab-t1">'+cab.t1+'</div><div class="lv-cab-t2">'+cab.t2+'</div></div>'+
+      (n&&!trava?'<button type="button" class="lv-desc" onclick="movDescartarLeva()">Descartar leva</button>':'')+
+    '</div>'+
+    '<div class="lv-num"><b>'+n+'</b><span>'+(n===1?'caixa':'caixas')+'</span></div>';
+  if(L.status==='incerto') html+='<div class="lv-banner"><b>Registro não confirmado.</b> A leva fica travada até confirmar. Tentar de novo não grava em dobro.</div>';
+  if(L.status==='enviando') html+='<div class="lv-banner envio">Registrando no estoque…</div>';
+  if(!n){
+    html+='<div class="lv-vazio">Bipe a primeira caixa.<br>Cada leitura aparece aqui, somada por peça e material.</div>';
+  } else {
+    html+='<div class="lv-itens">'+movResumoItens(L.itens).map(function(r){
+      var marca=novo&&r.codPeca===novo.codPeca&&r.material===novo.material;
+      return '<div class="lv-item'+(marca?' lv-item-novo':'')+'"><div class="lv-item-id"><b>'+movH(r.codPeca)+'</b><span>'+movH(r.material)+'</span></div>'+
+        '<div class="lv-item-pc">'+fmtNum(r.pecas)+' pç</div><div class="lv-item-n">'+r.caixas+'</div></div>';
+    }).join('')+'</div>';
+    html+='<details class="lv-lista"'+(S._lvListaAberta?' open':'')+' ontoggle="S._lvListaAberta=this.open"><summary>Ver caixa por caixa</summary><ol>'+
+      L.itens.slice().reverse().map(function(it){
+        var inv=inval[it.caixaId];
+        return '<li'+(inv?' class="lv-inv"':'')+'><div><b>'+movH(it.codPeca)+'</b> '+movH(it.material)+
+          '<small>Lote '+movH(it.lote||'—')+'   Ref '+movRef(it)+(inv?'\n'+movH(inv):'')+'</small></div>'+
+          (trava?'':'<button type="button" class="lv-x" onclick="movRemoverCaixa(\''+it.caixaId+'\')" aria-label="Tirar da leva" title="Tirar da leva">'+SVG_X+'</button>')+'</li>';
+      }).join('')+'</ol></details>';
+  }
+  var clsBtn=(L.tipo==='SAIDA'?'saida':'entrada')+(L.status==='incerto'?' incerto':'');
+  html+='<div class="lv-rodape"><button type="button" class="lv-registrar '+clsBtn+'" id="mov-btn-registrar"'+((!n||L.status==='enviando')?' disabled':'')+
+    ' onclick="'+(L.status==='incerto'?'movRegistrarLeva()':'movAbrirConfirmacao()')+'">'+movTextoBotao(L)+'</button></div>';
+  box.innerHTML=html;
+  if(_movLeitor) _movLeitor.contador(n);
+}
+function movTabelaResumoHTML(res){
+  var tc=0, tp=0;
+  var linhas=res.map(function(r){
+    tc+=r.caixas; tp+=r.pecas;
+    return '<tr><td><b>'+movH(r.codPeca)+'</b></td><td>'+movH(r.material)+'</td><td class="n">'+fmtNum(r.pecas)+'</td><td class="n cx">'+r.caixas+'</td></tr>';
+  }).join('');
+  return '<table class="mvm-tab"><thead><tr><th>Peça</th><th>Material</th><th class="n">Peças</th><th class="n">Caixas</th></tr></thead>'+
+    '<tbody>'+linhas+'</tbody><tfoot><tr><td colspan="2">Total</td><td class="n">'+fmtNum(tp)+'</td><td class="n cx">'+tc+'</td></tr></tfoot></table>';
+}
+
+// ── janela (não fecha clicando fora) ──
+function mvmAbrir(html){
+  var m=document.getElementById('mvm');
+  document.getElementById('mvm-conteudo').innerHTML=html;
+  m.hidden=false;
+  var cx=m.querySelector('.mvm-caixa'); try{ cx.focus({preventScroll:true}); }catch(e){}
+}
+function mvmFechar(){ var m=document.getElementById('mvm'); if(!m) return; m.hidden=true; document.getElementById('mvm-conteudo').innerHTML=''; }
+function mvmTremer(){ var cx=document.querySelector('#mvm .mvm-caixa'); if(!cx) return; cx.classList.remove('tremer'); void cx.offsetWidth; cx.classList.add('tremer'); }
+
+// ── confirmar e registrar ──
+function movAbrirConfirmacao(){
+  var L=S.leva; if(!L||!L.itens.length||L.status!=='aberta'||_movEnviando) return;
+  if(_movLeitor) _movLeitor.pausar(true);
+  var n=L.itens.length, cab=movCabecalhoLeva(L), cls=L.tipo==='SAIDA'?'saida':'entrada';
+  var correcao=L.tipo==='SAIDA'&&L.tipoSaida==='CORRECAO';
+  mvmAbrir(
+    '<div class="mvm-cab '+cls+'"><h2>'+(L.tipo==='SAIDA'?'Confirmar saída':'Confirmar entrada')+'</h2><p>'+cab.t2+'</p></div>'+
+    '<div class="mvm-corpo">'+movTabelaResumoHTML(movResumoItens(L.itens))+
+      (correcao?'<label class="mvm-campo">Motivo da correção<textarea id="mvm-motivo" rows="2" maxlength="300" placeholder="Ex.: caixa avariada, achada na contagem">'+movH(L.motivo||'')+'</textarea></label>':'')+
+      '<p class="mvm-txt">Confira as quantidades. Ao registrar, as '+n+' caixas '+(L.tipo==='SAIDA'?'saem do':'entram no')+' estoque todas de uma vez.</p>'+
+    '</div>'+
+    '<div class="mvm-acoes"><button type="button" class="mvm-sec" onclick="movFecharConfirmacao()">Voltar e conferir</button>'+
+    '<button type="button" class="mvm-pri '+cls+'" id="mvm-ok" onclick="movRegistrarLeva()">Registrar '+n+' caixa'+(n>1?'s':'')+'</button></div>');
+}
+function movFecharConfirmacao(){
+  if(_movEnviando) return;
+  mvmFechar();
+  if(_movLeitor) _movLeitor.pausar(false);
+}
+function movRegistrarLeva(){
+  var L=S.leva;
+  if(_movEnviando||!L||!L.itens.length) return;          // trava 1: já está enviando
+  if(L.status!=='aberta'&&L.status!=='incerto') return;
+  if(L.tipo==='SAIDA'&&L.tipoSaida==='CORRECAO'&&L.status==='aberta'){
+    var campo=document.getElementById('mvm-motivo');
+    var motivo=campo?campo.value.trim():String(L.motivo||'').trim();
+    if(!motivo){ toast('Escreva o motivo da correção','aviso'); if(campo) campo.focus(); return; }
+    L.motivo=motivo;
+  }
+  _movEnviando=true;
+  var b=document.getElementById('mvm-ok'); if(b) b.disabled=true;
+  L.status='enviando'; movSalvarLeva(); movRenderLeva();
+  if(_movLeitor) _movLeitor.pausar(true);
+  var n=L.itens.length;
+  mvmAbrir('<div class="mvm-cab '+(L.tipo==='SAIDA'?'saida':'entrada')+'"><h2>Registrando '+n+' caixa'+(n>1?'s':'')+'…</h2><p>Não feche esta tela.</p></div><div class="mvm-corpo mvm-centro"><div class="mvm-gira"></div></div>');
+  var levaId=L.id;
+  backend.registrarLote({
+    loteId:L.id, tipo:L.tipo, caixas:L.itens.map(function(i){ return i.caixaId; }),
+    usuario:(L.operador&&L.operador.nome)||'', conferente2:L.conferente2?L.conferente2.rotulo:'',
+    tipoSaida:L.tipoSaida||'', notaFiscal:L.notaFiscal||'', motivo:L.motivo||''
+  }).then(function(r){ _movEnviando=false; movTratarRespostaLote(levaId,r); })
+    .catch(function(e){ _movEnviando=false; movTratarRespostaLote(levaId,{ situacao:'incerto', ok:false, erro:(e&&e.message)||'Erro inesperado' }); });
+}
+function movTratarRespostaLote(levaId,r){
+  var L=S.leva;
+  if(!L||L.id!==levaId) return;
+  r=r||{ situacao:'incerto', ok:false };
+  if(r.ok){
+    var rc={ loteId:r.loteId||L.id, tipo:L.tipo, tipoSaida:L.tipoSaida, notaFiscal:L.notaFiscal, conferente2:L.conferente2, operador:L.operador,
+      total:Number(r.total)||0, totalLocal:L.itens.length, resumo:r.resumo||[], registradoEm:r.registradoEm||new Date().toISOString(), jaRegistrado:!!r.jaRegistrado };
+    try{ localStorage.setItem(MOV_RECIBO_KEY,JSON.stringify(rc)); }catch(e){}
+    S.leva=null; movSalvarLeva(); // gravou: tira a leva do tablet
+    movRenderLeva();
+    movMostrarRecibo(rc);
+    movCarregarEstoque();
+    return;
+  }
+  if(r.situacao==='recusado'||r.situacao==='erro'){ // o banco respondeu e NADA foi gravado
+    L.status='aberta'; L.invalidas=r.invalidas||[]; movSalvarLeva(); movRenderLeva();
+    if(r.situacao==='recusado') movMostrarRecusa(r); else movMostrarErro(r);
+    return;
+  }
+  L.status='incerto'; movSalvarLeva(); movRenderLeva(); // sem resposta: pode ter gravado ou não
+  movMostrarIncerto(r);
+}
+function movMostrarRecibo(rc){
+  var saida=rc.tipo==='SAIDA';
+  var titulo=saida?(rc.tipoSaida==='CORRECAO'?'Correção registrada':'Saída registrada'):'Entrada registrada';
+  var sub=saida?(rc.tipoSaida==='PEDIDO'?'Nota fiscal '+movH(rc.notaFiscal):'Correção de estoque'):'Conferente 2: '+movH(rc.conferente2?rc.conferente2.rotulo:'—');
+  var resumo=(rc.resumo||[]).map(function(x){ return { codPeca:x.codigoPeca||'?', peca:x.peca||'', material:x.material||'?', caixas:Number(x.caixas)||0, pecas:Number(x.pecas)||0 }; });
+  var avisos='';
+  if(rc.jaRegistrado) avisos+='<p class="mvm-nota">Esta leva já tinha sido gravada na tentativa anterior. Nada foi gravado em dobro.</p>';
+  if(rc.total!==rc.totalLocal) avisos+='<p class="mvm-alerta">Atenção: o banco gravou '+rc.total+' caixa(s) e a tela tinha '+rc.totalLocal+'. Confira em Estoque → Movimentações.</p>';
+  var continuar=saida?(rc.tipoSaida==='PEDIDO'?'Mais caixas na NF '+movH(rc.notaFiscal):'Mais uma correção'):'Nova entrada';
+  var outra=saida?'Começar outra saída':'Trocar conferente';
+  mvmAbrir(
+    '<div class="mvm-cab ok">'+SVG_OK+'<h2>'+titulo+'</h2><p>'+sub+'</p></div>'+
+    '<div class="mvm-corpo">'+movTabelaResumoHTML(resumo)+avisos+
+      '<p class="mvm-rodinha">Registrado às '+movHora(rc.registradoEm)+' por '+movH(rc.operador?rc.operador.nome:'—')+'. Código da leva: '+movH(String(rc.loteId).slice(0,8).toUpperCase())+'.</p></div>'+
+    '<div class="mvm-acoes">'+
+      (saida?'<button type="button" class="mvm-sec" onclick="movReciboContinuar()">'+continuar+'</button><button type="button" class="mvm-pri" onclick="movReciboOutra()">'+outra+'</button>'
+            :'<button type="button" class="mvm-sec" onclick="movReciboOutra()">'+outra+'</button><button type="button" class="mvm-pri entrada" onclick="movReciboContinuar()">'+continuar+'</button>')+
+    '</div>');
+}
+function movReciboContinuar(){ mvmFechar(); movCriarLeva(); }
+function movReciboOutra(){ mvmFechar(); S.movTipoSaida=null; S.movNotaFiscal=''; S.movConferente2=null; movIrParaContexto(); }
+function movMostrarRecusa(r){
+  var inv=r.invalidas||[];
+  var lista=inv.map(function(i){
+    var it=movAcharItem(i.caixaId);
+    return '<li><b>'+movH(i.codigoPeca||(it&&it.codPeca)||i.caixaId)+'</b> '+movH(i.material||(it&&it.material)||'')+
+      '<span>Ref '+(it?movRef(it):formatarReferencia(i.caixaId))+'</span><small>'+movH(i.motivo||'')+'</small></li>';
+  }).join('');
+  mvmAbrir(
+    '<div class="mvm-cab erro"><h2>Nada foi gravado</h2><p>'+movH(r.erro||'O banco recusou a leva.')+'</p></div>'+
+    '<div class="mvm-corpo">'+(inv.length
+      ?'<p class="mvm-txt" style="margin-top:0">'+(inv.length===1?'Esta caixa não pode ser movimentada:':'Estas '+inv.length+' caixas não podem ser movimentadas:')+'</p><ul class="mvm-inv">'+lista+'</ul>'+
+       '<p class="mvm-txt">Tire da leva e registre de novo. As outras caixas continuam bipadas.</p>'
+      :'<p class="mvm-txt" style="margin-top:0">Corrija e tente de novo. As caixas continuam bipadas.</p>')+'</div>'+
+    '<div class="mvm-acoes"><button type="button" class="mvm-sec" onclick="movFecharConfirmacao()">Voltar</button>'+
+      (inv.length?'<button type="button" class="mvm-pri" onclick="movTirarInvalidas()">Tirar '+(inv.length===1?'essa caixa':'essas '+inv.length+' caixas')+' da leva</button>':'')+'</div>');
+}
+function movTirarInvalidas(){
+  var L=S.leva; if(!L) return;
+  var ids={}; (L.invalidas||[]).forEach(function(i){ ids[i.caixaId]=1; });
+  var antes=L.itens.length;
+  L.itens=L.itens.filter(function(x){ return !ids[x.caixaId]; }); L.invalidas=[];
+  movSalvarLeva(); movRenderLeva(); mvmFechar();
+  if(_movLeitor) _movLeitor.pausar(false);
+  toast((antes-L.itens.length)+' caixa(s) tirada(s) da leva. Confira e registre de novo.','aviso');
+}
+function movMostrarErro(r){
+  var semFuncao=r.codigo==='PGRST202'||/registrar_lote_movimentacao/.test(String(r.erro||''));
+  mvmAbrir(
+    '<div class="mvm-cab erro"><h2>Nada foi gravado</h2><p>'+(semFuncao?'O banco ainda não tem a função de registro em leva.':movH(r.erro||'Erro no servidor'))+'</p></div>'+
+    '<div class="mvm-corpo"><p class="mvm-txt" style="margin-top:0">'+(semFuncao
+      ?'É preciso rodar uma vez o arquivo <b>movimentacao_lote.sql</b> no Supabase (SQL Editor). Depois disso, toque em Registrar de novo: as caixas continuam bipadas.'
+      :'As caixas continuam bipadas. Tente registrar de novo.')+'</p></div>'+
+    '<div class="mvm-acoes"><button type="button" class="mvm-pri" onclick="movFecharConfirmacao()">Entendi</button></div>');
+}
+function movMostrarIncerto(r){
+  mvmAbrir(
+    '<div class="mvm-cab aviso"><h2>Não deu para confirmar o registro</h2><p>'+movH(r.erro||'Sem resposta do servidor')+'</p></div>'+
+    '<div class="mvm-corpo"><p class="mvm-txt" style="margin-top:0">A leva pode ter sido gravada ou não. Ela fica travada até confirmar.</p>'+
+      '<p class="mvm-txt"><b>Toque em Tentar de novo.</b> Se ela já tiver sido gravada, o sistema só confirma: não grava duas vezes.</p></div>'+
+    '<div class="mvm-acoes"><button type="button" class="mvm-sec" onclick="movFecharConfirmacao()">Fechar</button><button type="button" class="mvm-pri" onclick="movRegistrarLeva()">Tentar de novo</button></div>');
+}
+function movPodeSair(){
+  if(S.modo!=='movimentacao') return true;
+  if(_movEnviando){ toast('Aguarde terminar o registro','aviso'); return false; }
+  if(movLevaTemCaixas()) return confirm('Tem '+S.leva.itens.length+' caixa(s) bipada(s) e não registrada(s). Elas ficam salvas neste tablet e aparecem quando você voltar.\n\nSair mesmo assim?');
+  return true;
+}
+window.addEventListener('beforeunload',function(e){ if(_movEnviando||movLevaTemCaixas()){ e.preventDefault(); e.returnValue=''; } });
+
+// ── manual (sem etiqueta) ──
+var _mmEnviando=false, _mmIdMov=null;
 function movMontarSelectManual(){
   var sp=document.getElementById('mm-peca'); if(!sp) return;
   sp.innerHTML=S.pecas.map(function(p){ return '<option value="'+esc(p.Codigo)+'|'+esc(p.Nome)+'">'+p.Codigo+' — '+p.Nome+'</option>'; }).join('');
@@ -4742,445 +5533,28 @@ function movAtualizarMateriaisManual(){
   var sm=document.getElementById('mm-mat'); if(!sm) return;
   sm.innerHTML=S.mats.map(function(m){ return '<option value="'+esc(m.Nome)+'">'+m.Nome+'</option>'; }).join('');
 }
-function movAbrirManual(){ document.getElementById('mov-manual-box').classList.add('vis'); _movCamPausado=true; }
+function movAbrirManual(){
+  _mmIdMov=gerarID(); // código único deste lançamento: se for enviado 2x, o banco recusa a cópia
+  document.getElementById('mov-manual-box').classList.add('vis');
+  if(_movLeitor) _movLeitor.pausar(true);
+}
 function movFecharManual(){
+  if(_mmEnviando) return;
   document.getElementById('mov-manual-box').classList.remove('vis');
   document.getElementById('mm-lote').value='';
   document.getElementById('mm-qtd').value=1;
   document.getElementById('mm-motivo').value='';
   document.getElementById('mm-senha').value='';
-  _movCamPausado=false;
+  _mmIdMov=null;
+  if(_movLeitor) _movLeitor.pausar(false);
 }
-
-// ── Câmera + leitura de QR Code (substitui o leitor USB) ──
-var _movCamStream=null, _movCamRAF=null, _movCamPausado=false, _movCamCooldownAte=0;
-
-function movAbrirCameraParaEscanear(){
-  var fechada=document.getElementById('mov-cam-fechada');
-  var aberta=document.getElementById('mov-cam-aberta');
-  if(fechada) fechada.style.display='none';
-  if(aberta) aberta.style.display='block';
-  movIniciarCamera();
-}
-function movFecharCameraManual(){
-  movPararCamera();
-  var fechada=document.getElementById('mov-cam-fechada');
-  var aberta=document.getElementById('mov-cam-aberta');
-  if(aberta) aberta.style.display='none';
-  if(fechada) fechada.style.display='flex';
-}
-function movIniciarCamera(){
-  var status=document.getElementById('mov-cam-status');
-  if(!status) return; // página não está montada (ex: chamado fora de contexto)
-  if(typeof jsQR==='undefined'){
-    status.textContent='Erro: biblioteca de leitura de QR não carregou. Verifique a conexão de internet do tablet e recarregue a página.';
-    status.classList.remove('oculto');
-    toast('Biblioteca de QR não carregou — sem internet ou bloqueio de rede','erro');
-    return;
-  }
-  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-    status.textContent='Este navegador não suporta acesso à câmera. Use a movimentação manual abaixo.';
-    status.classList.remove('oculto');
-    return;
-  }
-  status.textContent='Iniciando câmera...';
-  status.classList.remove('oculto');
-  navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal:'environment' } }, audio:false })
-    .then(function(stream){
-      _movCamStream=stream;
-      var video=document.getElementById('mov-cam-video');
-      video.srcObject=stream;
-      video.onloadedmetadata=function(){
-        video.play();
-        status.classList.add('oculto');
-        movLoopCamera();
-      };
-    })
-    .catch(function(e){
-      status.textContent='Não foi possível acessar a câmera ('+(e&&e.name?e.name:'erro')+'). Use a movimentação manual abaixo.';
-      status.classList.remove('oculto');
-    });
-}
-
-function movPararCamera(){
-  if(_movCamRAF){ cancelAnimationFrame(_movCamRAF); _movCamRAF=null; }
-  if(_movCamStream){ _movCamStream.getTracks().forEach(function(t){ t.stop(); }); _movCamStream=null; }
-}
-
-function movLoopCamera(){
-  var video=document.getElementById('mov-cam-video');
-  var canvas=document.getElementById('mov-cam-canvas');
-  var ctx=canvas.getContext('2d', { willReadFrequently:true });
-  function tick(){
-    if(!_movCamStream) return; // câmera foi parada (saiu da tela) — encerra o laço
-    if(video.readyState===video.HAVE_ENOUGH_DATA && !_movCamPausado && Date.now()>=_movCamCooldownAte){
-      canvas.width=video.videoWidth; canvas.height=video.videoHeight;
-      ctx.drawImage(video,0,0,canvas.width,canvas.height);
-      try{
-        var img=ctx.getImageData(0,0,canvas.width,canvas.height);
-        var codigo=jsQR(img.data,img.width,img.height,{ inversionAttempts:'attemptBoth' });
-        if(codigo && codigo.data){
-          _movCamCooldownAte=Date.now()+2500; // evita reler a mesma etiqueta em sequência
-          movProcessarCodigo(codigo.data);
-        }
-      }catch(e){ console.error('Erro na leitura de QR:',e); }
-    }
-    _movCamRAF=requestAnimationFrame(tick);
-  }
-  _movCamRAF=requestAnimationFrame(tick);
-}
-
-// Resolve o que foi digitado (nº curto ou código longo) e devolve o id da caixa pro callback
-function resolverDigitado(texto,cb){
-  google.script.run
-    .withSuccessHandler(function(r){ if(!r||!r.ok){ mostrarErroScan(r&&r.erro?r.erro:'Código não reconhecido'); return; } cb(r.id); })
-    .withFailureHandler(function(e){ mostrarErroScan('Erro: '+(e?e.message:'')); })
-    .resolverCodigoCaixa(texto);
-}
-function movDigitarCodigo(){
-  var inp=document.getElementById('mov-input-digitado');
-  var v=inp.value.trim(); if(!v) return;
-  resolverDigitado(v,function(id){ inp.value=''; movProcessarCodigo(id); });
-}
-function balDigitarCodigo(){
-  var inp=document.getElementById('bal-input-digitado');
-  var v=inp.value.trim(); if(!v) return;
-  resolverDigitado(v,function(id){ inp.value=''; balRegistrarBipagem(id); });
-}
-function movProcessarCodigo(raw){
-  raw=String(raw||'').trim();
-  if(!raw) return;
-  // O QR Code traz um JSON com o id da caixa; aceitamos também o id puro por segurança.
-  var caixaId=raw;
-  try{ var j=JSON.parse(raw); if(j&&j.id) caixaId=j.id; }catch(e){}
-
-  if(S.movTipo==='ENTRADA'){ movProcessarCodigoEntrada(caixaId); return; }
-  if(S.movTipo==='SAIDA'){ movProcessarCodigoSaida(caixaId); return; }
-}
-
-// ── SAÍDA: bipa → consulta a caixa (sem registrar) → mostra card de conferência → precisa clicar "Conferido" ──
-function movProcessarCodigoSaida(caixaId){
-  S.movSaidaPendentes=S.movSaidaPendentes||[];
-  if(S.movSaidaPendentes.some(function(x){ return x.caixaId===caixaId; })){
-    mostrarErroScan('Essa caixa já está na leva desta saída');
-    return;
-  }
-  _movCamPausado=true;
-  google.script.run
-    .withSuccessHandler(function(d){
-      if(!d){ _movCamPausado=false; mostrarErroScan('Caixa não encontrada na produção. Confira o código lido.'); return; }
-      if(d.StatusAtual!=='ENTRADA'){ _movCamPausado=false; mostrarErroScan('Essa caixa não está em estoque — precisa dar entrada nela de novo antes de poder dar saída.'); return; }
-      tocarBeep();
-      movFecharCameraManual();
-      S.movSaidaAguardando={ caixaId:caixaId, peca:d.Peca, codPeca:d.CodigoPeca, material:d.Material, lote:d.Lote, qtdPecas:d.QtdPecas, numeroCaixa:d.NumeroCaixa };
-      var info=document.getElementById('mov-saida-conferir-info');
-      info.innerHTML='<div style="font-weight:900;color:var(--azul);font-size:14px">'+d.CodigoPeca+' — '+d.Peca+'</div>'+
-        '<div style="font-size:12px;color:var(--texto2);margin-top:4px">Material: <b>'+d.Material+'</b></div>'+
-        '<div style="font-size:12px;color:var(--texto2)">Lote: <b>'+(d.Lote||'—')+'</b> • Caixa Nº '+(d.NumeroCaixa||'—')+' • '+d.QtdPecas+' pç'+(d.Seq?' • Ref <b>'+formatarNumCaixa(d.Seq)+'</b>':'')+'</div>';
-      document.getElementById('mov-saida-conferir-popup').style.display='block';
-      // câmera fica travada até clicar em "Conferido" — evita bipar a próxima sem revisar a atual.
-    })
-    .withFailureHandler(function(e){ _movCamPausado=false; mostrarErroScan('Erro: '+(e?e.message:'')); })
-    .getCaixaPorId(caixaId);
-}
-function movConferirSaidaAtual(){
-  if(!S.movSaidaAguardando) return;
-  S.movSaidaPendentes=S.movSaidaPendentes||[];
-  S.movSaidaPendentes.push(S.movSaidaAguardando);
-  S.movSaidaAguardando=null;
-  document.getElementById('mov-saida-conferir-popup').style.display='none';
-  _movCamPausado=false;
-  renderMovSaidaPendentesLista();
-}
-function renderMovSaidaPendentesLista(){
-  var lista=document.getElementById('mov-saida-pendentes-lista');
-  if(!lista) return;
-  var pend=S.movSaidaPendentes||[];
-  lista.innerHTML=pend.map(function(c){
-    return '<div class="caixa-row"><span>'+c.codPeca+' — '+c.peca+' ('+c.material+') Lote '+(c.lote||'—')+' — '+c.qtdPecas+' pç</span>'+
-      '<span class="caixa-acts"><button class="bic bic-d" onclick="movRemoverPendenteSaida(\''+c.caixaId+'\')">🗑️</button></span></div>';
-  }).join('');
-  var btn=document.getElementById('mov-saida-confirmar-btn');
-  if(!pend.length){ btn.disabled=true; btn.textContent='Escaneie ao menos uma caixa'; }
-  else { btn.disabled=false; btn.textContent='✅ Confirmar Registro de '+pend.length+' caixa(s)'; }
-}
-function movRemoverPendenteSaida(caixaId){
-  S.movSaidaPendentes=(S.movSaidaPendentes||[]).filter(function(x){ return x.caixaId!==caixaId; });
-  renderMovSaidaPendentesLista();
-}
-function movConfirmarSaidas(){
-  var pend=(S.movSaidaPendentes||[]).slice();
-  if(!pend.length) return;
-  var btn=document.getElementById('mov-saida-confirmar-btn');
-  btn.disabled=true; btn.textContent='Registrando...';
-  var ok=0, falhas=[];
-  function proxima(i){
-    if(i>=pend.length){
-      S.movSaidaPendentes=[];
-      renderMovSaidaPendentesLista();
-      movCarregarEstoque();
-      if(falhas.length) toast(ok+' caixa(s) registrada(s), '+falhas.length+' falharam: '+falhas.join('; '),'erro');
-      else toast(ok+' caixa(s) confirmada(s) e registrada(s) como saída!','sucesso');
-      return;
-    }
-    var c=pend[i];
-    var dados={ CaixaID:c.caixaId, Tipo:'SAIDA', Origem:'BIPADO', Usuario:movUsuarioAtual() };
-    if(S.movTipoSaida){ dados.TipoSaida=S.movTipoSaida; dados.NotaFiscal=S.movNotaFiscal||''; }
-    google.script.run
-      .withSuccessHandler(function(r){
-        if(r&&r.ok){ ok++; movTratarResultado(r,c.caixaId); } else { falhas.push(c.codPeca+' ('+(r&&r.erro?r.erro:'erro')+')'); }
-        proxima(i+1);
-      })
-      .withFailureHandler(function(e){ falhas.push(c.codPeca+' ('+(e?e.message:'erro')+')'); proxima(i+1); })
-      .registrarMovimentacao(dados,null);
-  }
-  proxima(0);
-}
-
-// ── Beep de confirmação sonora ao escanear (Web Audio API, sem arquivo externo) ──
-function tocarBeep(){
-  try{
-    var ctx=new (window.AudioContext||window.webkitAudioContext)();
-    function bip(tInicio,freq){
-      var osc=ctx.createOscillator(); var gain=ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.frequency.value=freq; osc.type='square';
-      gain.gain.setValueAtTime(.9,tInicio);
-      gain.gain.exponentialRampToValueAtTime(.01,tInicio+.12);
-      osc.start(tInicio); osc.stop(tInicio+.12);
-    }
-    bip(ctx.currentTime,1200);
-    bip(ctx.currentTime+.13,1600);
-  }catch(e){}
-}
-function tocarErro(){
-  try{
-    var ctx=new (window.AudioContext||window.webkitAudioContext)();
-    var osc=ctx.createOscillator(); var gain=ctx.createGain();
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.frequency.value=180; osc.type='sawtooth';
-    gain.gain.setValueAtTime(.9,ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(.01,ctx.currentTime+.4);
-    osc.start(ctx.currentTime); osc.stop(ctx.currentTime+.4);
-  }catch(e){}
-}
-function mostrarErroScan(msg){
-  toast(msg,'erro');
-  tocarErro();
-  var wrap=document.querySelector('.mov-cam-wrap');
-  if(wrap){ wrap.classList.remove('erro-flash'); void wrap.offsetWidth; wrap.classList.add('erro-flash'); }
-}
-
-// ── ENTRADA: escaneia sem registrar — só consulta a caixa e guarda pra revisão ──
-function movProcessarCodigoEntrada(caixaId){
-  S.movEntradaPendentes=S.movEntradaPendentes||[];
-  if(S.movEntradaPendentes.some(function(x){ return x.caixaId===caixaId; })){
-    mostrarErroScan('Essa caixa já foi escaneada nesta leva');
-    return;
-  }
-  _movCamPausado=true;
-  google.script.run
-    .withSuccessHandler(function(d){
-      if(!d){ _movCamPausado=false; mostrarErroScan('Caixa não encontrada na produção. Confira o código lido.'); return; }
-      if(d.StatusAtual==='ENTRADA'){ _movCamPausado=false; mostrarErroScan('Essa caixa já está em estoque — não é possível dar entrada de novo nela.'); return; }
-      tocarBeep();
-      movFecharCameraManual();
-      S.movEntradaAguardando={ caixaId:caixaId, peca:d.Peca, codPeca:d.CodigoPeca, material:d.Material, lote:d.Lote,
-        qtdPecas:d.QtdPecas, numeroCaixa:d.NumeroCaixa, trimestre:d.Trimestre, ano:d.Ano, matricula:d.Matricula, operadorProducao:d.Operador };
-      var info=document.getElementById('mov-entrada-conferir-info');
-      info.innerHTML='<div style="font-weight:900;color:var(--azul);font-size:14px">'+d.CodigoPeca+' — '+d.Peca+'</div>'+
-        '<div style="font-size:12px;color:var(--texto2);margin-top:4px">Material: <b>'+d.Material+'</b></div>'+
-        '<div style="font-size:12px;color:var(--texto2)">Lote: <b>'+(d.Lote||'—')+'</b> • Caixa Nº '+(d.NumeroCaixa||'—')+' • '+d.QtdPecas+' pç'+(d.Seq?' • Ref <b>'+formatarNumCaixa(d.Seq)+'</b>':'')+'</div>';
-      renderGridConferente2Item();
-      document.getElementById('mov-entrada-conferir-popup').style.display='block';
-      // câmera fica travada até escolher o Conferente 2 desta etiqueta — obrigatório sempre, etiqueta por etiqueta.
-    })
-    .withFailureHandler(function(e){ _movCamPausado=false; toast('Erro: '+(e?e.message:''),'erro'); })
-    .getCaixaPorId(caixaId);
-}
-function renderGridConferente2Item(){
-  var g=document.getElementById('mov-entrada-conferir-grid');
-  if(!g) return;
-  var conferente1Nome=S.movEntradaAguardando?S.movEntradaAguardando.operadorProducao:null;
-  var conferente1Mat=S.movEntradaAguardando?S.movEntradaAguardando.matricula:null;
-  var opcoes=S.op.filter(function(o){
-    if(conferente1Mat && o.Matricula) return o.Matricula!==conferente1Mat;
-    return o.Nome!==conferente1Nome;
-  });
-  if(!opcoes.length){ g.innerHTML='<p style="font-size:12px;color:var(--texto2)">Não há outro operador cadastrado além de quem produziu esta caixa ('+(conferente1Nome||'—')+'). Cadastre outro operador em Admin.</p>'; return; }
-  g.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px">'+opcoes.map(function(o){
-    var m=o.Matricula||'';
-    return '<div class="op-sel-btn" style="padding:10px 6px;gap:4px" onclick="movConfirmarConferente2Item(\''+esc(o.Nome)+'\',\''+esc(m)+'\')">'+
-      (m?'<span class="mat" style="font-size:9px;padding:1px 6px">'+m+'</span>':'')+
-      '<span class="nome" style="font-size:12px">'+o.Nome+'</span></div>';
-  }).join('')+'</div>';
-}
-function movConfirmarConferente2Item(nome,matricula){
-  if(!S.movEntradaAguardando) return;
-  var item=S.movEntradaAguardando;
-  item.conferente2Nome=(matricula?matricula+' — ':'')+nome;
-  S.movEntradaPendentes=S.movEntradaPendentes||[];
-  S.movEntradaPendentes.push(item);
-  S.movEntradaAguardando=null;
-  document.getElementById('mov-entrada-conferir-popup').style.display='none';
-  _movCamPausado=false;
-  renderMovEntradaLista();
-  toast(item.codPeca+' — '+item.peca+' adicionada à leva','sucesso');
-}
-
-function renderMovEntradaLista(){
-  var lista=document.getElementById('mov-entrada-lista');
-  if(!lista) return;
-  var pend=S.movEntradaPendentes||[];
-  if(!pend.length){
-    lista.innerHTML='<p style="font-size:12px;color:var(--texto2);padding:4px 0">Nenhuma caixa escaneada ainda nesta leva.</p>';
-  } else {
-    lista.innerHTML=pend.map(function(c){
-      return '<div class="caixa-row"><span>'+c.codPeca+' — '+c.peca+' ('+c.material+') Lote '+(c.lote||'—')+' — '+c.qtdPecas+' pç'+
-        '<br><span style="color:var(--texto2);font-size:10px">Conferente 2: '+(c.conferente2Nome||'—')+'</span></span>'+
-        '<span class="caixa-acts"><button class="bic bic-d" onclick="movRemoverPendenteEntrada(\''+c.caixaId+'\')">🗑️</button></span></div>';
-    }).join('');
-  }
-  atualizarBtnConfirmarEntrada();
-}
-function movRemoverPendenteEntrada(caixaId){
-  var item=(S.movEntradaPendentes||[]).find(function(x){ return x.caixaId===caixaId; });
-  var desc=item?(item.codPeca+' — '+item.peca):caixaId;
-  var motivo=prompt('Motivo para remover esta caixa da leva ('+desc+'):');
-  if(motivo===null) return; // cancelou
-  if(!motivo.trim()){ toast('É obrigatório informar o motivo','aviso'); return; }
-  var senha=prompt('Senha de administrador:');
-  if(!senha){ toast('Senha obrigatória para remover','aviso'); return; }
-  google.script.run
-    .withSuccessHandler(function(ok){
-      if(!ok){ toast('Senha incorreta','erro'); return; }
-      S.movEntradaPendentes=(S.movEntradaPendentes||[]).filter(function(x){ return x.caixaId!==caixaId; });
-      renderMovEntradaLista();
-      toast('Caixa removida da leva','aviso');
-    })
-    .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); })
-    .verificarSenhaAdmin(senha);
-}
-function atualizarBtnConfirmarEntrada(){
-  var btn=document.getElementById('mov-entrada-confirmar-btn');
-  if(!btn) return;
-  var pend=S.movEntradaPendentes||[];
-  if(!pend.length){ btn.disabled=true; btn.textContent='Escaneie ao menos uma caixa'; return; }
-  btn.disabled=false; btn.textContent='✅ Confirmar e Enviar '+pend.length+' caixa(s) pro Estoque';
-}
-function movConfirmarEntradas(){
-  var pend=(S.movEntradaPendentes||[]).slice();
-  if(!pend.length) return;
-  var btn=document.getElementById('mov-entrada-confirmar-btn');
-  btn.disabled=true; btn.textContent='Enviando...';
-  var ok=0, falhas=[];
-  function proxima(i){
-    if(i>=pend.length){
-      S.movEntradaPendentes=[];
-      renderMovEntradaLista();
-      movCarregarEstoque();
-      if(falhas.length) toast(ok+' caixa(s) enviada(s), '+falhas.length+' falharam: '+falhas.join('; '),'erro');
-      else toast(ok+' caixa(s) confirmada(s) e enviada(s) pro estoque!','sucesso');
-      document.getElementById('mov-ultima').classList.add('vis');
-      document.getElementById('mov-ultima-ico').textContent='📥';
-      document.getElementById('mov-ultima-peca').textContent=ok+' caixa(s) — entrada confirmada';
-      document.getElementById('mov-ultima-det').textContent='Conferentes 2 registrados por caixa';
-      return;
-    }
-    var c=pend[i];
-    google.script.run
-      .withSuccessHandler(function(r){
-        if(r&&r.ok) ok++; else falhas.push(c.codPeca+' ('+(r&&r.erro?r.erro:'erro')+')');
-        proxima(i+1);
-      })
-      .withFailureHandler(function(e){ falhas.push(c.codPeca+' ('+(e?e.message:'erro')+')'); proxima(i+1); })
-      .registrarMovimentacao({ CaixaID:c.caixaId, Tipo:'ENTRADA', Origem:'BIPADO', Usuario:movUsuarioAtual(), Conferente2:c.conferente2Nome||'' }, null);
-  }
-  proxima(0);
-}
-
-function movTratarResultado(r,caixaId){
-  if(!r||!r.ok){
-    if(r&&r.precisaForcar){
-      if(confirm((r.erro||'Divergência de estoque')+'\n\nDeseja FORÇAR esta movimentação? Isso exige senha de administrador.')){
-        var senha=prompt('Senha de administrador:');
-        if(senha){
-          _movCamPausado=true;
-          var dadosForcar={CaixaID:caixaId,Tipo:S.movTipo,Origem:'BIPADO',Usuario:movUsuarioAtual(),Forcar:true};
-          if(S.movTipo==='ENTRADA' && S.movConferente2){
-            dadosForcar.Conferente2=(S.movConferente2.matricula?S.movConferente2.matricula+' — ':'')+S.movConferente2.nome;
-          }
-          if(S.movTipo==='SAIDA' && S.movTipoSaida){
-            dadosForcar.TipoSaida=S.movTipoSaida;
-            dadosForcar.NotaFiscal=S.movNotaFiscal||'';
-          }
-          google.script.run
-            .withSuccessHandler(function(r2){ _movCamPausado=false; movTratarResultado(r2,caixaId); })
-            .withFailureHandler(function(e){ _movCamPausado=false; toast('Erro: '+(e?e.message:''),'erro'); })
-            .registrarMovimentacao(dadosForcar,senha);
-        }
-      }
-    } else {
-      toast(r&&r.erro?r.erro:'Erro ao bipar','erro');
-    }
-    return;
-  }
-  toast((r.tipo==='ENTRADA'?'Entrada':'Saída')+' registrada: '+r.peca,'sucesso');
-  document.getElementById('mov-ultima').classList.add('vis');
-  document.getElementById('mov-ultima-ico').textContent=r.tipo==='ENTRADA'?'📥':'📤';
-  document.getElementById('mov-ultima-peca').textContent=r.peca+' ('+r.material+')';
-  document.getElementById('mov-ultima-det').textContent=(r.tipo==='ENTRADA'?'Entrada':'Saída')+' de 1 caixa — agora';
-  if(r.tipo==='SAIDA'){
-    S.movCaixasSessao=S.movCaixasSessao||[];
-    S.movCaixasSessao.unshift({ movId:r.id, peca:r.peca, material:r.material, lote:r.lote, caixaId:r.caixaId, codPeca:r.codPeca });
-    renderMovSaidaLista();
-  }
-  movCarregarEstoque();
-}
-var _histMovSaidaCache={};
-function renderMovSaidaLista(){
-  var box=document.getElementById('mov-saida-lista-box');
-  var el=document.getElementById('mov-saida-lista');
-  if(!box||!el) return;
-  var lista=S.movCaixasSessao||[];
-  if(!lista.length){ box.style.display='none'; el.innerHTML=''; return; }
-  box.style.display='block';
-  el.innerHTML=lista.map(function(c){
-    _histMovSaidaCache[c.movId]=c;
-    return '<div class="caixa-row"><span>'+(c.codPeca||'')+' — '+c.peca+' ('+c.material+') Lote '+(c.lote||'—')+'</span>'+
-      '<span class="caixa-acts"><button class="bic bic-d" onclick="movExcluirDaSaida(\''+c.movId+'\')">🗑️</button></span></div>';
-  }).join('');
-}
-function movExcluirDaSaida(movId){
-  var c=_histMovSaidaCache[movId];
-  var desc=c?(c.codPeca+' — '+c.peca+' ('+c.material+')'):movId;
-  var motivo=prompt('Motivo da exclusão desta saída ('+desc+'):');
-  if(motivo===null) return; // cancelou
-  if(!motivo.trim()){ toast('É obrigatório informar o motivo','aviso'); return; }
-  var exigeSenha = S.movTipoSaida==='CORRECAO';
-  var senha=null;
-  if(exigeSenha){
-    senha=prompt('Correção de estoque — senha de administrador:');
-    if(!senha){ toast('Senha obrigatória pra excluir saída de correção','aviso'); return; }
-  }
-  google.script.run
-    .withSuccessHandler(function(r){
-      if(!r||!r.ok){ toast(r&&r.erro?r.erro:'Erro ao excluir','erro'); return; }
-      S.movCaixasSessao=(S.movCaixasSessao||[]).filter(function(x){ return x.movId!==movId; });
-      renderMovSaidaLista();
-      movCarregarEstoque();
-      toast('Saída excluída — caixa volta a constar como em estoque','aviso');
-    })
-    .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); })
-    .excluirMovimentacao(movId,motivo.trim(),senha,exigeSenha);
-}
-
 function movConfirmarManual(){
+  if(_mmEnviando) return;
   var pv=document.getElementById('mm-peca').value;
   if(!pv){ toast('Cadastre ao menos uma peça em Admin','aviso'); return; }
   var partes=pv.split('|');
   var dados={
-    Tipo:S.movTipo, Origem:'MANUAL',
+    Tipo:S.movTipo, Origem:'MANUAL', IdMov:_mmIdMov||gerarID(),
     CodigoPeca:partes[0], Peca:partes[1],
     Material:document.getElementById('mm-mat').value,
     Lote:document.getElementById('mm-lote').value.trim(),
@@ -5188,25 +5562,38 @@ function movConfirmarManual(){
     Motivo:document.getElementById('mm-motivo').value.trim(),
     Usuario:movUsuarioAtual()
   };
-  if(S.movTipo==='ENTRADA' && S.movConferente2){
-    dados.Conferente2=(S.movConferente2.matricula?S.movConferente2.matricula+' — ':'')+S.movConferente2.nome;
-  }
+  _mmIdMov=dados.IdMov;
+  if(S.movTipo==='ENTRADA'&&S.movConferente2) dados.Conferente2=S.movConferente2.rotulo;
+  if(S.movTipo==='SAIDA'){ dados.TipoSaida=S.movTipoSaida||''; dados.NotaFiscal=S.movNotaFiscal||''; }
+  if(!dados.Motivo){ toast('Informe o motivo','aviso'); return; }
   var senha=document.getElementById('mm-senha').value;
   if(!senha){ toast('Informe a senha de administrador','aviso'); return; }
+  var btn=document.getElementById('mm-btn');
+  _mmEnviando=true; if(btn){ btn.disabled=true; btn.textContent='Registrando…'; }
+  function destravar(){ _mmEnviando=false; if(btn){ btn.disabled=false; btn.textContent='💾 Registrar Manual'; } }
   google.script.run
     .withSuccessHandler(function(r){
+      destravar();
       if(!r||!r.ok){ toast(r&&r.erro?r.erro:'Erro ao registrar','erro'); return; }
-      toast('Movimentação manual registrada: '+r.peca,'sucesso');
+      toast(r.jaRegistrado?'Esse lançamento já estava gravado. Nada foi gravado em dobro.':'Movimentação manual registrada: '+r.peca+' ('+r.qtd+' cx)','sucesso');
       movFecharManual();
-      document.getElementById('mov-manual-box').classList.remove('vis');
-      document.getElementById('mov-ultima').classList.add('vis');
-      document.getElementById('mov-ultima-ico').textContent=r.tipo==='ENTRADA'?'📥':'📤';
-      document.getElementById('mov-ultima-peca').textContent=r.peca+' ('+r.material+')';
-      document.getElementById('mov-ultima-det').textContent='Manual — '+dados.QtdCaixas+' caixa(s)';
       movCarregarEstoque();
     })
-    .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); })
+    .withFailureHandler(function(e){
+      destravar();
+      toast('Sem confirmação do servidor. Toque em Registrar de novo: não grava em dobro.','erro');
+    })
     .registrarMovimentacao(dados,senha);
+}
+
+// ── sons (usados também na verificação e no balanço) ──
+function tocarBeep(){ Leitor.som('ok'); }
+function tocarErro(){ Leitor.som('erro'); }
+function mostrarErroScan(msg){
+  toast(msg,'erro');
+  tocarErro();
+  var wrap=document.querySelector('.mov-cam-wrap');
+  if(wrap){ wrap.classList.remove('erro-flash'); void wrap.offsetWidth; wrap.classList.add('erro-flash'); }
 }
 
 function movCarregarEstoque(){
