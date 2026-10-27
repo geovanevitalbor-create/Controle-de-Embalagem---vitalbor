@@ -1243,25 +1243,69 @@ select.inp-pos option{color:#000;background:#fff}
 .dash-filtro{background:#fff;border-radius:var(--radius);padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:16px}
 .df-titulo{font-size:13px;font-weight:800;color:var(--azul);margin-bottom:10px}
 .df-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
-.bal-modo{display:flex;gap:8px;flex-wrap:wrap}
-.df-campo .bal-modo label{display:flex;align-items:center;gap:8px;border:2px solid var(--cinza3);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;font-weight:800;color:var(--texto);cursor:pointer;text-transform:none;letter-spacing:0;margin:0;background:#fff}
-.df-campo .bal-modo label:has(input:checked){border-color:var(--azul3);background:#eaf3ff}
-.df-campo .bal-modo input,.df-campo .bal-chip input{width:auto;padding:0;border:0;margin:0;-webkit-appearance:auto;appearance:auto;accent-color:var(--azul3)}
-.bal-escolha{margin-top:8px;border:2px solid var(--cinza3);border-radius:var(--radius-sm);padding:10px;background:#fff;max-height:360px;overflow-y:auto}
-.bal-escolha[hidden]{display:none}
-.bal-escolha-hd{display:flex;gap:8px;align-items:center;position:sticky;top:-10px;background:#fff;padding:2px 0 8px;z-index:1}
-.bal-escolha-hd input{flex:1;min-width:0}
-.bal-qtd{font-size:12px;font-weight:800;color:var(--texto2);white-space:nowrap}
+.bal-novo{background:#fff;border-radius:var(--radius);box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:16px;flex-shrink:0}
+.bal-novo-hd{padding:16px 20px 4px}
+.bal-novo-hd h3{font-size:17px;font-weight:900;color:var(--azul);margin:0}
+.bal-novo-hd p{font-size:13px;color:var(--texto2);margin:4px 0 0}
+.bal-paineis{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:14px;padding:14px 20px;align-items:start}
+@media (max-width:1100px){.bal-paineis{grid-template-columns:1fr}}
+.bal-painel{border:1px solid var(--cinza2);border-radius:var(--radius);background:var(--cinza);display:flex;flex-direction:column;min-width:0}
+.bal-painel-hd{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid var(--cinza2);background:#fff;border-radius:var(--radius) var(--radius) 0 0}
+.bal-painel-hd h4{font-size:15px;font-weight:900;color:var(--azul);margin:0;flex:1 1 auto}
+.bal-seg{display:inline-flex;background:var(--cinza2);border-radius:999px;padding:3px}
+.bal-seg label{position:relative;display:block;margin:0;cursor:pointer}
+.bal-seg input{position:absolute;opacity:0;pointer-events:none}
+.bal-seg span{display:block;padding:7px 16px;border-radius:999px;font-size:13px;font-weight:800;color:var(--texto2);white-space:nowrap}
+.bal-seg label.on span,.bal-seg input:checked+span{background:var(--azul);color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.bal-seg input:focus-visible+span{outline:2px solid var(--azul3);outline-offset:2px}
+.bal-painel-corpo{padding:12px 14px;flex:1}
+.bal-todas{font-size:14px;color:var(--texto2);padding:6px 2px}
+.bal-todas b{color:var(--texto)}
+.bal-escolha[hidden],.bal-todas[hidden]{display:none}
+.bal-busca-linha{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.bal-busca-linha input{flex:0 1 320px;min-width:0;padding:9px 12px;border:2px solid var(--cinza3);border-radius:var(--radius-sm);font-size:14px;background:#fff;outline:none}
+.bal-busca-linha input:focus{border-color:var(--azul3)}
+.bal-qtd{font-size:13px;font-weight:800;color:var(--texto2);white-space:nowrap}
 .bal-qtd.tem{color:var(--azul3)}
-.bal-grupo{margin-bottom:8px}
+.bal-grupo{display:grid;grid-template-columns:96px minmax(0,1fr) auto;gap:10px;align-items:start;padding:10px 0;border-top:1px solid var(--cinza2)}
+.bal-grupo:first-child{border-top:0;padding-top:2px}
 .bal-grupo[hidden]{display:none}
-.bal-grupo-hd{display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:12px}
-.bal-grupo-hd b{color:var(--azul);margin-right:4px}
-.bal-grupo-hd button{background:var(--cinza2);border:none;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;color:var(--texto2)}
-.bal-chips{display:flex;flex-wrap:wrap;gap:6px}
-.df-campo .bal-chip{display:inline-flex;align-items:center;gap:6px;border:2px solid var(--cinza3);border-radius:20px;padding:7px 12px;font-size:13px;font-weight:800;color:var(--texto);cursor:pointer;text-transform:none;letter-spacing:0;margin:0;background:#fff;user-select:none}
-.df-campo .bal-chip[hidden]{display:none}
-.df-campo .bal-chip.on{border-color:var(--azul3);background:#eaf3ff;color:var(--azul)}
+.bal-grupo-nome{font-size:14px;font-weight:900;color:var(--azul);padding-top:9px;line-height:1.2}
+.bal-grupo-nome small{display:block;font-size:12px;font-weight:700;color:var(--texto2);margin-top:2px}
+.bal-grupo-acao{background:none;border:none;color:var(--azul3);font-size:12px;font-weight:800;cursor:pointer;padding:9px 4px;white-space:nowrap}
+.bal-grupo-acao:hover{text-decoration:underline}
+.bal-chips{display:flex;flex-wrap:wrap;gap:8px}
+.bal-chip{position:relative;display:inline-flex;margin:0;cursor:pointer}
+.bal-chip input{position:absolute;opacity:0;pointer-events:none}
+.bal-chip span{display:inline-flex;align-items:center;min-height:38px;padding:0 14px;border:2px solid var(--cinza3);border-radius:var(--radius-sm);background:#fff;font-size:14px;font-weight:800;color:var(--texto);user-select:none;transition:background .12s,border-color .12s}
+.bal-chip:hover span{border-color:var(--azul3)}
+.bal-chip.on span,.bal-chip input:checked+span{background:var(--azul);border-color:var(--azul);color:#fff}
+.bal-chip input:focus-visible+span{outline:2px solid var(--azul3);outline-offset:2px}
+.bal-chip[hidden]{display:none}
+.bal-mats-acoes{display:flex;gap:4px}
+.bal-mats-acoes .bal-grupo-acao{padding:4px}
+.bal-rodape{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px 20px;background:var(--azul);color:#fff;border-radius:0 0 var(--radius) var(--radius)}
+.bal-resumo .cod{white-space:nowrap}
+.bal-resumo{flex:1 1 320px;font-size:15px;line-height:1.4;font-weight:600}
+.bal-resumo b{font-weight:900}
+.bal-resumo.falta{color:#ffd166}
+.bal-data{display:flex;flex-direction:column;gap:4px}
+.bal-data span{font-size:12px;font-weight:700;color:rgba(255,255,255,.65)}
+.bal-data input{padding:9px 10px;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:700;color:var(--texto);background:#fff}
+.bal-criar{background:var(--laranja);color:#fff;border:none;border-radius:var(--radius-sm);padding:13px 22px;font-size:15px;font-weight:900;cursor:pointer;white-space:nowrap;align-self:flex-end}
+.bal-criar:hover{background:var(--laranja2)}
+.bal-criar:disabled{opacity:.45;cursor:not-allowed}
+.bal-dica{width:100%;font-size:12px;color:rgba(255,255,255,.6);margin-top:-6px}
+@media (max-width:640px){
+  .bal-novo-hd,.bal-paineis,.bal-rodape{padding-left:12px;padding-right:12px}
+  .bal-grupo{grid-template-columns:1fr auto}
+  .bal-grupo-nome{padding-top:0;display:flex;gap:6px;align-items:baseline}
+  .bal-grupo-nome small{display:inline;margin:0}
+  .bal-grupo .bal-chips{grid-column:1/-1;order:3}
+  .bal-grupo-acao{padding:0 4px}
+  .bal-busca-linha input{flex:1 1 auto}
+  .bal-criar{width:100%}
+}
 .df-campo label{display:block;font-size:9px;font-weight:800;color:var(--texto2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
 .df-campo input,.df-campo select{width:100%;padding:10px 11px;border:2px solid var(--cinza3);border-radius:var(--radius-sm);font-size:13px;font-weight:600;color:var(--texto);outline:none;background:#fff;-webkit-appearance:none}
 .df-campo input:focus,.df-campo select:focus{border-color:var(--azul3)}
@@ -4106,35 +4150,46 @@ var DADOS_EXEMPLO_NF = {
 function renderBalancoAdmin(){
   var inner=document.getElementById('adm-balanco-inner');
   inner.innerHTML=
-    '<div class="dash-filtro">'+
-      '<div class="df-titulo">📋 Novo Balanço</div>'+
-      '<div class="df-campo" style="margin-bottom:8px"><label>Quais peças vão ser contadas</label>'+
-        '<div class="bal-modo">'+
-          '<label><input type="radio" name="bal-modo" value="todas" checked onchange="balEscopoModo()"/> Todas as peças</label>'+
-          '<label><input type="radio" name="bal-modo" value="escolher" onchange="balEscopoModo()"/> Escolher peças</label>'+
+    '<section class="bal-novo">'+
+      '<div class="bal-novo-hd"><h3>Novo balanço</h3><p>Escolha o que vai ser contado. Caixa de fora do balanço é recusada na hora de bipar.</p></div>'+
+      '<div class="bal-paineis">'+
+        '<div class="bal-painel">'+
+          '<div class="bal-painel-hd"><h4>Peças</h4>'+
+            '<div class="bal-seg" role="radiogroup" aria-label="Peças">'+
+              '<label class="on"><input type="radio" name="bal-modo" value="todas" checked onchange="balEscopoModo()"/><span>Todas</span></label>'+
+              '<label><input type="radio" name="bal-modo" value="escolher" onchange="balEscopoModo()"/><span>Escolher</span></label>'+
+            '</div></div>'+
+          '<div class="bal-painel-corpo">'+
+            '<div class="bal-todas" id="bal-todas-pecas">Todas as <b>'+(S.pecas||[]).length+' peças</b> cadastradas entram no balanço.</div>'+
+            '<div id="bal-escolha" class="bal-escolha" hidden>'+
+              '<div class="bal-busca-linha"><input type="search" id="bal-busca" placeholder="Filtrar: COL, 100…" oninput="balFiltrarPecas()"/><span id="bal-qtd-sel" class="bal-qtd">0 selecionadas</span></div>'+
+              '<div id="bal-lista-pecas"></div>'+
+            '</div>'+
+          '</div>'+
         '</div>'+
-        '<div id="bal-escolha" class="bal-escolha" hidden>'+
-          '<div class="bal-escolha-hd"><input type="search" id="bal-busca" placeholder="Filtrar (ex.: COL, 100, DEFOFO)" oninput="balFiltrarPecas()"/><span id="bal-qtd-sel" class="bal-qtd">0 selecionadas</span></div>'+
-          '<div id="bal-lista-pecas"></div>'+
+        '<div class="bal-painel">'+
+          '<div class="bal-painel-hd"><h4>Matéria-prima</h4>'+
+            '<div class="bal-seg" role="radiogroup" aria-label="Matéria-prima">'+
+              '<label class="on"><input type="radio" name="bal-modo-mat" value="todas" checked onchange="balEscopoModoMat()"/><span>Todas</span></label>'+
+              '<label><input type="radio" name="bal-modo-mat" value="escolher" onchange="balEscopoModoMat()"/><span>Escolher</span></label>'+
+            '</div></div>'+
+          '<div class="bal-painel-corpo">'+
+            '<div class="bal-todas" id="bal-todas-mats">Qualquer matéria-prima entra no balanço.</div>'+
+            '<div id="bal-escolha-mat" class="bal-escolha" hidden>'+
+              '<div class="bal-busca-linha"><span id="bal-qtd-mat" class="bal-qtd">0 selecionadas</span>'+
+                '<span class="bal-mats-acoes"><button type="button" class="bal-grupo-acao" onclick="balMarcarMats(true)">Marcar todas</button><button type="button" class="bal-grupo-acao" onclick="balMarcarMats(false)">Limpar</button></span></div>'+
+              '<div id="bal-lista-mats" class="bal-chips"></div>'+
+            '</div>'+
+          '</div>'+
         '</div>'+
       '</div>'+
-      '<div class="df-campo" style="margin-bottom:8px"><label>Qual matéria-prima</label>'+
-        '<div class="bal-modo">'+
-          '<label><input type="radio" name="bal-modo-mat" value="todas" checked onchange="balEscopoModoMat()"/> Todas as matérias-primas</label>'+
-          '<label><input type="radio" name="bal-modo-mat" value="escolher" onchange="balEscopoModoMat()"/> Escolher matéria-prima</label>'+
-        '</div>'+
-        '<div id="bal-escolha-mat" class="bal-escolha" hidden>'+
-          '<div class="bal-grupo-hd"><span id="bal-qtd-mat" class="bal-qtd">0 selecionadas</span>'+
-            '<button type="button" onclick="balMarcarMats(true)">Marcar todas</button><button type="button" onclick="balMarcarMats(false)">Limpar</button></div>'+
-          '<div id="bal-lista-mats" class="bal-chips"></div>'+
-        '</div>'+
+      '<div class="bal-rodape">'+
+        '<div class="bal-resumo" id="bal-resumo" aria-live="polite"></div>'+
+        '<label class="bal-data"><span>Agendar para (opcional)</span><input type="date" id="bal-data" oninput="balResumoEscopo()"/></label>'+
+        '<button class="bal-criar" id="bal-criar" onclick="criarNovoBalanco()">Criar balanço</button>'+
+        '<div class="bal-dica" id="bal-dica">Sem data, o balanço começa agora e o aviso aparece em todas as telas.</div>'+
       '</div>'+
-      '<div class="df-row">'+
-        '<div class="df-campo"><label>Agendar pra data (opcional)</label><input type="date" id="bal-data"/></div>'+
-      '</div>'+
-      '<div style="font-size:11px;color:var(--texto2);margin-bottom:8px">Se deixar a data em branco, o balanço já entra "Em andamento" e o aviso aparece em todas as telas na hora.</div>'+
-      '<button class="btn-filtrar" onclick="criarNovoBalanco()">📋 Criar Balanço</button>'+
-    '</div>'+
+    '</section>'+
     '<div class="hist-row"><div class="hist-titulo">Histórico de Balanços</div></div>'+
     '<div id="balanco-lista"><div class="dash-empty"><div class="spinner" style="border-top-color:var(--azul3);margin:0 auto"></div></div></div>';
   carregarListaBalancos();
@@ -4160,15 +4215,38 @@ function balNoEscopo(e,cod,mat){
   return true;
 }
 function balEscopoModoMat(){
-  var e=document.querySelector('input[name="bal-modo-mat"]:checked');
-  document.getElementById('bal-escolha-mat').hidden=!(e&&e.value==='escolher');
+  var e=document.querySelector('input[name="bal-modo-mat"]:checked'), escolher=!!(e&&e.value==='escolher');
+  document.getElementById('bal-escolha-mat').hidden=!escolher;
+  document.getElementById('bal-todas-mats').hidden=escolher;
+  balMarcarSeg('bal-modo-mat'); balResumoEscopo();
+}
+function balListaCurta(l){
+  l=l.map(function(x){ return '<span class="cod">'+htmlTxt(x)+'</span>'; });
+  return l.length<=6?l.slice(0,-1).join(', ')+(l.length>1?' e ':'')+l[l.length-1]:l.slice(0,5).join(', ')+' e mais '+(l.length-5);
+}
+// Frase que diz exatamente o que o balanço vai contar
+function balResumoEscopo(){
+  var el=document.getElementById('bal-resumo'); if(!el) return;
+  var mp=document.querySelector('input[name="bal-modo"]:checked'), mm=document.querySelector('input[name="bal-modo-mat"]:checked');
+  var escP=mp&&mp.value==='escolher', escM=mm&&mm.value==='escolher';
+  var pecas=escP?balPecasSelecionadas().map(function(x){ return x.codigo; }):[], mats=escM?balMatsSelecionadas():[];
+  var falta=(escP&&!pecas.length)?'Marque pelo menos uma peça.':((escM&&!mats.length)?'Marque pelo menos uma matéria-prima.':'');
+  var bt=document.getElementById('bal-criar'); if(bt) bt.disabled=!!falta;
+  el.classList.toggle('falta',!!falta);
+  if(falta){ el.textContent=falta; return; }
+  var txtP=pecas.length?(pecas.length===1?'a peça <b class="cod">'+htmlTxt(pecas[0])+'</b>':'<b>'+pecas.length+' peças</b>: '+balListaCurta(pecas)):'<b>todas as peças</b>';
+  var txtM=mats.length?' em <b>'+balListaCurta(mats)+'</b>':', em qualquer matéria-prima';
+  var dt=(document.getElementById('bal-data')||{}).value;
+  el.innerHTML='Vai contar '+txtP+txtM+'.';
+  var dica=document.getElementById('bal-dica');
+  if(dica) dica.textContent=dt?'Fica agendado para '+dt.split('-').reverse().join('/')+'. O aviso aparece nas telas nesse dia.':'Sem data, o balanço começa agora e o aviso aparece em todas as telas.';
 }
 function balMontarListaMats(){
   var el=document.getElementById('bal-lista-mats'); if(!el) return;
   var mats=(S.mats||[]).map(function(m){ return m.Nome; }).filter(Boolean).sort();
   el.innerHTML=mats.map(function(n){
     return '<label class="bal-chip"><input type="checkbox" value="'+htmlTxt(n)+'" onchange="balContarSelMat()"/><span>'+htmlTxt(n)+'</span></label>';
-  }).join('')||'<div style="font-size:12px;color:var(--texto2)">Nenhuma matéria-prima cadastrada.</div>';
+  }).join('')||'<div style="font-size:13px;color:var(--texto2)">Nenhuma matéria-prima cadastrada.</div>';
   balContarSelMat();
 }
 function balMatsSelecionadas(){ return Array.prototype.map.call(document.querySelectorAll('#bal-lista-mats input:checked'),function(i){ return i.value; }); }
@@ -4177,11 +4255,17 @@ function balContarSelMat(){
   var n=balMatsSelecionadas().length, el=document.getElementById('bal-qtd-mat');
   if(el){ el.textContent=n===1?'1 selecionada':n+' selecionadas'; el.classList.toggle('tem',n>0); }
   document.querySelectorAll('#bal-lista-mats .bal-chip').forEach(function(c){ c.classList.toggle('on',c.querySelector('input').checked); });
+  balResumoEscopo();
+}
+function balMarcarSeg(nome){
+  document.querySelectorAll('input[name="'+nome+'"]').forEach(function(i){ i.parentNode.classList.toggle('on',i.checked); });
 }
 function balEscopoModo(){
   var esc0=document.querySelector('input[name="bal-modo"]:checked');
   var escolher=esc0&&esc0.value==='escolher';
   document.getElementById('bal-escolha').hidden=!escolher;
+  document.getElementById('bal-todas-pecas').hidden=escolher;
+  balMarcarSeg('bal-modo'); balResumoEscopo();
   if(escolher) setTimeout(function(){ try{ document.getElementById('bal-busca').focus(); }catch(e){} },50);
 }
 function balMontarListaPecas(){
@@ -4189,13 +4273,16 @@ function balMontarListaPecas(){
   var pecas=(S.pecas||[]).slice().sort(planOrdemPadrao), grupos={}, ordem=[];
   pecas.forEach(function(p){ var g=planPrefixoGrupo(p.Codigo)||'OUTRAS'; if(!grupos[g]){ grupos[g]=[]; ordem.push(g); } grupos[g].push(p); });
   el.innerHTML=ordem.map(function(g){
-    return '<div class="bal-grupo" data-grupo="'+htmlTxt(g)+'"><div class="bal-grupo-hd"><b>'+htmlTxt(g)+'</b>'+
-      '<button type="button" onclick="balMarcarGrupo(\''+esc(g)+'\',true)">Marcar todas</button><button type="button" onclick="balMarcarGrupo(\''+esc(g)+'\',false)">Limpar</button></div>'+
+    return '<div class="bal-grupo" data-grupo="'+htmlTxt(g)+'">'+
+      '<div class="bal-grupo-nome">'+htmlTxt(g)+'<small data-cont="'+htmlTxt(g)+'">0 de '+grupos[g].length+'</small></div>'+
       '<div class="bal-chips">'+grupos[g].map(function(p){
         return '<label class="bal-chip" data-busca="'+htmlTxt(semAcentoConsulta(p.Codigo+' '+p.Nome))+'" title="'+htmlTxt(p.Nome)+'">'+
           '<input type="checkbox" value="'+htmlTxt(p.Codigo)+'" data-nome="'+htmlTxt(p.Nome)+'" onchange="balContarSel()"/><span>'+htmlTxt(p.Codigo)+'</span></label>';
-      }).join('')+'</div></div>';
-  }).join('')||'<div style="font-size:12px;color:var(--texto2)">Nenhuma peça cadastrada.</div>';
+      }).join('')+'</div>'+
+      '<div><button type="button" class="bal-grupo-acao" onclick="balMarcarGrupo(\''+esc(g)+'\',true)">Marcar todas</button>'+
+      '<button type="button" class="bal-grupo-acao" onclick="balMarcarGrupo(\''+esc(g)+'\',false)">Limpar</button></div>'+
+    '</div>';
+  }).join('')||'<div style="font-size:13px;color:var(--texto2)">Nenhuma peça cadastrada.</div>';
   balContarSel();
 }
 function balFiltrarPecas(){
@@ -4220,6 +4307,11 @@ function balContarSel(){
   var n=balPecasSelecionadas().length, el=document.getElementById('bal-qtd-sel');
   if(el){ el.textContent=n===1?'1 selecionada':n+' selecionadas'; el.classList.toggle('tem',n>0); }
   document.querySelectorAll('#bal-lista-pecas .bal-chip').forEach(function(c){ c.classList.toggle('on',c.querySelector('input').checked); });
+  document.querySelectorAll('#bal-lista-pecas .bal-grupo').forEach(function(g){
+    var tot=g.querySelectorAll('input').length, sel=g.querySelectorAll('input:checked').length, c=g.querySelector('small[data-cont]');
+    if(c) c.textContent=sel+' de '+tot;
+  });
+  balResumoEscopo();
 }
 function criarNovoBalanco(){
   var modo=document.querySelector('input[name="bal-modo"]:checked');
