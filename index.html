@@ -1083,8 +1083,7 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-fa
 .pos-imprimir.vis{display:flex}
 .pos-nova{margin:6px 10px 10px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.12);border-radius:var(--radius);padding:10px;font-size:13px;font-weight:700;cursor:pointer;display:none;align-items:center;justify-content:center}
 .pos-nova.vis{display:flex}
-.pos-limpar{margin:6px 10px 10px;background:none;color:rgba(255,255,255,.45);border:1px dashed rgba(255,255,255,.18);border-radius:var(--radius);padding:9px;font-size:12px;font-weight:700;cursor:pointer;display:none;align-items:center;justify-content:center}
-.pos-limpar.vis{display:flex}
+
 .pos-nova:active{background:rgba(255,255,255,.15)}
 
 .pos-main{flex:1;display:flex;flex-direction:column;min-width:0}
@@ -1803,8 +1802,7 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
   .ps-label{font-size:8px}
   .ps-val{font-size:12px}
   .pos-registrar,.pos-imprimir,.pos-nova{margin:0;flex:1 1 0;min-height:48px;padding:10px;font-size:14px}
-  .pos-imprimir:not(.vis),.pos-nova:not(.vis),.pos-limpar:not(.vis){display:none}
-  .pos-limpar{margin:0;flex:1 1 100%;min-height:40px}
+  .pos-imprimir:not(.vis),.pos-nova:not(.vis){display:none}
   .pos-steps{overflow-x:auto;justify-content:flex-start;padding:0 6px;-webkit-overflow-scrolling:touch}
   .pstep{flex:0 0 auto;padding:6px 8px}
   .pstep-sep{width:8px}
@@ -1930,7 +1928,6 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
     <button class="pos-registrar" id="btn-registrar" onclick="confirmarProd()">✅ REGISTRAR</button>
     <button class="pos-imprimir" id="btn-imprimir" onclick="imprimirTodas()">🖨️ IMPRIMIR</button>
     <button class="pos-nova" id="btn-nova" onclick="novaProd()">+ Nova Produção</button>
-    <button class="pos-limpar" id="btn-limpar-prod" onclick="limparProd()">↺ Recomeçar do zero</button>
   </div>
 
   <div class="pos-main">
@@ -2522,10 +2519,7 @@ function entrarComoOperador(){
   document.getElementById('tb-modo-label').textContent='Modo:';
   var b=document.getElementById('tb-badge'); b.textContent='OPERADOR'; b.className='u-badge';
   mostrarPag('producao');
-  // continua de onde parou: se ainda está na memória, só redesenha; se o app fechou, recupera do aparelho
-  if(prodPassoAtual()===7){ renderGridOp(); return; }
-  if(S.sel&&S.sel.op){ renderGridOp(); renderGridPeca(); renderGridMat(); renderGridMaq(); updSidebar(); prodBotaoLimpar(); return; }
-  if(!prodRestaurar()) renderGridOp();
+  novaProd(); // sair e entrar de novo sempre começa do zero
 }
 
 function entrarComoMovimentacao(){
@@ -3877,7 +3871,6 @@ function clicarAvisoBalanco(){
 }
 function voltarInicio(){
   if(typeof movPodeSair==='function'&&!movPodeSair()) return;
-  if(S.modo==='operador') prodSalvar();
   S.modo=null; S.adm=false;
   trancarPrecos();
   movPararCamera();
@@ -5144,57 +5137,8 @@ function goStep(n){
     var st=document.getElementById('pst'+i);
     if(st) st.className='pstep'+(i===n?' ativo':i<n?' done':'');
   }
-  prodSalvar(n);
-  prodBotaoLimpar(n);
 }
-// ── O que o operador já escolheu fica guardado no aparelho: "◀ Voltar", "Sair" ou o app
-//    fechando não apagam mais as escolhas. Só "+ Nova Produção" / "Recomeçar do zero" limpam.
-var CHAVE_PROD='vitalbor_producao_andamento_v1', PROD_VALIDADE_H=12;
 function prodPassoAtual(){ for(var i=1;i<=7;i++){ var el=document.getElementById('sp'+i); if(el&&el.style.display!=='none') return i; } return 1; }
-function prodSalvar(passo){
-  try{
-    passo=passo||prodPassoAtual();
-    if(passo>=7||!S.sel||!S.sel.op){ localStorage.removeItem(CHAVE_PROD); return; }
-    var g=function(id){ var e=document.getElementById(id); return e?e.value:''; };
-    localStorage.setItem(CHAVE_PROD,JSON.stringify({ sel:S.sel, passo:passo, lote:g('inp-lote'), ano:g('sel-ano'), qtd:g('inp-qtd'), cx:g('inp-cx'), em:Date.now() }));
-  }catch(e){}
-}
-function prodBotaoLimpar(passo){
-  var b=document.getElementById('btn-limpar-prod'); if(!b) return;
-  b.classList.toggle('vis',!!(S.sel&&S.sel.op)&&(passo||prodPassoAtual())<7);
-}
-function prodRestaurar(){
-  var t=null; try{ t=JSON.parse(localStorage.getItem(CHAVE_PROD)||'null'); }catch(e){}
-  if(!t||!t.sel||!t.sel.op) return false;
-  if(Date.now()-(t.em||0)>PROD_VALIDADE_H*3600000){ try{ localStorage.removeItem(CHAVE_PROD); }catch(e){} return false; }
-  resetSelProd();
-  for(var k in t.sel) if(Object.prototype.hasOwnProperty.call(t.sel,k)) S.sel[k]=t.sel[k];
-  if(t.lote!=null) document.getElementById('inp-lote').value=t.lote;
-  if(t.ano) document.getElementById('sel-ano').value=t.ano;
-  document.querySelectorAll('.tbtn').forEach(function(b){ b.classList.toggle('sel',b.textContent.trim()===S.sel.trim); });
-  // volta para o passo onde parou (sem pular passo que ainda falta escolher)
-  var passo=Math.min(Number(t.passo)||1,6);
-  if(passo>=2&&!S.sel.op) passo=1;
-  if(passo>=3&&!S.sel.peca) passo=2;
-  if(passo>=4&&!S.sel.mat) passo=3;
-  if(passo>=6&&(!S.sel.trim||!S.sel.lote)) passo=5;
-  if(passo===4&&!S.hasMaq) passo=5;
-  if(passo===6){
-    document.getElementById('inp-qtd').value=t.qtd||S.sel.qtdPad;
-    document.getElementById('lbl-pad').textContent=S.sel.qtdPad+' peças';
-    document.getElementById('inp-cx').value=t.cx||1;
-    var q=Number(document.getElementById('inp-qtd').value)||0;
-    document.getElementById('aviso-adj').style.display=(q!==S.sel.qtdPad)?'block':'none';
-  }
-  renderGridOp(); renderGridPeca(); renderGridMat(); renderGridMaq();
-  updSidebar();
-  goStep(passo);
-  return true;
-}
-function limparProd(){
-  if(!confirm('Apagar as escolhas (operador, peça, material, lote) e começar do zero?')) return;
-  novaProd();
-}
 function irStepSe(n){
   var ok={1:true,2:!!S.sel.op,3:!!S.sel.peca,4:!!S.sel.mat,5:true,6:!!S.sel.trim};
   if(n<=6&&ok[n]) goStep(n);
@@ -5412,7 +5356,6 @@ function enviarProd(qtd,cx,senha){
     .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); document.getElementById('btn-registrar').classList.add('pronto'); })
     .registrarProducao(d,senha);
 }
-document.addEventListener('visibilitychange',function(){ if(document.hidden&&S.modo==='operador') prodSalvar(); });
 function resetSelProd(){
   S.sel={matricula:'',op:'',peca:'',codPeca:'',qtdPad:0,mat:'',maq:'',trim:'',ano:String(new Date().getFullYear()),lote:''};
   document.getElementById('inp-lote').value='';
@@ -5422,7 +5365,7 @@ function resetSelProd(){
 }
 function novaProd(){
   resetSelProd();
-  try{ localStorage.removeItem(CHAVE_PROD); }catch(e){}
+  try{ localStorage.removeItem('vitalbor_producao_andamento_v1'); }catch(e){} // limpa o que a versão anterior guardava
   document.getElementById('btn-registrar').style.display='';
   document.getElementById('btn-registrar').classList.remove('pronto');
   document.getElementById('btn-imprimir').classList.remove('vis');
