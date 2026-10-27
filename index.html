@@ -736,6 +736,8 @@ var backend = {
     } catch (e) { return { ok: false, erro: e.message }; }
   },
   async getCaixasEmEstoque(codigoPeca) {
+    // codigoPeca: '' (todas), 'COL-100' ou 'COL-100,PBA-50' (balanço de várias peças)
+    var codigos = balEscopoLista(codigoPeca);
     try {
       var movs = await sbGetAll('movimentacoes?select=caixa_id,tipo,data_hora&caixa_id=not.is.null&order=data_hora.asc,id.asc');
       var ultimoTipo = {};
@@ -746,7 +748,7 @@ var backend = {
       var prod = [];
       for (var b = 0; b < idsEmEstoque.length; b += 150) {
         var filtro = 'id=in.(' + idsEmEstoque.slice(b, b + 150).join(',') + ')';
-        if (codigoPeca) filtro += '&codigo_peca=eq.' + encodeURIComponent(codigoPeca);
+        if (codigos.length) filtro += '&codigo_peca=in.(' + encodeURIComponent(codigos.map(function (c) { return '"' + c.replace(/"/g, '') + '"'; }).join(',')) + ')';
         prod = prod.concat(await sbGet('producao?' + filtro + '&select=id,codigo_peca,peca,material,lote,numero_caixa'));
       }
       return prod.map(function (p) { return { ID: p.id, CodigoPeca: p.codigo_peca, Peca: p.peca, Material: p.material, Lote: p.lote, NumeroCaixa: p.numero_caixa }; });
@@ -1080,6 +1082,8 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-fa
 .pos-imprimir.vis{display:flex}
 .pos-nova{margin:6px 10px 10px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.12);border-radius:var(--radius);padding:10px;font-size:13px;font-weight:700;cursor:pointer;display:none;align-items:center;justify-content:center}
 .pos-nova.vis{display:flex}
+.pos-limpar{margin:6px 10px 10px;background:none;color:rgba(255,255,255,.45);border:1px dashed rgba(255,255,255,.18);border-radius:var(--radius);padding:9px;font-size:12px;font-weight:700;cursor:pointer;display:none;align-items:center;justify-content:center}
+.pos-limpar.vis{display:flex}
 .pos-nova:active{background:rgba(255,255,255,.15)}
 
 .pos-main{flex:1;display:flex;flex-direction:column;min-width:0}
@@ -1108,6 +1112,21 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-fa
 .pbtn .pc{font-size:14px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:#fff;margin-bottom:2px}
 .pbtn .pn{font-size:11px;font-weight:600;color:rgba(255,255,255,.6);line-height:1.2}
 .pbtn .pd{font-size:10px;color:rgba(255,255,255,.4);margin-top:1px}
+/* tela do operador: cards e textos grandes (fácil de tocar e ler de longe) */
+#pag-producao .pos-grid{gap:12px}
+#pag-producao .pbtn{min-height:clamp(110px,15vh,170px);padding:16px 12px;gap:8px;border-radius:14px}
+#pag-producao .pbtn .pi{font-size:clamp(30px,2.6vw,44px)}
+#pag-producao .pbtn .pc{font-size:clamp(20px,1.8vw,30px);letter-spacing:1.5px}
+#pag-producao .pbtn .pn{font-size:clamp(14px,1.15vw,19px);font-weight:700;color:rgba(255,255,255,.8);line-height:1.25}
+#pag-producao .pbtn .pd{font-size:clamp(12px,.95vw,16px);font-weight:600;color:rgba(255,255,255,.55)}
+#pag-producao .pbtn .pmat{font-size:clamp(12px,.9vw,15px);padding:2px 10px;border-radius:6px}
+#pag-producao .pbtn.pbtn-op .pn,#pag-producao .pbtn.pbtn-mat .pn,#pag-producao .pbtn.pbtn-maq .pn{font-size:clamp(18px,1.6vw,28px);font-weight:900;color:#fff}
+#pag-producao .pbtn-chk{width:26px;height:26px;font-size:14px;top:8px;right:8px}
+#pag-producao .pph-titulo{font-size:clamp(18px,1.5vw,24px)}
+#pag-producao .pph-sub{font-size:13px}
+#pag-producao .inp-pos{font-size:18px;padding:14px 16px}
+#pag-producao .pos-back-btn{font-size:14px;padding:10px 16px}
+#pag-producao .pstep span{font-size:13px}
 .pbtn.sel .pc{color:#fff}
 .pbtn.sel .pn{color:rgba(255,255,255,.85)}
 .pbtn.sel .pd{color:rgba(255,255,255,.7)}
@@ -1223,6 +1242,25 @@ select.inp-pos option{color:#000;background:#fff}
 .dash-filtro{background:#fff;border-radius:var(--radius);padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:16px}
 .df-titulo{font-size:13px;font-weight:800;color:var(--azul);margin-bottom:10px}
 .df-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.bal-modo{display:flex;gap:8px;flex-wrap:wrap}
+.df-campo .bal-modo label{display:flex;align-items:center;gap:8px;border:2px solid var(--cinza3);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;font-weight:800;color:var(--texto);cursor:pointer;text-transform:none;letter-spacing:0;margin:0;background:#fff}
+.df-campo .bal-modo label:has(input:checked){border-color:var(--azul3);background:#eaf3ff}
+.df-campo .bal-modo input,.df-campo .bal-chip input{width:auto;padding:0;border:0;margin:0;-webkit-appearance:auto;appearance:auto;accent-color:var(--azul3)}
+.bal-escolha{margin-top:8px;border:2px solid var(--cinza3);border-radius:var(--radius-sm);padding:10px;background:#fff;max-height:360px;overflow-y:auto}
+.bal-escolha[hidden]{display:none}
+.bal-escolha-hd{display:flex;gap:8px;align-items:center;position:sticky;top:-10px;background:#fff;padding:2px 0 8px;z-index:1}
+.bal-escolha-hd input{flex:1;min-width:0}
+.bal-qtd{font-size:12px;font-weight:800;color:var(--texto2);white-space:nowrap}
+.bal-qtd.tem{color:var(--azul3)}
+.bal-grupo{margin-bottom:8px}
+.bal-grupo[hidden]{display:none}
+.bal-grupo-hd{display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:12px}
+.bal-grupo-hd b{color:var(--azul);margin-right:4px}
+.bal-grupo-hd button{background:var(--cinza2);border:none;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;color:var(--texto2)}
+.bal-chips{display:flex;flex-wrap:wrap;gap:6px}
+.df-campo .bal-chip{display:inline-flex;align-items:center;gap:6px;border:2px solid var(--cinza3);border-radius:20px;padding:7px 12px;font-size:13px;font-weight:800;color:var(--texto);cursor:pointer;text-transform:none;letter-spacing:0;margin:0;background:#fff;user-select:none}
+.df-campo .bal-chip[hidden]{display:none}
+.df-campo .bal-chip.on{border-color:var(--azul3);background:#eaf3ff;color:var(--azul)}
 .df-campo label{display:block;font-size:9px;font-weight:800;color:var(--texto2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
 .df-campo input,.df-campo select{width:100%;padding:10px 11px;border:2px solid var(--cinza3);border-radius:var(--radius-sm);font-size:13px;font-weight:600;color:var(--texto);outline:none;background:#fff;-webkit-appearance:none}
 .df-campo input:focus,.df-campo select:focus{border-color:var(--azul3)}
@@ -1720,12 +1758,14 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
   .ps-label{font-size:8px}
   .ps-val{font-size:12px}
   .pos-registrar,.pos-imprimir,.pos-nova{margin:0;flex:1 1 0;min-height:48px;padding:10px;font-size:14px}
-  .pos-imprimir:not(.vis),.pos-nova:not(.vis){display:none}
+  .pos-imprimir:not(.vis),.pos-nova:not(.vis),.pos-limpar:not(.vis){display:none}
+  .pos-limpar{margin:0;flex:1 1 100%;min-height:40px}
   .pos-steps{overflow-x:auto;justify-content:flex-start;padding:0 6px;-webkit-overflow-scrolling:touch}
   .pstep{flex:0 0 auto;padding:6px 8px}
   .pstep-sep{width:8px}
   .pos-panel-head{padding:8px 12px}
   #pag-producao .pos-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  #pag-producao .pbtn{min-height:96px;padding:12px 8px}
 }
 
 /* administração no celular: menu vira uma faixa rolável no topo */
@@ -1845,6 +1885,7 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
     <button class="pos-registrar" id="btn-registrar" onclick="confirmarProd()">✅ REGISTRAR</button>
     <button class="pos-imprimir" id="btn-imprimir" onclick="imprimirTodas()">🖨️ IMPRIMIR</button>
     <button class="pos-nova" id="btn-nova" onclick="novaProd()">+ Nova Produção</button>
+    <button class="pos-limpar" id="btn-limpar-prod" onclick="limparProd()">↺ Recomeçar do zero</button>
   </div>
 
   <div class="pos-main">
@@ -2436,7 +2477,10 @@ function entrarComoOperador(){
   document.getElementById('tb-modo-label').textContent='Modo:';
   var b=document.getElementById('tb-badge'); b.textContent='OPERADOR'; b.className='u-badge';
   mostrarPag('producao');
-  renderGridOp();
+  // continua de onde parou: se ainda está na memória, só redesenha; se o app fechou, recupera do aparelho
+  if(prodPassoAtual()===7){ renderGridOp(); return; }
+  if(S.sel&&S.sel.op){ renderGridOp(); renderGridPeca(); renderGridMat(); renderGridMaq(); updSidebar(); prodBotaoLimpar(); return; }
+  if(!prodRestaurar()) renderGridOp();
 }
 
 function entrarComoMovimentacao(){
@@ -3788,6 +3832,7 @@ function clicarAvisoBalanco(){
 }
 function voltarInicio(){
   if(typeof movPodeSair==='function'&&!movPodeSair()) return;
+  if(S.modo==='operador') prodSalvar();
   S.modo=null; S.adm=false;
   trancarPrecos();
   movPararCamera();
@@ -4062,10 +4107,17 @@ function renderBalancoAdmin(){
   inner.innerHTML=
     '<div class="dash-filtro">'+
       '<div class="df-titulo">📋 Novo Balanço</div>'+
+      '<div class="df-campo" style="margin-bottom:8px"><label>Quais peças vão ser contadas</label>'+
+        '<div class="bal-modo">'+
+          '<label><input type="radio" name="bal-modo" value="todas" checked onchange="balEscopoModo()"/> Todas as peças</label>'+
+          '<label><input type="radio" name="bal-modo" value="escolher" onchange="balEscopoModo()"/> Escolher peças</label>'+
+        '</div>'+
+        '<div id="bal-escolha" class="bal-escolha" hidden>'+
+          '<div class="bal-escolha-hd"><input type="search" id="bal-busca" placeholder="Filtrar (ex.: COL, 100, DEFOFO)" oninput="balFiltrarPecas()"/><span id="bal-qtd-sel" class="bal-qtd">0 selecionadas</span></div>'+
+          '<div id="bal-lista-pecas"></div>'+
+        '</div>'+
+      '</div>'+
       '<div class="df-row">'+
-        '<div class="df-campo"><label>Escopo</label><select id="bal-escopo"><option value="">Todas as peças</option>'+
-          S.pecas.map(function(p){ return '<option value="'+esc(p.Codigo)+'|'+esc(p.Nome)+'">'+p.Codigo+' — '+p.Nome+'</option>'; }).join('')+
-        '</select></div>'+
         '<div class="df-campo"><label>Agendar pra data (opcional)</label><input type="date" id="bal-data"/></div>'+
       '</div>'+
       '<div style="font-size:11px;color:var(--texto2);margin-bottom:8px">Se deixar a data em branco, o balanço já entra "Em andamento" e o aviso aparece em todas as telas na hora.</div>'+
@@ -4074,10 +4126,61 @@ function renderBalancoAdmin(){
     '<div class="hist-row"><div class="hist-titulo">Histórico de Balanços</div></div>'+
     '<div id="balanco-lista"><div class="dash-empty"><div class="spinner" style="border-top-color:var(--azul3);margin:0 auto"></div></div></div>';
   carregarListaBalancos();
+  balMontarListaPecas();
+}
+// Escopo do balanço: '' = todas; 'COL-100' ou 'COL-100,PBA-50' = só essas peças
+function balEscopoLista(cod){ return String(cod||'').split(',').map(function(x){ return x.trim(); }).filter(Boolean); }
+function balEscopoModo(){
+  var esc0=document.querySelector('input[name="bal-modo"]:checked');
+  var escolher=esc0&&esc0.value==='escolher';
+  document.getElementById('bal-escolha').hidden=!escolher;
+  if(escolher) setTimeout(function(){ try{ document.getElementById('bal-busca').focus(); }catch(e){} },50);
+}
+function balMontarListaPecas(){
+  var el=document.getElementById('bal-lista-pecas'); if(!el) return;
+  var pecas=(S.pecas||[]).slice().sort(planOrdemPadrao), grupos={}, ordem=[];
+  pecas.forEach(function(p){ var g=planPrefixoGrupo(p.Codigo)||'OUTRAS'; if(!grupos[g]){ grupos[g]=[]; ordem.push(g); } grupos[g].push(p); });
+  el.innerHTML=ordem.map(function(g){
+    return '<div class="bal-grupo" data-grupo="'+htmlTxt(g)+'"><div class="bal-grupo-hd"><b>'+htmlTxt(g)+'</b>'+
+      '<button type="button" onclick="balMarcarGrupo(\''+esc(g)+'\',true)">Marcar todas</button><button type="button" onclick="balMarcarGrupo(\''+esc(g)+'\',false)">Limpar</button></div>'+
+      '<div class="bal-chips">'+grupos[g].map(function(p){
+        return '<label class="bal-chip" data-busca="'+htmlTxt(semAcentoConsulta(p.Codigo+' '+p.Nome))+'" title="'+htmlTxt(p.Nome)+'">'+
+          '<input type="checkbox" value="'+htmlTxt(p.Codigo)+'" data-nome="'+htmlTxt(p.Nome)+'" onchange="balContarSel()"/><span>'+htmlTxt(p.Codigo)+'</span></label>';
+      }).join('')+'</div></div>';
+  }).join('')||'<div style="font-size:12px;color:var(--texto2)">Nenhuma peça cadastrada.</div>';
+  balContarSel();
+}
+function balFiltrarPecas(){
+  var t=semAcentoConsulta(document.getElementById('bal-busca').value).trim();
+  document.querySelectorAll('#bal-lista-pecas .bal-grupo').forEach(function(g){
+    var algum=false;
+    g.querySelectorAll('.bal-chip').forEach(function(c){ var v=!t||c.getAttribute('data-busca').indexOf(t)>=0; c.hidden=!v; if(v) algum=true; });
+    g.hidden=!algum;
+  });
+}
+function balMarcarGrupo(g,marcar){
+  document.querySelectorAll('#bal-lista-pecas .bal-grupo').forEach(function(el){
+    if(el.getAttribute('data-grupo')!==g) return;
+    el.querySelectorAll('.bal-chip').forEach(function(c){ if(!c.hidden) c.querySelector('input').checked=marcar; });
+  });
+  balContarSel();
+}
+function balPecasSelecionadas(){
+  return Array.prototype.map.call(document.querySelectorAll('#bal-lista-pecas input:checked'),function(i){ return { codigo:i.value, nome:i.getAttribute('data-nome') }; });
+}
+function balContarSel(){
+  var n=balPecasSelecionadas().length, el=document.getElementById('bal-qtd-sel');
+  if(el){ el.textContent=n===1?'1 selecionada':n+' selecionadas'; el.classList.toggle('tem',n>0); }
+  document.querySelectorAll('#bal-lista-pecas .bal-chip').forEach(function(c){ c.classList.toggle('on',c.querySelector('input').checked); });
 }
 function criarNovoBalanco(){
-  var v=document.getElementById('bal-escopo').value;
-  var partes=v?v.split('|'):['',''];
+  var modo=document.querySelector('input[name="bal-modo"]:checked');
+  var partes=['',''];
+  if(modo&&modo.value==='escolher'){
+    var sel=balPecasSelecionadas();
+    if(!sel.length){ toast('Marque pelo menos uma peça (ou escolha "Todas as peças")','aviso'); return; }
+    partes=sel.length===1?[sel[0].codigo, sel[0].codigo+' — '+sel[0].nome]:[sel.map(function(x){ return x.codigo; }).join(','), sel.map(function(x){ return x.codigo; }).join(', ')];
+  }
   var data=document.getElementById('bal-data').value;
   google.script.run
     .withSuccessHandler(function(r){
@@ -4182,7 +4285,8 @@ function balRegistrarBipagem(caixaId){
     delete S._balEmConsulta[caixaId]; balAtualizarPendentes();
     if(S.balancoAtivoExec!==exec) return;
     if(!d){ balRetorno('erro','Caixa não encontrada','Esse código não existe no sistema. Confira o número.'); return; }
-    if(exec.escopoCodigo&&d.CodigoPeca!==exec.escopoCodigo){ balRetorno('erro','Fora do escopo','Essa caixa é '+d.CodigoPeca+'. Este balanço é de '+exec.escopoNome+'. Ela não foi contada.'); return; }
+    var escopoLista=balEscopoLista(exec.escopoCodigo);
+    if(escopoLista.length&&escopoLista.indexOf(d.CodigoPeca)<0){ balRetorno('erro','Fora do escopo','Essa caixa é '+d.CodigoPeca+'. Este balanço é de '+exec.escopoNome+'. Ela não foi contada.'); return; }
     if(S.balancoBipadas.indexOf(caixaId)>=0) return;
     S.balancoBipadas.push(caixaId);
     S.balancoInfo[caixaId]={ cod:d.CodigoPeca, peca:d.Peca, mat:d.Material, lote:d.Lote, seq:d.Seq||null, num:d.NumeroCaixa };
@@ -4266,8 +4370,9 @@ function balChave(codigo,peca,material){ return (codigo||peca)+'||'+material; }
 // Sem o nível 2, saídas manuais (sem caixa) já tinham baixado o saldo mas deixavam as caixas
 // "abertas"; o balanço dava baixa nelas de novo e o saldo furava (ex.: COL-100 em -8).
 function balMontarReconciliacao(exec,confirmadas,faltando,sobrandoTodas,saldos){
-  var escopo=exec.escopoCodigo||null;
-  var sobrando=sobrandoTodas.filter(function(s){ return !escopo || s.CodigoPeca===escopo; });
+  var escopoLista=balEscopoLista(exec.escopoCodigo);
+  function noEscopo(cod){ return !escopoLista.length || escopoLista.indexOf(cod)>=0; }
+  var sobrando=sobrandoTodas.filter(function(s){ return noEscopo(s.CodigoPeca); });
   var foraEscopo=sobrandoTodas.length-sobrando.length;
   var itens={};
   function item(codigo,peca,material){
@@ -4276,7 +4381,7 @@ function balMontarReconciliacao(exec,confirmadas,faltando,sobrandoTodas,saldos){
     return itens[k];
   }
   saldos.forEach(function(s){
-    if(escopo && s.CodigoPeca!==escopo) return;
+    if(!noEscopo(s.CodigoPeca)) return;
     item(s.CodigoPeca,s.Peca,s.Material).saldo=Number(s.Saldo)||0;
   });
   confirmadas.forEach(function(c){ item(c.CodigoPeca,c.Peca,c.Material).contado++; });
@@ -4893,6 +4998,56 @@ function goStep(n){
     var st=document.getElementById('pst'+i);
     if(st) st.className='pstep'+(i===n?' ativo':i<n?' done':'');
   }
+  prodSalvar(n);
+  prodBotaoLimpar(n);
+}
+// ── O que o operador já escolheu fica guardado no aparelho: "◀ Voltar", "Sair" ou o app
+//    fechando não apagam mais as escolhas. Só "+ Nova Produção" / "Recomeçar do zero" limpam.
+var CHAVE_PROD='vitalbor_producao_andamento_v1', PROD_VALIDADE_H=12;
+function prodPassoAtual(){ for(var i=1;i<=7;i++){ var el=document.getElementById('sp'+i); if(el&&el.style.display!=='none') return i; } return 1; }
+function prodSalvar(passo){
+  try{
+    passo=passo||prodPassoAtual();
+    if(passo>=7||!S.sel||!S.sel.op){ localStorage.removeItem(CHAVE_PROD); return; }
+    var g=function(id){ var e=document.getElementById(id); return e?e.value:''; };
+    localStorage.setItem(CHAVE_PROD,JSON.stringify({ sel:S.sel, passo:passo, lote:g('inp-lote'), ano:g('sel-ano'), qtd:g('inp-qtd'), cx:g('inp-cx'), em:Date.now() }));
+  }catch(e){}
+}
+function prodBotaoLimpar(passo){
+  var b=document.getElementById('btn-limpar-prod'); if(!b) return;
+  b.classList.toggle('vis',!!(S.sel&&S.sel.op)&&(passo||prodPassoAtual())<7);
+}
+function prodRestaurar(){
+  var t=null; try{ t=JSON.parse(localStorage.getItem(CHAVE_PROD)||'null'); }catch(e){}
+  if(!t||!t.sel||!t.sel.op) return false;
+  if(Date.now()-(t.em||0)>PROD_VALIDADE_H*3600000){ try{ localStorage.removeItem(CHAVE_PROD); }catch(e){} return false; }
+  resetSelProd();
+  for(var k in t.sel) if(Object.prototype.hasOwnProperty.call(t.sel,k)) S.sel[k]=t.sel[k];
+  if(t.lote!=null) document.getElementById('inp-lote').value=t.lote;
+  if(t.ano) document.getElementById('sel-ano').value=t.ano;
+  document.querySelectorAll('.tbtn').forEach(function(b){ b.classList.toggle('sel',b.textContent.trim()===S.sel.trim); });
+  // volta para o passo onde parou (sem pular passo que ainda falta escolher)
+  var passo=Math.min(Number(t.passo)||1,6);
+  if(passo>=2&&!S.sel.op) passo=1;
+  if(passo>=3&&!S.sel.peca) passo=2;
+  if(passo>=4&&!S.sel.mat) passo=3;
+  if(passo>=6&&(!S.sel.trim||!S.sel.lote)) passo=5;
+  if(passo===4&&!S.hasMaq) passo=5;
+  if(passo===6){
+    document.getElementById('inp-qtd').value=t.qtd||S.sel.qtdPad;
+    document.getElementById('lbl-pad').textContent=S.sel.qtdPad+' peças';
+    document.getElementById('inp-cx').value=t.cx||1;
+    var q=Number(document.getElementById('inp-qtd').value)||0;
+    document.getElementById('aviso-adj').style.display=(q!==S.sel.qtdPad)?'block':'none';
+  }
+  renderGridOp(); renderGridPeca(); renderGridMat(); renderGridMaq();
+  updSidebar();
+  goStep(passo);
+  return true;
+}
+function limparProd(){
+  if(!confirm('Apagar as escolhas (operador, peça, material, lote) e começar do zero?')) return;
+  novaProd();
 }
 function irStepSe(n){
   var ok={1:true,2:!!S.sel.op,3:!!S.sel.peca,4:!!S.sel.mat,5:true,6:!!S.sel.trim};
@@ -4959,7 +5114,7 @@ function renderGridOp(filtro){
   g.style.gridTemplateColumns='repeat('+calcCols(itens.length)+',1fr)';
   g.innerHTML=itens.map(function(o){
     var m=o.Matricula||'';
-    return '<div class="pbtn" onclick="selOp(\''+esc(o.Nome)+'\',\''+esc(m)+'\')">' +
+    return '<div class="pbtn pbtn-op'+(S.sel.op===o.Nome?' sel':'')+'" onclick="selOp(\''+esc(o.Nome)+'\',\''+esc(m)+'\')">' +
       '<div class="pbtn-chk">✓</div><div class="pi">👤</div>'+
       (m?'<div class="pmat">'+m+'</div>':'')+
       '<div class="pn">'+o.Nome+'</div></div>';
@@ -4975,7 +5130,7 @@ function renderGridPeca(filtro){
   if(!itens.length){ g.style.gridTemplateColumns=''; g.innerHTML='<p style="color:rgba(255,255,255,.4);padding:16px;grid-column:1/-1;text-align:center;font-size:13px">Nenhuma peça encontrada.</p>'; return; }
   g.style.gridTemplateColumns='repeat('+calcCols(itens.length)+',1fr)';
   g.innerHTML=itens.map(function(p){
-    return '<div class="pbtn" onclick="selPeca(\''+esc(p.Nome)+'\',\''+esc(p.Codigo)+'\','+Number(p.QtdPadrao)+')">' +
+    return '<div class="pbtn pbtn-peca'+(S.sel.codPeca===p.Codigo?' sel':'')+'" onclick="selPeca(\''+esc(p.Nome)+'\',\''+esc(p.Codigo)+'\','+Number(p.QtdPadrao)+')">' +
       '<div class="pbtn-chk">✓</div><div class="pc">'+p.Codigo+'</div>'+
       '<div class="pn">'+p.Nome+'</div><div class="pd">'+p.QtdPadrao+' pç/cx</div></div>';
   }).join('');
@@ -4984,7 +5139,7 @@ function selPeca(n,c,q){ S.sel.peca=n; S.sel.codPeca=c; S.sel.qtdPad=Number(q); 
 
 function renderGridMat(){
   renderGridPag(S.mats,'g-mat','pag-mat','pag-mat-info',S.pgMat,function(m){
-    return '<div class="pbtn" onclick="selMat(\''+esc(m.Nome)+'\')">' +
+    return '<div class="pbtn pbtn-mat'+(S.sel.mat===m.Nome?' sel':'')+'" onclick="selMat(\''+esc(m.Nome)+'\')">' +
       '<div class="pbtn-chk">✓</div><div class="pi">🧪</div>'+
       '<div class="pn">'+m.Nome+'</div>'+
       (m.Descricao?'<div class="pd">'+m.Descricao+'</div>':'')+
@@ -5006,7 +5161,7 @@ function renderGridMaq(){
   var g=document.getElementById('g-maq'); if(!g) return;
   g.style.gridTemplateColumns='repeat('+calcCols(S.maqs.length)+',1fr)';
   g.innerHTML=S.maqs.map(function(m){
-    return '<div class="pbtn" onclick="selMaq(\''+esc(m.Nome)+'\')">' +
+    return '<div class="pbtn pbtn-maq'+(S.sel.maq===m.Nome?' sel':'')+'" onclick="selMaq(\''+esc(m.Nome)+'\')">' +
       '<div class="pbtn-chk">✓</div><div class="pi">⚙️</div>'+
       '<div class="pn">'+m.Nome+'</div>'+(m.Descricao?'<div class="pd">'+m.Descricao+'</div>':'')+
       '</div>';
@@ -5111,6 +5266,7 @@ function enviarProd(qtd,cx,senha){
     .withFailureHandler(function(e){ toast('Erro: '+(e?e.message:''),'erro'); document.getElementById('btn-registrar').classList.add('pronto'); })
     .registrarProducao(d,senha);
 }
+document.addEventListener('visibilitychange',function(){ if(document.hidden&&S.modo==='operador') prodSalvar(); });
 function resetSelProd(){
   S.sel={matricula:'',op:'',peca:'',codPeca:'',qtdPad:0,mat:'',maq:'',trim:'',ano:String(new Date().getFullYear()),lote:''};
   document.getElementById('inp-lote').value='';
@@ -5120,6 +5276,7 @@ function resetSelProd(){
 }
 function novaProd(){
   resetSelProd();
+  try{ localStorage.removeItem(CHAVE_PROD); }catch(e){}
   document.getElementById('btn-registrar').style.display='';
   document.getElementById('btn-registrar').classList.remove('pronto');
   document.getElementById('btn-imprimir').classList.remove('vis');
@@ -5127,8 +5284,15 @@ function novaProd(){
   updSidebar(); renderGridOp(); goStep(1);
 }
 function voltarProd(){
-  resetSelProd();
-  updSidebar(); renderGridOp(); goStep(1);
+  // ◀ Voltar: volta UM passo e mantém tudo o que já foi escolhido (antes apagava tudo e voltava ao operador)
+  var ant=prodPassoAtual()-1;
+  if(ant===4&&!S.hasMaq) ant=3;
+  if(ant<1) ant=1;
+  if(ant===1) renderGridOp((document.getElementById('busca-op')||{}).value);
+  else if(ant===2) renderGridPeca((document.getElementById('busca-peca')||{}).value);
+  else if(ant===3) renderGridMat();
+  else if(ant===4) renderGridMaq();
+  goStep(ant);
 }
 
 // ═══════════════════════════════════════
