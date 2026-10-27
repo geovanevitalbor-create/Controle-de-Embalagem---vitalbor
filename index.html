@@ -736,8 +736,8 @@ var backend = {
     } catch (e) { return { ok: false, erro: e.message }; }
   },
   async getCaixasEmEstoque(codigoPeca) {
-    // codigoPeca: '' (todas), 'COL-100' ou 'COL-100,PBA-50' (balanço de várias peças)
-    var codigos = balEscopoLista(codigoPeca);
+    // codigoPeca = escopo do balanço: '' (tudo), 'COL-100', 'COL-100,PBA-50' ou {"pecas":[...],"mats":[...]}
+    var escopo = balEscopo(codigoPeca), codigos = escopo.pecas;
     try {
       var movs = await sbGetAll('movimentacoes?select=caixa_id,tipo,data_hora&caixa_id=not.is.null&order=data_hora.asc,id.asc');
       var ultimoTipo = {};
@@ -751,7 +751,8 @@ var backend = {
         if (codigos.length) filtro += '&codigo_peca=in.(' + encodeURIComponent(codigos.map(function (c) { return '"' + c.replace(/"/g, '') + '"'; }).join(',')) + ')';
         prod = prod.concat(await sbGet('producao?' + filtro + '&select=id,codigo_peca,peca,material,lote,numero_caixa'));
       }
-      return prod.map(function (p) { return { ID: p.id, CodigoPeca: p.codigo_peca, Peca: p.peca, Material: p.material, Lote: p.lote, NumeroCaixa: p.numero_caixa }; });
+      return prod.filter(function (p) { return balNoEscopo(escopo, p.codigo_peca, p.material); })
+        .map(function (p) { return { ID: p.id, CodigoPeca: p.codigo_peca, Peca: p.peca, Material: p.material, Lote: p.lote, NumeroCaixa: p.numero_caixa }; });
     } catch (e) { return []; }
   },
   async concluirBalanco(id, resultado, correcoes, usuario) {
@@ -4117,6 +4118,17 @@ function renderBalancoAdmin(){
           '<div id="bal-lista-pecas"></div>'+
         '</div>'+
       '</div>'+
+      '<div class="df-campo" style="margin-bottom:8px"><label>Qual matéria-prima</label>'+
+        '<div class="bal-modo">'+
+          '<label><input type="radio" name="bal-modo-mat" value="todas" checked onchange="balEscopoModoMat()"/> Todas as matérias-primas</label>'+
+          '<label><input type="radio" name="bal-modo-mat" value="escolher" onchange="balEscopoModoMat()"/> Escolher matéria-prima</label>'+
+        '</div>'+
+        '<div id="bal-escolha-mat" class="bal-escolha" hidden>'+
+          '<div class="bal-grupo-hd"><span id="bal-qtd-mat" class="bal-qtd">0 selecionadas</span>'+
+            '<button type="button" onclick="balMarcarMats(true)">Marcar todas</button><button type="button" onclick="balMarcarMats(false)">Limpar</button></div>'+
+          '<div id="bal-lista-mats" class="bal-chips"></div>'+
+        '</div>'+
+      '</div>'+
       '<div class="df-row">'+
         '<div class="df-campo"><label>Agendar pra data (opcional)</label><input type="date" id="bal-data"/></div>'+
       '</div>'+
@@ -4127,9 +4139,45 @@ function renderBalancoAdmin(){
     '<div id="balanco-lista"><div class="dash-empty"><div class="spinner" style="border-top-color:var(--azul3);margin:0 auto"></div></div></div>';
   carregarListaBalancos();
   balMontarListaPecas();
+  balMontarListaMats();
 }
-// Escopo do balanço: '' = todas; 'COL-100' ou 'COL-100,PBA-50' = só essas peças
+// Escopo do balanço (coluna escopo_codigo):
+//   ''                                   → tudo
+//   'COL-100' ou 'COL-100,PBA-50'        → só essas peças, qualquer matéria-prima (formato antigo, continua valendo)
+//   '{"pecas":[...],"mats":["NBR - 60"]}' → peças (lista vazia = todas) E matérias-primas escolhidas
 function balEscopoLista(cod){ return String(cod||'').split(',').map(function(x){ return x.trim(); }).filter(Boolean); }
+function balEscopo(cod){
+  var t=String(cod||'').trim();
+  if(t.charAt(0)==='{'){
+    try{ var o=JSON.parse(t); return { pecas:(o.pecas||[]).map(String), mats:(o.mats||[]).map(String) }; }catch(e){}
+  }
+  return { pecas:balEscopoLista(t), mats:[] };
+}
+function balNormMat(m){ return semAcentoConsulta(m||'').replace(/\s+/g,''); }
+function balNoEscopo(e,cod,mat){
+  if(e.pecas.length&&e.pecas.indexOf(cod)<0) return false;
+  if(e.mats.length){ var n=balNormMat(mat); if(!e.mats.some(function(x){ return balNormMat(x)===n; })) return false; }
+  return true;
+}
+function balEscopoModoMat(){
+  var e=document.querySelector('input[name="bal-modo-mat"]:checked');
+  document.getElementById('bal-escolha-mat').hidden=!(e&&e.value==='escolher');
+}
+function balMontarListaMats(){
+  var el=document.getElementById('bal-lista-mats'); if(!el) return;
+  var mats=(S.mats||[]).map(function(m){ return m.Nome; }).filter(Boolean).sort();
+  el.innerHTML=mats.map(function(n){
+    return '<label class="bal-chip"><input type="checkbox" value="'+htmlTxt(n)+'" onchange="balContarSelMat()"/><span>'+htmlTxt(n)+'</span></label>';
+  }).join('')||'<div style="font-size:12px;color:var(--texto2)">Nenhuma matéria-prima cadastrada.</div>';
+  balContarSelMat();
+}
+function balMatsSelecionadas(){ return Array.prototype.map.call(document.querySelectorAll('#bal-lista-mats input:checked'),function(i){ return i.value; }); }
+function balMarcarMats(v){ document.querySelectorAll('#bal-lista-mats input').forEach(function(i){ i.checked=v; }); balContarSelMat(); }
+function balContarSelMat(){
+  var n=balMatsSelecionadas().length, el=document.getElementById('bal-qtd-mat');
+  if(el){ el.textContent=n===1?'1 selecionada':n+' selecionadas'; el.classList.toggle('tem',n>0); }
+  document.querySelectorAll('#bal-lista-mats .bal-chip').forEach(function(c){ c.classList.toggle('on',c.querySelector('input').checked); });
+}
 function balEscopoModo(){
   var esc0=document.querySelector('input[name="bal-modo"]:checked');
   var escolher=esc0&&esc0.value==='escolher';
@@ -4175,11 +4223,18 @@ function balContarSel(){
 }
 function criarNovoBalanco(){
   var modo=document.querySelector('input[name="bal-modo"]:checked');
-  var partes=['',''];
+  var modoMat=document.querySelector('input[name="bal-modo-mat"]:checked');
+  var partes=['',''], sel=[], mats=[];
   if(modo&&modo.value==='escolher'){
-    var sel=balPecasSelecionadas();
+    sel=balPecasSelecionadas();
     if(!sel.length){ toast('Marque pelo menos uma peça (ou escolha "Todas as peças")','aviso'); return; }
     partes=sel.length===1?[sel[0].codigo, sel[0].codigo+' — '+sel[0].nome]:[sel.map(function(x){ return x.codigo; }).join(','), sel.map(function(x){ return x.codigo; }).join(', ')];
+  }
+  if(modoMat&&modoMat.value==='escolher'){
+    mats=balMatsSelecionadas();
+    if(!mats.length){ toast('Marque pelo menos uma matéria-prima (ou escolha "Todas as matérias-primas")','aviso'); return; }
+    var nomePecas=!sel.length?'Todas as peças':(sel.length===1?sel[0].codigo:sel.map(function(x){ return x.codigo; }).join(', '));
+    partes=[JSON.stringify({ pecas:sel.map(function(x){ return x.codigo; }), mats:mats }), nomePecas+' · '+mats.join(', ')];
   }
   var data=document.getElementById('bal-data').value;
   google.script.run
@@ -4285,8 +4340,7 @@ function balRegistrarBipagem(caixaId){
     delete S._balEmConsulta[caixaId]; balAtualizarPendentes();
     if(S.balancoAtivoExec!==exec) return;
     if(!d){ balRetorno('erro','Caixa não encontrada','Esse código não existe no sistema. Confira o número.'); return; }
-    var escopoLista=balEscopoLista(exec.escopoCodigo);
-    if(escopoLista.length&&escopoLista.indexOf(d.CodigoPeca)<0){ balRetorno('erro','Fora do escopo','Essa caixa é '+d.CodigoPeca+'. Este balanço é de '+exec.escopoNome+'. Ela não foi contada.'); return; }
+    if(!balNoEscopo(balEscopo(exec.escopoCodigo),d.CodigoPeca,d.Material)){ balRetorno('erro','Fora do escopo','Essa caixa é '+d.CodigoPeca+' · '+d.Material+'. Este balanço é de '+exec.escopoNome+'. Ela não foi contada.'); return; }
     if(S.balancoBipadas.indexOf(caixaId)>=0) return;
     S.balancoBipadas.push(caixaId);
     S.balancoInfo[caixaId]={ cod:d.CodigoPeca, peca:d.Peca, mat:d.Material, lote:d.Lote, seq:d.Seq||null, num:d.NumeroCaixa };
@@ -4370,9 +4424,9 @@ function balChave(codigo,peca,material){ return (codigo||peca)+'||'+material; }
 // Sem o nível 2, saídas manuais (sem caixa) já tinham baixado o saldo mas deixavam as caixas
 // "abertas"; o balanço dava baixa nelas de novo e o saldo furava (ex.: COL-100 em -8).
 function balMontarReconciliacao(exec,confirmadas,faltando,sobrandoTodas,saldos){
-  var escopoLista=balEscopoLista(exec.escopoCodigo);
-  function noEscopo(cod){ return !escopoLista.length || escopoLista.indexOf(cod)>=0; }
-  var sobrando=sobrandoTodas.filter(function(s){ return noEscopo(s.CodigoPeca); });
+  var escopo=balEscopo(exec.escopoCodigo);
+  function noEscopo(cod,mat){ return balNoEscopo(escopo,cod,mat); }
+  var sobrando=sobrandoTodas.filter(function(s){ return noEscopo(s.CodigoPeca,s.Material); });
   var foraEscopo=sobrandoTodas.length-sobrando.length;
   var itens={};
   function item(codigo,peca,material){
@@ -4381,7 +4435,7 @@ function balMontarReconciliacao(exec,confirmadas,faltando,sobrandoTodas,saldos){
     return itens[k];
   }
   saldos.forEach(function(s){
-    if(!noEscopo(s.CodigoPeca)) return;
+    if(!noEscopo(s.CodigoPeca,s.Material)) return;
     item(s.CodigoPeca,s.Peca,s.Material).saldo=Number(s.Saldo)||0;
   });
   confirmadas.forEach(function(c){ item(c.CodigoPeca,c.Peca,c.Material).contado++; });
