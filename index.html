@@ -882,7 +882,23 @@ var backend = {
     } finally { clearTimeout(limite); }
   },
 
-  async verificarSenhaAdmin(senha) { return String(senha) === ADMIN_PASSWORD; }
+  async verificarSenhaAdmin(senha) { return String(senha) === ADMIN_PASSWORD; },
+
+  // ── Tabela de preços (faturamento). A senha de supervisor é conferida NO BANCO (precos_venda.sql):
+  //    ela não está neste arquivo e a tabela de preços não pode ser lida direto com a chave pública.
+  async _rpcPrecos(nome, corpo) {
+    try {
+      var resp = await fetch(SUPABASE_URL + '/rest/v1/rpc/' + nome, { method: 'POST', headers: sbHeaders(), cache: 'no-store', body: JSON.stringify(corpo) });
+      var texto = await resp.text(), j = null;
+      try { j = JSON.parse(texto); } catch (e) {}
+      if (resp.ok && j && typeof j === 'object') return j;
+      if (j && (j.code === 'PGRST202' || j.code === '42883' || /precos_/.test(j.message || '') && resp.status === 404)) return { ok: false, erro: 'sem_funcao' };
+      return { ok: false, erro: (j && j.message) || ('Erro ' + resp.status) };
+    } catch (e) { return { ok: false, erro: 'conexao' }; }
+  },
+  async precosVer(senha) { return this._rpcPrecos('precos_ver', { p_senha: String(senha || '') }); },
+  async precosSalvar(senha, tabela, itens, usuario) { return this._rpcPrecos('precos_salvar', { p_senha: String(senha || ''), p_tabela: tabela, p_itens: itens, p_usuario: usuario || '' }); },
+  async precosTrocarSenha(atual, nova) { return this._rpcPrecos('precos_trocar_senha', { p_senha_atual: String(atual || ''), p_senha_nova: String(nova || '') }); }
 };
 
 // ── Polyfill: reproduz a interface google.script.run(...).withSuccessHandler(cb).funcao(args) ──
@@ -1275,6 +1291,25 @@ select.inp-pos option{color:#000;background:#fff}
 /* MODAIS */
 .mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:500;align-items:flex-end;justify-content:center}
 .mo.aberto{display:flex}
+.fat-box{margin-top:12px;border:2px solid #1a1a2e;border-radius:var(--radius-sm);padding:12px 14px;background:#fff}
+.fat-box.fechado{border-style:dashed;border-color:var(--cinza3);background:var(--cinza)}
+.fat-hd{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.fat-tit{font-size:13px;font-weight:900;color:var(--azul)}
+.fat-btns{display:flex;gap:6px;flex-wrap:wrap}
+.fat-btns button{border:none;border-radius:6px;padding:8px 12px;font-size:12px;font-weight:800;cursor:pointer;background:var(--cinza2);color:var(--texto)}
+.fat-btns .fat-ver{background:#1a1a2e;color:#fff}
+.fat-total{font-size:26px;font-weight:900;color:#1a1a2e;margin:8px 0 2px;font-variant-numeric:tabular-nums}
+.fat-sub{font-size:11px;color:var(--texto2);font-weight:700}
+.fat-dest{display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-top:1px solid var(--cinza2);font-variant-numeric:tabular-nums}
+.fat-dest b{font-weight:800}
+.fat-aviso{margin-top:8px;background:#fff4e5;border-left:4px solid #e67e22;padding:8px 10px;font-size:12px;font-weight:700;color:#8a4b08;border-radius:4px}
+.fat-sel{padding:6px 8px;border:2px solid var(--cinza3);border-radius:6px;font-weight:800;font-size:12px}
+.pr-tab{width:100%;border-collapse:collapse;font-size:13px}
+.pr-tab th{background:#1a1a2e;color:#fff;padding:7px 6px;font-size:12px}
+.pr-tab td{border-bottom:1px solid var(--cinza2);padding:4px 6px}
+.pr-tab td:first-child{font-weight:800;white-space:nowrap}
+.pr-tab input{width:100%;min-width:70px;padding:8px 6px;border:2px solid var(--cinza3);border-radius:6px;text-align:right;font-size:14px;font-variant-numeric:tabular-nums}
+.pr-tab input:focus{border-color:var(--azul3);outline:none}
 .mb{background:#fff;border-radius:16px 16px 0 0;padding:20px 16px 28px;width:100%;max-height:90vh;overflow-y:auto}
 .mb-t{font-size:17px;font-weight:900;color:var(--azul);margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid var(--cinza2)}
 .mb-acts{display:flex;gap:8px;margin-top:16px}
@@ -2187,6 +2222,7 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
             <div class="fg"><label>Título do Planejamento</label><input type="text" id="plan-titulo" placeholder="Ex: Pedido semana 39" oninput="S.planAtual.titulo=this.value"/></div>
             <div id="plan-setup-destinos"></div>
             <div id="plan-resumo-pedido" style="margin-top:14px"></div>
+            <div id="plan-faturamento"></div>
           </div>
 
           <div class="hist-titulo" style="margin-top:0">🏭 Destinos deste pedido</div>
@@ -2195,7 +2231,8 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
 
           <div style="display:flex;gap:10px;margin-top:14px;margin-bottom:20px">
             <button class="btn-filtrar" style="background:var(--verde)" onclick="salvarPlanejamentoAtual()">💾 Salvar Planejamento</button>
-            <button class="btn-filtrar" style="background:#8a2be2" onclick="gerarPDFPlanejamento()">🖨️ Gerar PDF</button>
+            <button class="btn-filtrar" style="background:#8a2be2" onclick="gerarPDFPlanejamento(false)" title="Sem valores — para a equipe">🖨️ PDF Funcionários</button>
+            <button class="btn-filtrar" style="background:#1a1a2e" onclick="pdfDiretoria()" title="Com preços e faturamento — pede a senha de supervisor">🔒 PDF Diretoria</button>
           </div>
         </div>
 
@@ -2286,6 +2323,27 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
     <div class="mb-t" id="cad-t">Cadastrar</div>
     <div id="cad-body"></div>
     <div class="mb-acts"><button class="mb-cancel" onclick="fecharCad()">Cancelar</button><button class="mb-save" id="btn-salvar-cad" onclick="salvarCad()">💾 Salvar</button></div>
+  </div>
+</div>
+
+<!-- SENHA DE SUPERVISOR (valores de faturamento) -->
+<div class="mo" id="mo-sup">
+  <div class="mb" style="border-top:5px solid #1a1a2e">
+    <div class="mb-t">🔒 Valores de faturamento</div>
+    <p style="font-size:13px;color:var(--texto2);margin-bottom:12px" id="sup-msg">Os preços só aparecem com a senha de supervisor.</p>
+    <div class="fg"><label>Senha de supervisor</label><input type="password" id="inp-sup" placeholder="••••••••" autocomplete="off" onkeydown="if(event.key==='Enter')confirmarSenhaSupervisor()"/></div>
+    <div style="color:#c0392b;font-size:12px;margin-bottom:6px;display:none;font-weight:700" id="sup-err"></div>
+    <div class="mb-acts"><button class="mb-cancel" onclick="fecharSenhaSupervisor()">Cancelar</button><button class="mb-save" style="background:#1a1a2e" id="sup-ok" onclick="confirmarSenhaSupervisor()">Ver valores</button></div>
+  </div>
+</div>
+
+<!-- TABELA DE PREÇOS -->
+<div class="mo" id="mo-precos">
+  <div class="mb" style="max-width:760px">
+    <div class="mb-t">💰 Tabela de preços <span style="font-weight:600;font-size:12px;color:var(--texto2)">(R$ por peça)</span></div>
+    <div id="precos-corpo"></div>
+    <div style="color:#c0392b;font-size:12px;margin:6px 0;display:none;font-weight:700" id="precos-err"></div>
+    <div class="mb-acts"><button class="mb-cancel" onclick="fecharTabelaPrecos()">Fechar</button><button class="mb-save" id="precos-salvar" onclick="salvarTabelaPrecos()">💾 Salvar tabela</button></div>
   </div>
 </div>
 
@@ -2601,6 +2659,7 @@ function entrarComoPlanejamento(){
   document.getElementById('topbar').style.display='flex';
   document.getElementById('tb-modo-label').textContent='Modo:';
   var b=document.getElementById('tb-badge'); b.textContent='PLANEJAMENTO'; b.className='u-badge';
+  trancarPrecos(); // valores sempre começam escondidos
   mostrarPag('planejamento');
   voltarListaPlanejamentos();
 }
@@ -2932,6 +2991,7 @@ function renderResumoPedido(){
   var r=calcularResumoPedido();
   if(!r.caixasTotalGeral){
     el.innerHTML='<div class="plan-resumo-vazio">Preencha as quantidades dos destinos pra ver o resumo do pedido aqui.</div>';
+    renderFaturamentoPlan();
     return;
   }
   var tamanhosKeys=Object.keys(r.porTamanho).sort();
@@ -2945,18 +3005,267 @@ function renderResumoPedido(){
   html+='</div>';
   if(r.faltaDados) html+='<div class="plan-resumo-aviso">⚠️ Algumas peças alocadas não têm peso unitário ou tamanho de caixa cadastrado — o peso/cubagem delas não entra nesse cálculo. Complete o cadastro em Admin → Peças.</div>';
   el.innerHTML=html;
+  renderFaturamentoPlan();
 }
-function gerarPDFPlanejamento(){
+// ═══════════════════════════════════════
+// FATURAMENTO (preços) — só com senha de supervisor, conferida no banco
+// ═══════════════════════════════════════
+var PRECOS_TRAVA_MIN=20; // minutos até esconder os valores sozinho
+function fmtReais(v){ return (Number(v)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+function fmtPrecoUn(v){ return (Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:4}); }
+function precoNormPeca(c){ return String(c||'').toUpperCase().replace(/\s+/g,'').replace(/^DEFOFO-/,'DEF-'); }
+function precoNormMat(m){ var n=semAcentoConsulta(m||'').toUpperCase().trim(); var t=n.match(/^[A-Z]+/); return t?t[0]:n; }
+function htmlTxt(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function trancarPrecos(){
+  if(S.precos&&S.precos.timer) clearTimeout(S.precos.timer);
+  S.precos=null;
+  var pa=document.getElementById('print-area');
+  if(pa&&pa.getAttribute('data-valores')==='1'){ pa.innerHTML=''; pa.setAttribute('data-valores',''); }
+  if(document.getElementById('plan-faturamento')) renderFaturamentoPlan();
+}
+function guardarPrecos(senha,lista){
+  if(S.precos&&S.precos.timer) clearTimeout(S.precos.timer);
+  var mapa={}, quando={};
+  (lista||[]).forEach(function(x){
+    var t=String(x.tabela||'').toUpperCase();
+    if(!mapa[t]) mapa[t]={};
+    mapa[t][precoNormPeca(x.peca)+'||'+precoNormMat(x.material)]=Number(x.preco);
+    if(x.atualizadoEm&&(!quando[t]||x.atualizadoEm>quando[t])) quando[t]=x.atualizadoEm;
+  });
+  S.precos={ senha:senha, lista:lista||[], mapa:mapa, quando:quando, tabelas:Object.keys(mapa).sort(),
+    timer:setTimeout(function(){ trancarPrecos(); toast('Valores escondidos de novo (tempo esgotado)','aviso'); }, PRECOS_TRAVA_MIN*60000) };
+}
+
+// ── senha de supervisor ──
+var _supCallback=null;
+function pedirSenhaSupervisor(msg,cb){
+  if(S.precos){ if(cb) cb(); return; }
+  _supCallback=cb||null;
+  document.getElementById('sup-msg').textContent=msg||'Os preços só aparecem com a senha de supervisor.';
+  document.getElementById('inp-sup').value='';
+  document.getElementById('sup-err').style.display='none';
+  var bt=document.getElementById('sup-ok'); bt.disabled=false; bt.textContent='Ver valores';
+  document.getElementById('mo-sup').classList.add('aberto');
+  setTimeout(function(){ try{ document.getElementById('inp-sup').focus(); }catch(e){} },50);
+}
+function fecharSenhaSupervisor(){ document.getElementById('mo-sup').classList.remove('aberto'); _supCallback=null; }
+function confirmarSenhaSupervisor(){
+  var senha=document.getElementById('inp-sup').value, err=document.getElementById('sup-err'), bt=document.getElementById('sup-ok');
+  function erro(t){ err.textContent=t; err.style.display='block'; bt.disabled=false; bt.textContent='Ver valores'; }
+  if(!senha){ erro('Informe a senha'); return; }
+  if(bt.disabled) return;
+  bt.disabled=true; bt.textContent='Conferindo…';
+  backend.precosVer(senha).then(function(r){
+    if(!r||!r.ok){
+      var e=r&&r.erro;
+      if(e==='senha') erro('Senha incorreta');
+      else if(e==='bloqueado') erro('Muitas senhas erradas. Espere 10 minutos e tente de novo.');
+      else if(e==='sem_funcao') erro('A tabela de preços ainda não foi instalada no banco. Rode o arquivo precos_venda.sql no Supabase.');
+      else if(e==='conexao') erro('Sem conexão com o servidor. Confira a internet.');
+      else erro('Erro: '+(e||'desconhecido'));
+      return;
+    }
+    guardarPrecos(senha,r.precos);
+    document.getElementById('mo-sup').classList.remove('aberto');
+    var cb=_supCallback; _supCallback=null;
+    renderFaturamentoPlan();
+    if(cb) cb();
+  });
+}
+
+// ── qual tabela de preço vale para este planejamento ──
+function planTabelaPreco(){
+  if(!S.precos||!S.precos.tabelas.length) return null;
+  var ts=S.precos.tabelas, esc0=S.planAtual&&S.planAtual.tabelaPreco;
+  if(esc0&&ts.indexOf(esc0)>=0) return esc0;
+  var tit=semAcentoConsulta((S.planAtual&&S.planAtual.titulo)||'').toUpperCase();
+  var achou=ts.filter(function(t){ return tit.indexOf(semAcentoConsulta(t).toUpperCase())>=0; });
+  if(achou.length) return achou.sort(function(a,b){ return b.length-a.length; })[0]; // pelo nome no título
+  return ts.length===1?ts[0]:null;
+}
+function planEscolherTabela(v){ S.planAtual.tabelaPreco=v||null; renderFaturamentoPlan(); }
+
+// Valor de cada linha = peças (caixas × peças por caixa) × preço por peça
+function calcularFaturamentoPlan(tabela){
+  var mapa=(S.precos&&tabela&&S.precos.mapa[tabela])||{};
+  var res={ tabela:tabela, total:0, destinos:[], linhas:{}, semPreco:[], semQtd:[] };
+  var faltas={};
+  (S.planAtual.destinos||[]).forEach(function(dest,idx){
+    var d={ nome:dest.nome||('Destino '+(idx+1)), valor:0, caixas:0, faltando:0 };
+    Object.keys(dest.alocacoes||{}).forEach(function(chave){
+      var qtd=Number(dest.alocacoes[chave])||0; if(qtd<=0) return;
+      var partes=chave.split('||'), cod=partes[0], grupo=partes[1];
+      var pecas=planPecasEquivalentes(qtd,cod);
+      var k=precoNormPeca(cod)+'||'+precoNormMat(grupo);
+      var preco=Object.prototype.hasOwnProperty.call(mapa,k)?mapa[k]:null;
+      var valor=(preco!=null&&pecas)?pecas*preco:null;
+      res.linhas[idx+'|'+chave]={ preco:preco, valor:valor };
+      d.caixas+=qtd;
+      if(valor!=null){ d.valor+=valor; res.total+=valor; }
+      else {
+        d.faltando+=qtd;
+        var fk=cod+' '+precoNormMat(grupo)+(preco==null?'':' (sem peças por caixa)');
+        if(!faltas[fk]) faltas[fk]={ texto:fk, caixas:0, semQtd:preco!=null };
+        faltas[fk].caixas+=qtd;
+      }
+    });
+    res.destinos.push(d);
+  });
+  Object.keys(faltas).sort().forEach(function(k){ (faltas[k].semQtd?res.semQtd:res.semPreco).push(faltas[k]); });
+  return res;
+}
+function textoFaltasPreco(f){
+  var t=[];
+  if(f.semPreco.length) t.push('Sem preço na tabela '+f.tabela+': '+f.semPreco.map(function(x){ return x.texto+' ('+x.caixas+' cx)'; }).join(', ')+' — não entra no total.');
+  if(f.semQtd.length) t.push('Peça sem "peças por caixa" no cadastro: '+f.semQtd.map(function(x){ return x.texto.replace(' (sem peças por caixa)','')+' ('+x.caixas+' cx)'; }).join(', ')+' — não entra no total. Complete em Admin → Peças.');
+  return t;
+}
+
+function renderFaturamentoPlan(){
+  var el=document.getElementById('plan-faturamento'); if(!el) return;
+  if(!S.precos){
+    el.innerHTML='<div class="fat-box fechado"><div class="fat-hd"><div class="fat-tit">💰 Faturamento</div>'+
+      '<div class="fat-btns"><button class="fat-ver" onclick="pedirSenhaSupervisor()">🔓 Ver valores</button></div></div>'+
+      '<div class="fat-sub" style="margin-top:4px">Valores escondidos — só com a senha de supervisor.</div></div>';
+    return;
+  }
+  var tab=planTabelaPreco(), ts=S.precos.tabelas;
+  var sel=ts.length?'<select class="fat-sel" onchange="planEscolherTabela(this.value)">'+(tab?'':'<option value="">Escolha a tabela…</option>')+
+    ts.map(function(t){ return '<option'+(t===tab?' selected':'')+' value="'+htmlTxt(t)+'">'+htmlTxt(t)+'</option>'; }).join('')+'</select>':'';
+  var html='<div class="fat-box"><div class="fat-hd"><div class="fat-tit">💰 Faturamento '+sel+'</div>'+
+    '<div class="fat-btns"><button onclick="abrirTabelaPrecos()">✏️ Preços</button><button onclick="trancarPrecos()">🔒 Esconder</button></div></div>';
+  if(!ts.length) html+='<div class="fat-aviso">Nenhuma tabela de preço cadastrada. Toque em ✏️ Preços para criar.</div>';
+  else if(!tab) html+='<div class="fat-aviso">Escolha a tabela de preço deste pedido (o título não diz qual é).</div>';
+  else {
+    var f=calcularFaturamentoPlan(tab);
+    html+='<div class="fat-total">'+fmtReais(f.total)+'</div><div class="fat-sub">Valor do pedido pela tabela '+htmlTxt(tab)+' (peças × preço por peça)</div>';
+    if(f.destinos.length>1||f.destinos.length===1&&f.destinos[0].caixas){
+      html+='<div style="margin-top:8px">'+f.destinos.map(function(d){
+        return '<div class="fat-dest"><span>'+htmlTxt(d.nome)+' <span style="color:var(--texto2)">· '+d.caixas+' cx</span></span><b>'+fmtReais(d.valor)+'</b></div>';
+      }).join('')+'</div>';
+    }
+    textoFaltasPreco(f).forEach(function(t){ html+='<div class="fat-aviso">⚠️ '+htmlTxt(t)+'</div>'; });
+  }
+  el.innerHTML=html+'</div>';
+}
+
+// ── editor da tabela de preços ──
+var _precosEdit=null;
+function abrirTabelaPrecos(){
+  pedirSenhaSupervisor('Para ver e editar a tabela de preços, informe a senha de supervisor.', function(){
+    var tab=planTabelaPreco()||(S.precos.tabelas[0]||'');
+    _precosEdit={ tabela:tab, nova:!tab };
+    montarTabelaPrecos();
+    document.getElementById('precos-err').style.display='none';
+    document.getElementById('mo-precos').classList.add('aberto');
+  });
+}
+function fecharTabelaPrecos(){ document.getElementById('mo-precos').classList.remove('aberto'); _precosEdit=null; }
+function precosTrocarTabela(v){
+  if(v==='__nova__'){ _precosEdit={ tabela:'', nova:true }; }
+  else _precosEdit={ tabela:v, nova:false };
+  montarTabelaPrecos();
+}
+function montarTabelaPrecos(){
+  var corpo=document.getElementById('precos-corpo'), tab=_precosEdit.tabela;
+  var mapa=(tab&&S.precos.mapa[tab])||{};
+  // linhas: peças cadastradas + peças que só existem na tabela; colunas: materiais da tabela + materiais do planejamento
+  var pecas={}, mats={};
+  (S.planPecasTodas||S.pecas||[]).forEach(function(p){ pecas[precoNormPeca(p.Codigo)]=1; });
+  (S.planGrupos||[]).forEach(function(g){ mats[precoNormMat(g.nome)]=1; });
+  Object.keys(S.precos.mapa).forEach(function(t){ Object.keys(S.precos.mapa[t]).forEach(function(k){ var pp=k.split('||'); mats[pp[1]]=1; if(t===tab) pecas[pp[0]]=1; }); });
+  var listaP=Object.keys(pecas).map(function(c){ return { Codigo:c }; }).sort(planOrdemPadrao).map(function(x){ return x.Codigo; });
+  var listaM=Object.keys(mats).sort();
+  var quando=tab&&S.precos.quando[tab]?new Date(S.precos.quando[tab]):null;
+  var html='<div class="fg-row" style="grid-template-columns:1fr 1fr;align-items:end">'+
+    '<div class="fg" style="margin:0"><label>Tabela</label><select id="precos-tab" onchange="precosTrocarTabela(this.value)">'+
+      S.precos.tabelas.map(function(t){ return '<option'+(t===tab&&!_precosEdit.nova?' selected':'')+' value="'+htmlTxt(t)+'">'+htmlTxt(t)+'</option>'; }).join('')+
+      '<option value="__nova__"'+(_precosEdit.nova?' selected':'')+'>+ Nova tabela (outro cliente)</option></select></div>'+
+    (_precosEdit.nova?'<div class="fg" style="margin:0"><label>Nome da nova tabela</label><input type="text" id="precos-nome" placeholder="Ex: SANEAR" value="'+htmlTxt(tab)+'"/></div>'
+      :'<div style="font-size:11px;color:var(--texto2);font-weight:700;padding-bottom:6px">'+(quando?'Última alteração: '+quando.toLocaleString('pt-BR'):'')+'</div>')+
+  '</div>'+
+  '<p style="font-size:12px;color:var(--texto2);margin:10px 0">Preço em R$ <b>por peça</b>. Deixe em branco o que não tem preço. O nome da tabela no título do planejamento (ex.: "ASPERBRAS 28/10/26") faz ela ser escolhida sozinha.</p>'+
+  '<div style="overflow-x:auto"><table class="pr-tab"><thead><tr><th style="text-align:left">Peça</th>'+listaM.map(function(m){ return '<th>'+htmlTxt(m)+'</th>'; }).join('')+'</tr></thead><tbody>'+
+  listaP.map(function(c){
+    return '<tr><td>'+htmlTxt(c)+'</td>'+listaM.map(function(m){
+      var v=mapa[c+'||'+m];
+      return '<td><input type="text" inputmode="decimal" data-peca="'+htmlTxt(c)+'" data-mat="'+htmlTxt(m)+'" value="'+(v!=null?fmtPrecoUn(v).replace(/\./g,''):'')+'"/></td>';
+    }).join('')+'</tr>';
+  }).join('')+'</tbody></table></div>'+
+  '<details style="margin-top:14px"><summary style="cursor:pointer;font-size:12px;font-weight:800;color:var(--azul3)">Trocar a senha de supervisor</summary>'+
+    '<div class="fg-row" style="margin-top:8px"><div class="fg"><label>Senha nova</label><input type="password" id="sup-nova1" autocomplete="new-password"/></div>'+
+    '<div class="fg"><label>Repita a senha nova</label><input type="password" id="sup-nova2" autocomplete="new-password"/></div></div>'+
+    '<button type="button" class="btn-filtrar" style="width:auto;padding:10px 16px;background:#1a1a2e" onclick="trocarSenhaSupervisor()">Trocar senha</button></details>';
+  corpo.innerHTML=html;
+}
+function salvarTabelaPrecos(){
+  var err=document.getElementById('precos-err'), bt=document.getElementById('precos-salvar');
+  function erro(t){ err.textContent=t; err.style.display='block'; bt.disabled=false; bt.textContent='💾 Salvar tabela'; }
+  err.style.display='none';
+  var tab=_precosEdit.nova?String((document.getElementById('precos-nome')||{}).value||'').trim().toUpperCase():_precosEdit.tabela;
+  if(!tab){ erro('Dê um nome para a tabela (normalmente o nome do cliente).'); return; }
+  if(_precosEdit.nova&&S.precos.tabelas.indexOf(tab)>=0){ erro('Já existe a tabela '+tab+'. Escolha ela na lista para editar.'); return; }
+  var itens=[], ruim=null;
+  document.querySelectorAll('#precos-corpo .pr-tab input').forEach(function(inp){
+    var t=String(inp.value||'').trim(); if(!t) return;
+    var n=Number(t.replace(/\./g,'').replace(',','.'));
+    if(t.indexOf(',')<0) n=Number(t); // aceita 8.48 e 8,48
+    if(!isFinite(n)||n<0){ ruim=ruim||(inp.dataset.peca+' '+inp.dataset.mat+': "'+t+'"'); return; }
+    itens.push({ peca:inp.dataset.peca, material:inp.dataset.mat, preco:n });
+  });
+  if(ruim){ erro('Preço inválido em '+ruim+'. Use números, ex.: 8,48'); return; }
+  if(!itens.length&&!confirm('A tabela '+tab+' vai ficar sem nenhum preço. Continuar?')) return;
+  bt.disabled=true; bt.textContent='Salvando…';
+  var senha=S.precos.senha;
+  backend.precosSalvar(senha,tab,itens,S.movOperador?S.movOperador.nome:'Supervisor').then(function(r){
+    if(!r||!r.ok){ erro(r&&r.erro==='senha'?'A senha de supervisor mudou. Esconda os valores e entre de novo.':('Não salvou: '+((r&&r.erro)||'erro'))); return; }
+    return backend.precosVer(senha).then(function(v){
+      bt.disabled=false; bt.textContent='💾 Salvar tabela';
+      if(v&&v.ok) guardarPrecos(senha,v.precos);
+      S.planAtual.tabelaPreco=tab;
+      fecharTabelaPrecos();
+      renderFaturamentoPlan();
+      toast('Tabela '+tab+' salva ('+r.total+' preços)','sucesso');
+    });
+  });
+}
+function trocarSenhaSupervisor(){
+  var a=document.getElementById('sup-nova1').value, b=document.getElementById('sup-nova2').value;
+  if(a.length<6){ toast('A senha nova precisa ter pelo menos 6 caracteres','aviso'); return; }
+  if(a!==b){ toast('As duas senhas não são iguais','aviso'); return; }
+  backend.precosTrocarSenha(S.precos.senha,a).then(function(r){
+    if(!r||!r.ok){ toast('Não trocou: '+((r&&r.erro)||'erro'),'erro'); return; }
+    S.precos.senha=a;
+    document.getElementById('sup-nova1').value=''; document.getElementById('sup-nova2').value='';
+    toast('Senha de supervisor trocada','sucesso');
+  });
+}
+
+// ── PDFs ──
+function pdfDiretoria(){
   if(!S.planAtual.destinos||!S.planAtual.destinos.length){ toast('Nada pra gerar ainda','aviso'); return; }
+  pedirSenhaSupervisor('O PDF da diretoria tem os valores de faturamento. Informe a senha de supervisor.', function(){
+    if(!planTabelaPreco()){ toast('Escolha a tabela de preço deste pedido no quadro Faturamento','aviso'); renderFaturamentoPlan(); return; }
+    gerarPDFPlanejamento(true);
+  });
+}
+function gerarPDFPlanejamento(comPreco){
+  if(!S.planAtual.destinos||!S.planAtual.destinos.length){ toast('Nada pra gerar ainda','aviso'); return; }
+  comPreco=!!comPreco&&!!S.precos;
+  var tabela=comPreco?planTabelaPreco():null;
+  if(comPreco&&!tabela){ toast('Escolha a tabela de preço deste pedido','aviso'); return; }
+  var fat=comPreco?calcularFaturamentoPlan(tabela):null;
   var pecasPorCodigo={};
   (S.planPecasTodas||S.pecas||[]).forEach(function(p){ pecasPorCodigo[p.Codigo]=p; });
 
   var resumo=calcularResumoPedido();
   var tamanhosKeys=Object.keys(resumo.porTamanho).sort();
+  var fs=comPreco?'10px':'11px', cel='padding:4px;text-align:center'+(comPreco?';white-space:nowrap':''), th=comPreco?'padding:4px;white-space:nowrap':'padding:4px';
 
   var html='<style>@page{size:A4 portrait;margin:14mm}</style>';
   html+='<div style="font-family:Arial,sans-serif;color:#000">';
-  html+='<h1 style="font-size:19px;margin-bottom:1mm">'+esc(S.planAtual.titulo||'Planejamento de Pedido')+'</h1>';
+  html+='<h1 style="font-size:19px;margin-bottom:1mm">'+htmlTxt(S.planAtual.titulo||'Planejamento de Pedido')+'</h1>';
   html+='<div style="font-size:10px;color:#555;margin-bottom:5mm">Gerado em '+fmtDI(new Date()).split('-').reverse().join('/')+'</div>';
 
   html+='<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8mm"><tr>'+
@@ -2964,17 +3273,19 @@ function gerarPDFPlanejamento(){
     '<td style="border:1px solid #ccc;padding:6px;text-align:center"><div style="font-size:10px;color:#666">PESO TOTAL</div><div style="font-size:18px;font-weight:900">'+resumo.pesoTotalGeral.toFixed(1)+' kg</div></td>'+
     tamanhosKeys.map(function(nome){
       var t=resumo.porTamanho[nome];
-      return '<td style="border:1px solid #ccc;padding:6px;text-align:center"><div style="font-size:10px;color:#666">CAIXAS '+esc(nome.toUpperCase())+'</div><div style="font-size:18px;font-weight:900">'+t.qtd+'</div><div style="font-size:10px;color:#666">'+t.cubagem.toFixed(2)+' m³</div></td>';
+      return '<td style="border:1px solid #ccc;padding:6px;text-align:center"><div style="font-size:10px;color:#666">CAIXAS '+htmlTxt(nome.toUpperCase())+'</div><div style="font-size:18px;font-weight:900">'+t.qtd+'</div><div style="font-size:10px;color:#666">'+t.cubagem.toFixed(2)+' m³</div></td>';
     }).join('')+
+    (comPreco?'<td style="border:1px solid #ccc;padding:6px;text-align:center"><div style="font-size:10px;color:#666">VALOR TOTAL</div><div style="font-size:18px;font-weight:900">'+fmtReais(fat.total)+'</div></td>':'')+
   '</tr></table>';
 
-  S.planAtual.destinos.forEach(function(dest){
+  S.planAtual.destinos.forEach(function(dest,idx){
     var chaves=Object.keys(dest.alocacoes||{}).filter(function(k){ return Number(dest.alocacoes[k])>0; });
     if(!chaves.length) return;
-    html+='<div style="font-size:15px;font-weight:900;border-bottom:1.5px solid #000;padding-bottom:1.5mm;margin-top:7mm;margin-bottom:2mm;text-transform:uppercase">'+esc(dest.nome)+'</div>';
-    html+='<table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:2mm"><thead><tr style="background:#222;color:#fff">'+
-      '<th style="padding:4px;text-align:left">Peça</th><th style="padding:4px">Material</th><th style="padding:4px">Caixas</th><th style="padding:4px">Peças (NF)</th><th style="padding:4px">Peso (kg)</th><th style="padding:4px">Cubagem (m³)</th></tr></thead><tbody>';
-    var pesoDestino=0, caixasDestino=0, cubagemDestino=0;
+    html+='<div style="font-size:15px;font-weight:900;border-bottom:1.5px solid #000;padding-bottom:1.5mm;margin-top:7mm;margin-bottom:2mm;text-transform:uppercase">'+htmlTxt(dest.nome)+'</div>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:'+fs+';margin-bottom:2mm"><thead><tr style="background:#222;color:#fff">'+
+      '<th style="padding:4px;text-align:left">Peça</th><th style="'+th+'">Material</th><th style="'+th+'">Caixas</th><th style="'+th+'">Peças (NF)</th><th style="'+th+'">Peso (kg)</th><th style="'+th+'">Cubagem (m³)</th>'+
+      (comPreco?'<th style="'+th+'">Preço (R$)</th><th style="'+th+'">Valor (R$)</th>':'')+'</tr></thead><tbody>';
+    var pesoDestino=0, caixasDestino=0, cubagemDestino=0, valorDestino=0;
     chaves.sort().forEach(function(chave){
       var partes=chave.split('||'); var cod=partes[0], grupo=partes[1];
       var qtd=Number(dest.alocacoes[chave]);
@@ -2987,16 +3298,20 @@ function gerarPDFPlanejamento(){
       if(pesoSub) pesoDestino+=pesoSub;
       if(cubSub) cubagemDestino+=cubSub;
       caixasDestino+=qtd;
-      html+='<tr style="border-bottom:1px solid #ccc"><td style="padding:4px">'+esc(cod)+' — '+esc(p?p.Nome:'')+'</td><td style="padding:4px;text-align:center">'+esc(grupo)+'</td><td style="padding:4px;text-align:center">'+qtd+'</td><td style="padding:4px;text-align:center">'+pecasQtd+'</td><td style="padding:4px;text-align:center">'+(pesoSub?pesoSub.toFixed(1):'—')+'</td><td style="padding:4px;text-align:center">'+(cubSub?cubSub.toFixed(3):'—')+'</td></tr>';
+      var ln=comPreco?(fat.linhas[idx+'|'+chave]||{}):null;
+      if(ln&&ln.valor!=null) valorDestino+=ln.valor;
+      html+='<tr style="border-bottom:1px solid #ccc"><td style="padding:4px">'+htmlTxt(cod)+' — '+htmlTxt(p?p.Nome:'')+'</td><td style="'+cel+'">'+htmlTxt(grupo)+'</td><td style="'+cel+'">'+qtd+'</td><td style="'+cel+'">'+pecasQtd+'</td><td style="'+cel+'">'+(pesoSub?pesoSub.toFixed(1):'—')+'</td><td style="'+cel+'">'+(cubSub?cubSub.toFixed(3):'—')+'</td>'+
+        (comPreco?'<td style="'+cel+'">'+(ln.preco!=null?fmtPrecoUn(ln.preco):'—')+'</td><td style="'+cel+'">'+(ln.valor!=null?fmtReais(ln.valor).replace('R$','').trim():'—')+'</td>':'')+'</tr>';
     });
     html+='</tbody></table>';
-    html+='<div style="font-size:11px;font-weight:700;text-align:right">Subtotal deste destino: '+caixasDestino+' caixas • '+pesoDestino.toFixed(1)+' kg • '+cubagemDestino.toFixed(3)+' m³</div>';
+    html+='<div style="font-size:11px;font-weight:700;text-align:right">Subtotal deste destino: '+caixasDestino+' caixas • '+pesoDestino.toFixed(1)+' kg • '+cubagemDestino.toFixed(3)+' m³'+(comPreco?' • '+fmtReais(valorDestino):'')+'</div>';
   });
 
   html+='<div style="font-size:15px;font-weight:900;border-bottom:1.5px solid #000;padding-bottom:1.5mm;margin-top:9mm;margin-bottom:3mm">Resumo Geral</div>';
   html+='<table style="width:70%;border-collapse:collapse;font-size:13px;margin-bottom:4mm">'+
     '<tr><td style="padding:5px;font-weight:700">Quantidade Total de Caixas</td><td style="padding:5px;text-align:right">'+resumo.caixasTotalGeral+'</td></tr>'+
     '<tr><td style="padding:5px;font-weight:700">Peso Total do Pedido (kg)</td><td style="padding:5px;text-align:right">'+resumo.pesoTotalGeral.toFixed(1)+'</td></tr>'+
+    (comPreco?'<tr><td style="padding:5px;font-weight:700">Valor Total do Pedido (R$)</td><td style="padding:5px;text-align:right">'+fmtReais(fat.total).replace('R$','').trim()+'</td></tr>':'')+
   '</table>';
   if(tamanhosKeys.length){
     var cubagemSoma=0;
@@ -3004,10 +3319,13 @@ function gerarPDFPlanejamento(){
     tamanhosKeys.forEach(function(nome){
       var t=resumo.porTamanho[nome];
       cubagemSoma+=t.cubagem;
-      html+='<tr style="border-bottom:1px solid #ccc"><td style="padding:5px">'+esc(nome)+'</td><td style="padding:5px;text-align:center">'+t.qtd+'</td><td style="padding:5px;text-align:center">'+t.cubagem.toFixed(3)+'</td></tr>';
+      html+='<tr style="border-bottom:1px solid #ccc"><td style="padding:5px">'+htmlTxt(nome)+'</td><td style="padding:5px;text-align:center">'+t.qtd+'</td><td style="padding:5px;text-align:center">'+t.cubagem.toFixed(3)+'</td></tr>';
     });
     html+='<tr style="border-top:2px solid #000;font-weight:900"><td style="padding:5px">Total</td><td style="padding:5px;text-align:center">'+resumo.caixasTotalGeral+'</td><td style="padding:5px;text-align:center">'+cubagemSoma.toFixed(3)+'</td></tr>';
     html+='</tbody></table>';
+  }
+  if(comPreco){
+    textoFaltasPreco(fat).forEach(function(t){ html+='<div style="font-size:11px;margin-top:4mm">Obs.: '+htmlTxt(t)+'</div>'; });
   }
 
   html+='</div>';
@@ -3015,6 +3333,7 @@ function gerarPDFPlanejamento(){
   var pa=document.getElementById('print-area');
   pa.innerHTML=html;
   pa.style.display='block'; window.print(); pa.style.display='none';
+  pa.setAttribute('data-valores',comPreco?'1':''); // ao esconder os valores, o PDF da diretoria some da página também
 }
 
 function entrarComoNotaFiscal(){
