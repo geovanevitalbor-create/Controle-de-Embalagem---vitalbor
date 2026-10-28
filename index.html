@@ -268,7 +268,8 @@ function montarPecaComCaixa(p, tamanhosPorId, arranjosPorPeca, ativo) {
     TamanhoCaixaId: p.tamanho_caixa_id || null, TamanhoCaixaNome: tam ? tam.Nome : '',
     CubagemM3PorCaixa: tam ? tam.CubagemM3 : null,
     PesoUnitarioG: pesoUnitarioG, PesoCaixaFechadaKg: pesoCaixaFechadaKg,
-    Arranjos: arranjosPorPeca[p.id] || [], Ativo: !!ativo, DataCadastro: fmtDataBR(p.data_cadastro)
+    Arranjos: arranjosPorPeca[p.id] || [], Ativo: !!ativo, DataCadastro: fmtDataBR(p.data_cadastro),
+    MateriaisPermitidos: Array.isArray(p.materiais_permitidos) ? p.materiais_permitidos.filter(Boolean) : []
   };
 }
 function montarTamanhoCaixa(t) {
@@ -414,10 +415,24 @@ var backend = {
         peso_unitario_g: (dados.PesoUnitarioG === '' || dados.PesoUnitarioG === undefined || dados.PesoUnitarioG === null) ? null : Number(dados.PesoUnitarioG),
         ativo: true
       };
-      if (dados.ID) { await sbPatch('pecas', 'id=eq.' + dados.ID, payload); return { ok: true }; }
-      var rows = await sbPost('pecas', payload);
+      var mats = (dados.MateriaisPermitidos || []).filter(Boolean);
+      payload.materiais_permitidos = mats.length ? mats : null;
+      var semColuna = false;
+      async function gravar() {
+        if (dados.ID) { await sbPatch('pecas', 'id=eq.' + dados.ID, payload); return null; }
+        return await sbPost('pecas', payload);
+      }
+      var rows;
+      try { rows = await gravar(); }
+      catch (e1) {
+        // banco ainda sem a coluna (pecas_materiais.sql não rodado): salva o resto e avisa
+        if (!/materiais_permitidos/.test(String(e1 && e1.message))) throw e1;
+        delete payload.materiais_permitidos; semColuna = true;
+        rows = await gravar();
+      }
+      if (dados.ID) return { ok: true, semColunaMateriais: semColuna };
       await inserirLog('CADASTRO', 'Admin', 'Peça cadastrada: ' + dados.Nome, '');
-      return { ok: true, id: rows[0].id };
+      return { ok: true, id: rows[0].id, semColunaMateriais: semColuna };
     } catch (e) { return { ok: false, erro: e.message }; }
   },
   async excluirPeca(id) {
@@ -1083,6 +1098,13 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--azul2);font-fa
 .pos-imprimir.vis{display:flex}
 .pos-nova{margin:6px 10px 10px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.12);border-radius:var(--radius);padding:10px;font-size:13px;font-weight:700;cursor:pointer;display:none;align-items:center;justify-content:center}
 .pos-nova.vis{display:flex}
+#pag-producao .pbtn.pbtn-trava{opacity:.42;border-style:dashed}
+#pag-producao .pbtn.pbtn-trava .pd{color:rgba(255,255,255,.7)}
+.fc-mats{margin:4px 0 12px;padding:12px;border:1px solid var(--cinza2);border-radius:var(--radius-sm);background:var(--cinza)}
+.fc-mats-tit{font-size:14px;font-weight:900;color:var(--azul)}
+.fc-mats-sub{font-size:12px;color:var(--texto2);margin:2px 0 10px}
+.fc-mats-res{font-size:12px;font-weight:800;color:var(--texto2);margin-top:8px}
+.fc-mats-res.trava{color:#7a5a00}
 
 .pos-nova:active{background:rgba(255,255,255,.15)}
 
@@ -1959,7 +1981,7 @@ table.mov-tabela tr:nth-child(even) td:first-child{background:#f0f1f4}
     </div>
     <!-- SP3 Material -->
     <div id="sp3" style="display:none;flex-direction:column;flex:1;min-height:0">
-      <div class="pos-panel-head"><button class="pos-back-btn" onclick="voltarProd()">◀ Voltar</button><div><div class="pph-titulo">Matéria-Prima</div><div class="pph-sub">Composto sendo utilizado</div></div></div>
+      <div class="pos-panel-head"><button class="pos-back-btn" onclick="voltarProd()">◀ Voltar</button><div><div class="pph-titulo">Matéria-Prima</div><div class="pph-sub" id="sp3-sub">Composto sendo utilizado</div></div></div>
       <div class="pos-grid-wrap"><div class="pos-grid" id="g-mat"></div><div class="pos-paginacao" id="pag-mat" style="display:none"><button class="ppag-btn" id="pag-mat-prev" onclick="pgMat(-1)">◀</button><div class="ppag-info" id="pag-mat-info">1/1</div><button class="ppag-btn" id="pag-mat-next" onclick="pgMat(1)">▶</button></div></div>
     </div>
     <!-- SP4 Máquina -->
@@ -2900,14 +2922,17 @@ function planPecasOrdenadas(){
   return pecas;
 }
 function planCelulaBloqueada(codigoPeca, grupoNome){
+  var l=pecaMatsPermitidos(codigoPeca);
+  if(l.length){ var g=balNormMat(grupoNome); return !l.some(function(m){ return balNormMat(agruparNomeMaterialQuadro(m))===g; }); }
   return semAcentoConsulta(codigoPeca).indexOf('col')===0 && semAcentoConsulta(grupoNome).indexOf('nbr')!==0;
 }
 function planDesbloquearCelula(idx, chave, grupoNome){
+  var cod=chave.split('||')[0], l=pecaMatsPermitidos(cod);
   abrirModalColNBR(grupoNome, function(){
     S.planColOverride=S.planColOverride||{};
     S.planColOverride[idx+'-'+chave]=true;
     renderDestinosPlanejamento();
-  });
+  }, l.length?(cod+' só aceita '+l.join(', ')+'. Para planejar em '+grupoNome+', precisa da senha de admin.'):null);
 }
 function planSelecionarLinha(codigo){
   S.planLinhaSelecionada=(S.planLinhaSelecionada===codigo)?null:codigo;
@@ -2961,7 +2986,7 @@ function renderDestinosPlanejamento(){
         var pecasEq=val?planPecasEquivalentes(Number(val),p.Codigo):0;
         var bloqueada=planCelulaBloqueada(p.Codigo,g.nome) && !(S.planColOverride&&S.planColOverride[idx+'-'+chave]);
         if(bloqueada){
-          return '<td style="background:#e9e9ec;padding:6px;text-align:center;cursor:pointer" onclick="planDesbloquearCelula('+idx+',\''+esc(chave)+'\',\''+esc(g.nome)+'\')" title="Peça COL só usa NBR — clique pra liberar com senha de admin">'+
+          return '<td style="background:#e9e9ec;padding:6px;text-align:center;cursor:pointer" onclick="planDesbloquearCelula('+idx+',\''+esc(chave)+'\',\''+esc(g.nome)+'\')" title="Material não usado nesta peça — clique pra liberar com senha de admin">'+
             '<span style="color:#9a9ea6;font-size:18px;font-weight:800">—</span>'+
           '</td>';
         }
@@ -5225,27 +5250,55 @@ function renderGridPeca(filtro){
       '<div class="pn">'+p.Nome+'</div><div class="pd">'+p.QtdPadrao+' pç/cx</div></div>';
   }).join('');
 }
-function selPeca(n,c,q){ S.sel.peca=n; S.sel.codPeca=c; S.sel.qtdPad=Number(q); updSidebar(); renderGridMat(); goStep(3); }
+function pecaMatsPermitidos(cod){
+  var p=(S.pecas||[]).find(function(x){ return x.Codigo===cod; })||(S.planPecasTodas||[]).find(function(x){ return x.Codigo===cod; });
+  return (p&&p.MateriaisPermitidos)||[];
+}
+function matPermitidoNaPeca(cod,mat){
+  var l=pecaMatsPermitidos(cod); if(!l.length) return true;
+  var n=balNormMat(mat); return l.some(function(x){ return balNormMat(x)===n; });
+}
+// {bloqueado, msg}: a peça tem matérias-primas cadastradas? então só elas. Se não tem, vale a regra antiga (COL só NBR-50).
+function regraMaterial(cod,mat){
+  var l=pecaMatsPermitidos(cod);
+  if(l.length) return { bloqueado:!matPermitidoNaPeca(cod,mat), msg:cod+' só aceita '+l.join(', ')+'. Para usar '+mat+', precisa da senha de admin.' };
+  var ehCol=semAcentoConsulta(cod||'').indexOf('col')===0;
+  return { bloqueado:ehCol&&!ehNBR50(mat), msg:'Peça da linha COL com material diferente de NBR-50 ('+mat+') — precisa de senha de admin.' };
+}
+function selPeca(n,c,q){
+  S.sel.peca=n; S.sel.codPeca=c; S.sel.qtdPad=Number(q); S.sel.mat=''; S.sel.matLiberado=false; updSidebar();
+  // peça com uma matéria-prima só: já vem escolhida, o operador não precisa (nem pode) trocar
+  var l=pecaMatsPermitidos(c);
+  var unica=l.length===1&&(S.mats||[]).find(function(m){ return balNormMat(m.Nome)===balNormMat(l[0]); });
+  if(unica){ toast('Matéria-prima desta peça: '+unica.Nome,'aviso'); selMatContinuar(unica.Nome); return; }
+  S.pgMat=0; renderGridMat(); goStep(3);
+}
 
 function renderGridMat(){
-  renderGridPag(S.mats,'g-mat','pag-mat','pag-mat-info',S.pgMat,function(m){
-    return '<div class="pbtn pbtn-mat'+(S.sel.mat===m.Nome?' sel':'')+'" onclick="selMat(\''+esc(m.Nome)+'\')">' +
-      '<div class="pbtn-chk">✓</div><div class="pi">🧪</div>'+
+  var cod=S.sel.codPeca, l=pecaMatsPermitidos(cod);
+  var sub=document.getElementById('sp3-sub');
+  if(sub) sub.textContent=l.length?(cod+' só aceita: '+l.join(', ')):'Composto sendo utilizado';
+  // as permitidas primeiro; as outras aparecem travadas (só com senha de admin)
+  var lista=(S.mats||[]).slice().sort(function(a,b){ return (matPermitidoNaPeca(cod,a.Nome)?0:1)-(matPermitidoNaPeca(cod,b.Nome)?0:1); });
+  renderGridPag(lista,'g-mat','pag-mat','pag-mat-info',S.pgMat,function(m){
+    var trava=l.length&&!matPermitidoNaPeca(cod,m.Nome);
+    return '<div class="pbtn pbtn-mat'+(S.sel.mat===m.Nome?' sel':'')+(trava?' pbtn-trava':'')+'" onclick="selMat(\''+esc(m.Nome)+'\')">' +
+      '<div class="pbtn-chk">✓</div><div class="pi">'+(trava?'🔒':'🧪')+'</div>'+
       '<div class="pn">'+m.Nome+'</div>'+
-      (m.Descricao?'<div class="pd">'+m.Descricao+'</div>':'')+
+      (trava?'<div class="pd">Não usada nesta peça</div>':(m.Descricao?'<div class="pd">'+m.Descricao+'</div>':''))+
       '</div>';
   },'Nenhum material cadastrado.');
 }
 function pgMat(d){ S.pgMat=Math.max(0,S.pgMat+d); renderGridMat(); }
 function selMat(n){
-  var ehLinhaCol=semAcentoConsulta(S.sel.codPeca||'').indexOf('col')===0;
-  if(ehLinhaCol && !ehNBR50(n) && !S.adm){
-    abrirModalColNBR(n, function(){ selMatContinuar(n); });
+  var r=regraMaterial(S.sel.codPeca,n);
+  if(r.bloqueado && !S.adm){
+    abrirModalColNBR(n, function(){ S.sel.matLiberado=true; selMatContinuar(n,true); }, r.msg);
     return;
   }
   selMatContinuar(n);
 }
-function selMatContinuar(n){ S.sel.mat=n; updSidebar(); if(S.hasMaq){ renderGridMaq(); goStep(4); } else { S.sel.maq=''; goStep(5); } }
+function selMatContinuar(n,liberado){ S.sel.mat=n; S.sel.matLiberado=!!liberado; updSidebar(); if(S.hasMaq){ renderGridMaq(); goStep(4); } else { S.sel.maq=''; goStep(5); } }
 
 function renderGridMaq(){
   var g=document.getElementById('g-maq'); if(!g) return;
@@ -5281,9 +5334,9 @@ function adjC(d){ var i=document.getElementById('inp-cx');  i.value=Math.max(1,(
 function chkAdj(){ var q=Number(document.getElementById('inp-qtd').value)||0; document.getElementById('aviso-adj').style.display=(q!==S.sel.qtdPad)?'block':'none'; updSidebar(); }
 
 function confirmarProd(){
-  var ehLinhaCol=semAcentoConsulta(S.sel.codPeca||'').indexOf('col')===0;
-  if(ehLinhaCol && !ehNBR50(S.sel.mat) && !S.adm){
-    abrirModalColNBR(S.sel.mat, confirmarProdContinuar);
+  var r=regraMaterial(S.sel.codPeca,S.sel.mat);
+  if(r.bloqueado && !S.adm && !S.sel.matLiberado){
+    abrirModalColNBR(S.sel.mat, function(){ S.sel.matLiberado=true; confirmarProdContinuar(); }, r.msg);
     return;
   }
   confirmarProdContinuar();
@@ -5306,8 +5359,8 @@ var _colNbrCallback=null;
 function ehNBR50(material){
   return semAcentoConsulta(material||'').replace(/\s+/g,'')==='nbr-50';
 }
-function abrirModalColNBR(material,callback){
-  document.getElementById('col-nbr-msg').textContent='Peça da linha COL com material diferente de NBR-50 ('+material+') — precisa de senha de admin.';
+function abrirModalColNBR(material,callback,msg){
+  document.getElementById('col-nbr-msg').textContent=msg||('Peça da linha COL com material diferente de NBR-50 ('+material+') — precisa de senha de admin.');
   document.getElementById('inp-col-nbr-s').value='';
   document.getElementById('col-nbr-err').style.display='none';
   _colNbrCallback=callback;
@@ -5357,7 +5410,7 @@ function enviarProd(qtd,cx,senha){
     .registrarProducao(d,senha);
 }
 function resetSelProd(){
-  S.sel={matricula:'',op:'',peca:'',codPeca:'',qtdPad:0,mat:'',maq:'',trim:'',ano:String(new Date().getFullYear()),lote:''};
+  S.sel={matricula:'',op:'',peca:'',codPeca:'',qtdPad:0,mat:'',matLiberado:false,maq:'',trim:'',ano:String(new Date().getFullYear()),lote:''};
   document.getElementById('inp-lote').value='';
   var bo=document.getElementById('busca-op'); if(bo) bo.value='';
   var bp=document.getElementById('busca-peca'); if(bp) bp.value='';
@@ -5376,6 +5429,7 @@ function voltarProd(){
   // ◀ Voltar: volta UM passo e mantém tudo o que já foi escolhido (antes apagava tudo e voltava ao operador)
   var ant=prodPassoAtual()-1;
   if(ant===4&&!S.hasMaq) ant=3;
+  if(ant===3&&pecaMatsPermitidos(S.sel.codPeca).length===1) ant=2; // matéria-prima única: não tem o que escolher
   if(ant<1) ant=1;
   if(ant===1) renderGridOp((document.getElementById('busca-op')||{}).value);
   else if(ant===2) renderGridPeca((document.getElementById('busca-peca')||{}).value);
@@ -6558,6 +6612,7 @@ function rPecas(d){
       '<span style="font-family:monospace;background:var(--cinza2);padding:1px 5px;border-radius:3px;font-size:10px">'+p.Codigo+'</span>'+
       '<span>'+p.QtdPadrao+' pç/cx</span>'+
       '<span class="badge" style="background:'+(temCant?'#d4edda':'#eceef1')+';color:'+(temCant?'#155724':'#6a6f78')+'">'+(temCant?'✓ Cantoneira':'Sem cantoneira')+'</span>'+
+      ((p.MateriaisPermitidos||[]).length?'<span class="badge" style="background:#fff3cd;color:#7a5a00">🔒 Só '+htmlTxt(p.MateriaisPermitidos.join(', '))+'</span>':'<span class="badge" style="background:#eceef1;color:#6a6f78">Qualquer matéria-prima</span>')+
       '</div></div>'+
       '<div class="ic-acts">'+
       '<button class="bic bic-e" onclick="editFromCache(\'peca\','+i+')">✏️</button>'+
@@ -6610,7 +6665,7 @@ function editFromCache(tipo, idx){
   } else if(tipo==='peca'){
     S.cadTipo='pecas';
     document.getElementById('cad-t').textContent='Editar Peça';
-    document.getElementById('cad-body').innerHTML=formCad('pecas',{Codigo:d.Codigo||'',Nome:d.Nome||'',QtdPadrao:d.QtdPadrao||'',TamanhoCaixa:d.TamanhoCaixa||'',TamanhoCaixaId:d.TamanhoCaixaId||'',PesoUnitarioG:d.PesoUnitarioG||'',Cantoneira:!!d.Cantoneira});
+    document.getElementById('cad-body').innerHTML=formCad('pecas',{Codigo:d.Codigo||'',Nome:d.Nome||'',QtdPadrao:d.QtdPadrao||'',TamanhoCaixa:d.TamanhoCaixa||'',TamanhoCaixaId:d.TamanhoCaixaId||'',PesoUnitarioG:d.PesoUnitarioG||'',Cantoneira:!!d.Cantoneira,MateriaisPermitidos:d.MateriaisPermitidos||[]});
     _gruposEdicao=(d.Arranjos&&d.Arranjos[0]&&d.Arranjos[0].Grupos)?d.Arranjos[0].Grupos.map(function(g){ return {qtdTubos:g.qtdTubos, pecasPorTubo:g.pecasPorTubo}; }):[];
     renderGruposEdicao();
   } else if(tipo==='mat'){
@@ -6766,7 +6821,8 @@ function formCad(tipo,d){
   if(tipo==='operadores') return '<div class="fg-row"><div class="fg"><label>Matrícula / Código</label><input type="text" id="fc-mat" placeholder="Ex: OP20" value="'+(d&&d.Matricula?d.Matricula:'')+'"/></div><div class="fg"><label>Nome</label><input type="text" id="fc-n" placeholder="Ex: João Silva" value="'+(d&&d.Nome?d.Nome:'')+'"/></div></div>';
   if(tipo==='pecas') return '<div class="fg"><label>Código</label><input type="text" id="fc-c" placeholder="Ex: DEF-200" value="'+(d&&d.Codigo?d.Codigo:'')+'"/></div><div class="fg"><label>Nome da Peça</label><input type="text" id="fc-n" placeholder="Ex: Anel Defofo 200mm" value="'+(d&&d.Nome?d.Nome:'')+'"/></div><div class="fg-row"><div class="fg" style="margin-bottom:6px"><label>Qtd Padrão por Caixa</label><input type="number" id="fc-q" oninput="atualizarTotalGrupos()" placeholder="Ex: 540" value="'+(d&&d.QtdPadrao?d.QtdPadrao:'')+'"/></div><div class="fg" style="margin-bottom:6px"><label>Peso Unitário da Peça (g)</label><input type="number" id="fc-pesounit" placeholder="Ex: 42" value="'+(d&&d.PesoUnitarioG?d.PesoUnitarioG:'')+'"/></div></div><div class="fg"><label>Tamanho da Caixa</label><select id="fc-tamanho"><option value="">Selecione...</option>'+
     (S.tamanhosCaixa||[]).map(function(t){ return '<option value="'+t.ID+'" '+(d&&d.TamanhoCaixaId===t.ID?'selected':'')+'>'+t.Nome+'</option>'; }).join('')+
-    '</select></div><div class="fg" style="display:flex;align-items:center;gap:8px;flex-direction:row"><input type="checkbox" id="fc-cantoneira" style="width:20px;height:20px" '+(d&&d.Cantoneira?'checked':'')+'/><label style="margin:0">Usa cantoneira na caixa</label></div><div class="fg"><label>Divisão em Tubos (grupos que juntos fecham a caixa)</label><div id="fc-grupos-lista"></div><button type="button" class="arr-add-grupo" onclick="adicionarGrupo()">+ grupo de tubo</button><div class="arr-total" id="grupos-total"></div></div>';
+    '</select></div><div class="fg" style="display:flex;align-items:center;gap:8px;flex-direction:row"><input type="checkbox" id="fc-cantoneira" style="width:20px;height:20px" '+(d&&d.Cantoneira?'checked':'')+'/><label style="margin:0">Usa cantoneira na caixa</label></div><div class="fg"><label>Divisão em Tubos (grupos que juntos fecham a caixa)</label><div id="fc-grupos-lista"></div><button type="button" class="arr-add-grupo" onclick="adicionarGrupo()">+ grupo de tubo</button><div class="arr-total" id="grupos-total"></div></div>'+
+    formMatsPermitidos(d&&d.MateriaisPermitidos);
   if(tipo==='materiais') return '<div class="fg"><label>Nome</label><input type="text" id="fc-n" placeholder="Ex: EPDM" value="'+(d&&d.Nome?d.Nome:'')+'" onblur="sugerirCorMaterial()"/></div><div class="fg"><label>Cor (referência impressa na etiqueta)</label><input type="text" id="fc-cor" placeholder="Ex: Verde" value="'+(d&&d.Cor?d.Cor:'')+'"/></div><div class="fg"><label>Descrição / Norma (opcional)</label><input type="text" id="fc-d" placeholder="Ex: NBR 7676" value="'+(d&&d.Descricao?d.Descricao:'')+'"/></div>';
   if(tipo==='maquinas') return '<div class="fg"><label>Nome</label><input type="text" id="fc-n" placeholder="Ex: Injetora 01" value="'+(d&&d.Nome?d.Nome:'')+'"/></div><div class="fg"><label>Descrição (opcional)</label><input type="text" id="fc-d" placeholder="Ex: Engel 150t" value="'+(d&&d.Descricao?d.Descricao:'')+'"/></div>';
   if(tipo==='clientes') return '<div class="fg"><label>Nome do Cliente</label><input type="text" id="fc-n" placeholder="Ex: Tigre" value="'+(d&&d.Nome?d.Nome:'')+'"/></div>';
@@ -6786,6 +6842,23 @@ function formCad(tipo,d){
     '<div style="font-size:11px;color:#e67e22;font-weight:700;margin-bottom:8px">⚠️ Editar aqui não reimprime a etiqueta física — a caixa já rotulada continua com os dados antigos impressos nela.</div>'+
     '<button type="button" class="btn-novo" style="width:100%" onclick="reimprimirCaixa(\''+(d&&d.ID?d.ID:'')+'\')">🖨️ Reimprimir Etiquetas desta Caixa</button>';
   return '';
+}
+// Matérias-primas que a peça aceita (o operador só escolhe entre elas)
+function formMatsPermitidos(lista){
+  lista=lista||[];
+  var nomes=(S.mats||[]).map(function(m){ return m.Nome; });
+  lista.forEach(function(n){ if(nomes.indexOf(n)<0) nomes.push(n); }); // mantém material inativo que já estava marcado
+  return '<div class="fc-mats"><div class="fc-mats-tit">Matérias-primas que esta peça aceita</div>'+
+    '<div class="fc-mats-sub">O operador só vai poder escolher as marcadas. Sem nenhuma marcada, aceita qualquer uma.</div>'+
+    '<div class="bal-chips" id="fc-mats">'+nomes.map(function(n){
+      var on=lista.indexOf(n)>=0;
+      return '<label class="bal-chip'+(on?' on':'')+'"><input type="checkbox" value="'+htmlTxt(n)+'"'+(on?' checked':'')+' onchange="this.parentNode.classList.toggle(\'on\',this.checked);fcMatsResumo()"/><span>'+htmlTxt(n)+'</span></label>';
+    }).join('')+'</div><div class="fc-mats-res'+(lista.length?' trava':'')+'" id="fc-mats-res">'+fcMatsTexto(lista)+'</div></div>';
+}
+function fcMatsTexto(l){ return l.length?'Travada: só '+l.join(', ')+'.':'Livre: aceita qualquer matéria-prima.'; }
+function fcMatsResumo(){
+  var l=Array.prototype.map.call(document.querySelectorAll('#fc-mats input:checked'),function(i){ return i.value; });
+  var el=document.getElementById('fc-mats-res'); if(el){ el.textContent=fcMatsTexto(l); el.classList.toggle('trava',l.length>0); }
 }
 var _salvandoCad = false;
 function salvarCad(){
@@ -6810,6 +6883,7 @@ function salvarCad(){
     dados.TamanhoCaixaId=selTam?selTam.value:'';
     dados.TamanhoCaixa=(selTam&&selTam.selectedIndex>0)?selTam.options[selTam.selectedIndex].textContent:'';
     dados.Cantoneira=document.getElementById('fc-cantoneira')?document.getElementById('fc-cantoneira').checked:false;
+    dados.MateriaisPermitidos=Array.prototype.map.call(document.querySelectorAll('#fc-mats input:checked'),function(i){ return i.value; });
     if(!dados.Codigo||!dados.Nome||!dados.QtdPadrao){ toast('Preencha todos os campos','aviso'); return; }
     var gruposValidos=_gruposEdicao.filter(function(g){ return Number(g.qtdTubos)>0 && Number(g.pecasPorTubo)>0; }).map(function(g){ return {qtdTubos:Number(g.qtdTubos),pecasPorTubo:Number(g.pecasPorTubo)}; });
     if(gruposValidos.length){
@@ -6822,6 +6896,8 @@ function salvarCad(){
     }
     var arranjosParaSalvar=gruposValidos.length ? [{grupos:gruposValidos}] : [];
     var cbPeca=function(rPeca){
+      if(rPeca&&rPeca.ok===false){ er({ message:rPeca.erro||'não salvou' }); return; } // antes: erro aparecia como "Salvo!"
+      if(rPeca&&rPeca.semColunaMateriais&&dados.MateriaisPermitidos.length) setTimeout(function(){ toast('Peça salva, mas a trava de matéria-prima NÃO: rode o pecas_materiais.sql no Supabase','erro'); },600);
       var pecaId=dados.ID||(rPeca&&rPeca.id);
       if(!pecaId){ liberar(); fecharCad(); admNavIr(tipo); relTipo(tipo); toast('Salvo!','sucesso'); return; }
       google.script.run
